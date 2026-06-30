@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>项目综合指标估算工具</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #3b82f6;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container { max-width: 640px; margin: 0 auto; padding: 16px; }
+    header {
+      text-align: center;
+      padding: 24px 0 12px;
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    header p { color: var(--text-muted); font-size: 0.875rem; margin-top: 4px; }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: #fff;
+      padding: 16px 20px;
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+    .card-body { padding: 16px 20px; }
+
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .form-group label .required { color: var(--danger); margin-left: 2px; }
+    .form-group label .optional { color: var(--text-muted); font-weight: 400; font-size: 0.75rem; }
+    .form-group .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+    .form-group .error { font-size: 0.75rem; color: var(--danger); margin-top: 4px; display: none; }
+    .form-group.error .error { display: block; }
+    .form-group.error input, .form-group.error select { border-color: var(--danger); }
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    input::placeholder { color: #cbd5e1; }
+    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+    .row { display: flex; gap: 12px; }
+    .row .form-group { flex: 1; }
+    @media (max-width: 480px) { .row { flex-direction: column; gap: 0; } }
+
+    /* Buttons */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-light); }
+    .btn-secondary { background: var(--border); color: var(--text); margin-top: 10px; }
+    .btn-secondary:hover { background: #cbd5e1; }
+
+    /* Result */
+    .result-section { display: none; margin-top: 16px; }
+    .result-section.show { display: block; }
+    .result-title {
+      background: var(--primary);
+      color: #fff;
+      text-align: center;
+      padding: 12px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      border-radius: 8px 8px 0 0;
+    }
+    .result-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .result-table th, .result-table td {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    .result-table th {
+      background: #f1f5f9;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .result-table td { background: #fff; }
+    .result-table tr:nth-child(even) td { background: #fafafa; }
+    .result-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .result-table td.unit { text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+    .result-table td.remark { font-size: 0.8rem; color: var(--text-muted); }
+    .result-table .group-row td { background: #f1f5f9; font-weight: 600; padding-left: 28px; }
+    .result-table .group-row td:first-child { padding-left: 12px; }
+    .result-table .sub-row td { padding-left: 32px; }
+    .result-table .sub-row td:first-child { padding-left: 28px; color: var(--text-muted); font-size: 0.8rem; }
+
+    .action-bar { display: flex; gap: 10px; margin-top: 12px; }
+    .action-bar .btn { flex: 1; margin-top: 0; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+    .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(30,41,59,0.95);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>项目综合指标估算</h1>
+      <p>输入基础规划数据，快速生成项目指标表</p>
+    </header>
+
+    <div class="card">
+      <div class="card-header">基础参数输入</div>
+      <div class="card-body">
+        <div class="form-group" id="group-name">
+          <label>项目名称 <span class="optional">（选填）</span></label>
+          <input type="text" id="input-name" placeholder="例如：上海智能智造中心" />
+        </div>
+
+        <div class="form-group" id="group-region">
+          <label>区域 <span class="required">*</span></label>
+          <select id="input-region">
+            <option value="">请选择区域</option>
+            <option value="上海">上海</option>
+            <option value="杭州">杭州</option>
+            <option value="长三角区域">长三角区域</option>
+            <option value="湾区">湾区</option>
+            <option value="其他区域">其他区域</option>
+          </select>
+          <div class="error">请选择区域</div>
+        </div>
+
+        <div class="form-group" id="group-land">
+          <label>规划用地面积 <span class="required">*</span></label>
+          <input type="number" id="input-land" placeholder="单位：m²" min="0" step="0.01" />
+          <div class="hint">请输入用地面积，单位：m²</div>
+          <div class="error">请输入有效的规划用地面积</div>
+        </div>
+
+        <div class="row">
+          <div class="form-group" id="group-far">
+            <label>容积率 <span class="required">*</span></label>
+            <input type="number" id="input-far" placeholder="1.00 ~ 6.00" min="1.0" max="6.0" step="0.01" />
+            <div class="hint">1.00 ~ 6.00，保留两位小数</div>
+            <div class="error">容积率必须在 1.00 ~ 6.00 之间</div>
+          </div>
+          <div class="form-group" id="group-green">
+            <label>绿地率 <span class="required">*</span></label>
+            <input type="number" id="input-green" placeholder="0.00 ~ 40.00" min="0" max="40" step="0.01" />
+            <div class="hint">0% ~ 40%，保留两位小数</div>
+            <div class="error">绿地率必须在 0% ~ 40% 之间</div>
+          </div>
+        </div>
+
+        <div class="form-group" id="group-ancillary">
+          <label>配套用房占比 <span class="required">*</span></label>
+          <input type="number" id="input-ancillary" placeholder="0.00 ~ 30.00" min="0" max="30" step="0.01" />
+          <div class="hint">0% ~ 30%，保留两位小数</div>
+          <div class="error">配套用房占比必须在 0% ~ 30% 之间</div>
+        </div>
+
+        <div class="row">
+          <div class="form-group" id="group-factory">
+            <label>厂房配建指标 <span class="required">*</span></label>
+            <input type="number" id="input-factory" placeholder="辆/100m²" min="0" step="0.01" />
+            <div class="hint">辆/100m²（按计容面积）</div>
+            <div class="error">请输入厂房配建指标</div>
+          </div>
+          <div class="form-group" id="group-support">
+            <label>配套用房配建指标 <span class="required">*</span></label>
+            <input type="number" id="input-support" placeholder="辆/100m²" min="0" step="0.01" />
+            <div class="hint">辆/100m²（按计容面积）</div>
+            <div class="error">请输入配套用房配建指标</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="calculate()">生成指标估算表</button>
+      </div>
+    </div>
+
+    <div class="result-section" id="result-section">
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="result-title" id="result-title">综合指标估算</div>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th style="width:32%">指标名称</th>
+              <th style="width:22%">数值</th>
+              <th style="width:14%">单位</th>
+              <th style="width:32%">备注</th>
+            </tr>
+          </thead>
+          <tbody id="result-body"></tbody>
+        </table>
+        <div class="action-bar" style="padding: 12px 16px 16px;">
+          <button class="btn btn-secondary" onclick="copyResult()">复制结果</button>
+          <button class="btn btn-secondary" onclick="resetForm()">重新计算</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">已复制到剪贴板</div>
+
+  <script>
+    // Format number with commas
+    function fmtNum(n, decimals = 1) {
+      if (n === undefined || n === null) return '-';
+      const s = Number(n).toFixed(decimals);
+      const parts = s.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return parts.join('.');
+    }
+    function fmtInt(n) {
+      if (n === undefined || n === null) return '-';
+      return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    function fmtPercent(n, decimals = 2) {
+      return (Number(n) * 100).toFixed(decimals) + '%';
+    }
+
+    function getBuildingDensity(far) {
+      if (far < 1.5) return 0.45;
+      if (far < 2.0) return 0.42;
+      return 0.40;
+    }
+
+    function isHangzhou(region) {
+      return region === '杭州';
+    }
+
+    function validate() {
+      let ok = true;
+      const fields = [
+        { id: 'region', required: true },
+        { id: 'land', required: true, min: 0 },
+        { id: 'far', required: true, min: 1.0, max: 6.0 },
+        { id: 'green', required: true, min: 0, max: 40 },
+        { id: 'ancillary', required: true, min: 0, max: 30 },
+        { id: 'factory', required: true, min: 0 },
+        { id: 'support', required: true, min: 0 },
+      ];
+      const missing = [];
+      fields.forEach(f => {
+        const el = document.getElementById('input-' + f.id);
+        const group = document.getElementById('group-' + f.id);
+        const val = el.value.trim();
+        const num = parseFloat(val);
+        let err = false;
+        if (f.required && val === '') {
+          err = true;
+          missing.push(group.querySelector('label').childNodes[0].textContent.trim());
+        } else if (f.id !== 'region' && val !== '' && isNaN(num)) {
+          err = true;
+        } else if (f.min !== undefined && num < f.min) {
+          err = true;
+        } else if (f.max !== undefined && num > f.max) {
+          err = true;
+        }
+        if (err) {
+          group.classList.add('error');
+          ok = false;
+        } else {
+          group.classList.remove('error');
+        }
+      });
+      return { ok, missing };
+    }
+
+    function calculate() {
+      const v = validate();
+      if (!v.ok) {
+        if (v.missing.length > 0) {
+          showToast('请填写：' + v.missing.join('、'));
+        } else {
+          showToast('请检查输入项的数值范围');
+        }
+        return;
+      }
+
+      const name = document.getElementById('input-name').value.trim();
+      const region = document.getElementById('input-region').value;
+      const landArea = parseFloat(document.getElementById('input-land').value);
+      const far = parseFloat(document.getElementById('input-far').value);
+      const greenRate = parseFloat(document.getElementById('input-green').value) / 100;
+      const ancillaryRatio = parseFloat(document.getElementById('input-ancillary').value) / 100;
+      const factoryIndex = parseFloat(document.getElementById('input-factory').value);
+      const supportIndex = parseFloat(document.getElementById('input-support').value);
+
+      const buildingDensity = getBuildingDensity(far);
+      const aboveGroundArea = landArea * far;
+      const greenArea = landArea * greenRate;
+      const buildingBaseArea = landArea * buildingDensity;
+      const roadArea = landArea * 0.30;
+
+      const totalVehicle = Math.ceil(aboveGroundArea * (1 - ancillaryRatio) * factoryIndex / 100 + aboveGroundArea * ancillaryRatio * supportIndex / 100);
+      const totalNonVehicle = Math.ceil(aboveGroundArea * 1.0 / 100);
+
+      let groundNonVehicle = 0, undergroundNonVehicle = 0;
+      if (totalNonVehicle <= 500) {
+        groundNonVehicle = totalNonVehicle;
+        undergroundNonVehicle = 0;
+      } else {
+        groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+        undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+      }
+
+      const groundNonVehicleArea = groundNonVehicle * 1.5;
+      const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
+      let groundVehicle = Math.floor(availableParkingArea / 25);
+      if (groundVehicle < 10) groundVehicle = 0;
+      const undergroundVehicle = totalVehicle - groundVehicle;
+
+      const undergroundArea = isHangzhou(region)
+        ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
+        : undergroundVehicle * 35 + undergroundNonVehicle * 1.5;
+      const totalArea = aboveGroundArea + undergroundArea;
+      const acre = landArea / 666.7;
+
+      const titleText = name ? (name + '综合指标估算') : '综合指标估算';
+      document.getElementById('result-title').textContent = titleText;
+
+      const tbody = document.getElementById('result-body');
+      tbody.innerHTML = `
+        <tr>
+          <td>规划用地面积</td>
+          <td class="num">${fmtNum(landArea, 1)}</td>
+          <td class="unit">m²</td>
+          <td class="remark">约${fmtNum(acre, 1)}亩</td>
+        </tr>
+        <tr>
+          <td>总建筑面积</td>
+          <td class="num">${fmtNum(totalArea, 1)}</td>
+          <td class="unit">m²</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr>
+          <td>地上建筑面积</td>
+          <td class="num">${fmtNum(aboveGroundArea, 1)}</td>
+          <td class="unit">m²</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr>
+          <td>地下建筑面积</td>
+          <td class="num">${fmtNum(undergroundArea, 1)}</td>
+          <td class="unit">m²</td>
+          <td class="remark">含地下车库与设备用房</td>
+        </tr>
+        <tr>
+          <td>绿地率</td>
+          <td class="num">${fmtPercent(greenRate, 2)}</td>
+          <td class="unit">—</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr>
+          <td>建筑密度</td>
+          <td class="num">${fmtPercent(buildingDensity, 0)}</td>
+          <td class="unit">—</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr class="group-row">
+          <td>机动车停车位数量</td>
+          <td class="num">${fmtInt(totalVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">厂房按照${factoryIndex.toFixed(2)}辆/100m²，配套用房按照${supportIndex.toFixed(2)}辆/100m²</td>
+        </tr>
+        <tr class="sub-row">
+          <td>地面机动车停车位</td>
+          <td class="num">${fmtInt(groundVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr class="sub-row">
+          <td>地下机动车停车位</td>
+          <td class="num">${fmtInt(undergroundVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr class="group-row">
+          <td>非机动车停车位数量</td>
+          <td class="num">${fmtInt(totalNonVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">1.0辆/100m²</td>
+        </tr>
+        <tr class="sub-row">
+          <td>地面非机动车停车位</td>
+          <td class="num">${fmtInt(groundNonVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">—</td>
+        </tr>
+        <tr class="sub-row">
+          <td>地下非机动车停车位</td>
+          <td class="num">${fmtInt(undergroundNonVehicle)}</td>
+          <td class="unit">辆</td>
+          <td class="remark">—</td>
+        </tr>
+      `;
+
+      document.getElementById('result-section').classList.add('show');
+      document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function copyResult() {
+      const title = document.getElementById('result-title').textContent;
+      const rows = document.querySelectorAll('#result-body tr');
+      let text = title + '\n\n';
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const name = cells[0].textContent.trim();
+        const val = cells[1].textContent.trim();
+        const unit = cells[2].textContent.trim();
+        const remark = cells[3].textContent.trim();
+        let line = name + '\t' + val;
+        if (unit !== '—') line += ' ' + unit;
+        if (remark !== '—') line += '\t' + remark;
+        text += line + '\n';
+      });
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    function resetForm() {
+      document.querySelectorAll('input').forEach(el => el.value = '');
+      document.getElementById('input-region').value = '';
+      document.querySelectorAll('.form-group').forEach(g => g.classList.remove('error'));
+      document.getElementById('result-section').classList.remove('show');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+  </script>
+</body>
+</html>
