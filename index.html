@@ -371,7 +371,7 @@
 
       const groundNonVehicleArea = groundNonVehicle * 1.5;
       const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
-      let groundVehicle = Math.floor(availableParkingArea / 50);
+      let groundVehicle = Math.floor(availableParkingArea / 25);
       if (groundVehicle < 10) groundVehicle = 0;
       const undergroundVehicle = totalVehicle - groundVehicle;
 
