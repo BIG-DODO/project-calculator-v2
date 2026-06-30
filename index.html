@@ -34,7 +34,6 @@
     header h1 { font-size: 1.5rem; font-weight: 700; color: var(--text); }
     header p { color: var(--text-muted); font-size: 0.875rem; margin-top: 4px; }
 
-    /* Card */
     .card {
       background: var(--card);
       border-radius: var(--radius);
@@ -51,7 +50,6 @@
     }
     .card-body { padding: 16px 20px; }
 
-    /* Form */
     .form-group { margin-bottom: 16px; }
     .form-group label {
       display: block;
@@ -85,7 +83,6 @@
     .row .form-group { flex: 1; }
     @media (max-width: 480px) { .row { flex-direction: column; gap: 0; } }
 
-    /* Buttons */
     .btn {
       display: block;
       width: 100%;
@@ -104,7 +101,6 @@
     .btn-secondary { background: var(--border); color: var(--text); margin-top: 10px; }
     .btn-secondary:hover { background: #cbd5e1; }
 
-    /* Result */
     .result-section { display: none; margin-top: 16px; }
     .result-section.show { display: block; }
     .result-title {
@@ -144,10 +140,6 @@
     .action-bar { display: flex; gap: 10px; margin-top: 12px; }
     .action-bar .btn { flex: 1; margin-top: 0; }
 
-    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
-    .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }
-
-    /* Toast */
     #toast {
       position: fixed;
       bottom: 24px;
@@ -268,7 +260,6 @@
   <div id="toast">已复制到剪贴板</div>
 
   <script>
-    // Format number with commas
     function fmtNum(n, decimals = 1) {
       if (n === undefined || n === null) return '-';
       const s = Number(n).toFixed(decimals);
@@ -489,58 +480,202 @@
       navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
     }
 
+    // ---------- 下载表格：XML Spreadsheet 2003（Excel 原生支持） ----------
     function downloadTable() {
       const title = document.getElementById('result-title').textContent;
       const rows = Array.from(document.querySelectorAll('#result-body tr'));
-      
-      // 生成层级结构 CSV（5列：A=主项/其中/空, B=子项名称, C=数值, D=单位, E=备注）
-      let csv = '\uFEFF'; // UTF-8 BOM
-      csv += title + ',,,,\n';                       // 第1行：标题
-      csv += '指标名称,,数值,单位,备注\n';            // 第2行：表头
-      
+
+      // 列宽：A=指标主项, B=子项, C=数值, D=单位, E=备注
+      const colWidths = [100, 140, 90, 60, 180];
+
+      // 样式定义
+      const borderThin = '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+                         '<Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+                         '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+                         '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>';
+
+      let styles = `
+  <Style ss:ID="Title">
+    <Font ss:FontName="微软雅黑" ss:Size="14" ss:Bold="1"/>
+    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+  </Style>
+  <Style ss:ID="Header">
+    <Font ss:FontName="微软雅黑" ss:Size="11" ss:Bold="1"/>
+    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+    <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="Normal">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+  </Style>
+  <Style ss:ID="NormalRight">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+  </Style>
+  <Style ss:ID="Parent">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+    <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="ParentRight">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+    <Interior ss:Color="#f1f5f9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="SubItem">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+  </Style>
+  <Style ss:ID="SubItemRight">
+    <Font ss:FontName="微软雅黑" ss:Size="11"/>
+    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    <Borders>${borderThin}</Borders>
+  </Style>`;
+
+      // 收集数据项
       const parentItems = ['总建筑面积', '机动车停车位数量', '非机动车停车位数量'];
-      
+      const items = [];
+
       for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const cells = row.querySelectorAll('td');
+        const cells = rows[i].querySelectorAll('td');
         const name = cells[0].textContent.trim();
         const val = cells[1].textContent.trim().replace(/,/g, '');
         const unit = cells[2].textContent.trim();
         const remark = cells[3].textContent.trim();
-        
+
         if (parentItems.includes(name)) {
-          // 父项行：A列=名称, B列=空
-          csv += '"' + name + '","",' + val + ',"' + unit + '","' + remark + '"\n';
-          
-          // 处理接下来的2行作为子项
+          // 父项
+          items.push({ type: 'parent', name, val, unit, remark });
+          // 收集2个子项
           for (let j = 1; j <= 2 && (i + j) < rows.length; j++) {
-            const subRow = rows[i + j];
-            const subCells = subRow.querySelectorAll('td');
-            const subName = subCells[0].textContent.trim();
-            const subVal = subCells[1].textContent.trim().replace(/,/g, '');
-            const subUnit = subCells[2].textContent.trim();
-            const subRemark = subCells[3].textContent.trim();
-            
-            if (j === 1) {
-              csv += '"其中","' + subName + '",' + subVal + ',"' + subUnit + '","' + subRemark + '"\n';
-            } else {
-              csv += '",","' + subName + '",' + subVal + ',"' + subUnit + '","' + subRemark + '"\n';
-            }
+            const subCells = rows[i + j].querySelectorAll('td');
+            items.push({
+              type: 'sub',
+              label: j === 1 ? '其中' : '',
+              name: subCells[0].textContent.trim(),
+              val: subCells[1].textContent.trim().replace(/,/g, ''),
+              unit: subCells[2].textContent.trim(),
+              remark: subCells[3].textContent.trim()
+            });
           }
-          i += 2; // 跳过已处理的子项
+          i += 2;
         } else {
-          // 普通行：A列=名称, B列=空
-          csv += '"' + name + '","",' + val + ',"' + unit + '","' + remark + '"\n';
+          items.push({ type: 'normal', name, val, unit, remark });
         }
       }
-      
+
+      // 构建行
+      let tableRows = '';
+      let rowNum = 1;
+
+      // 标题行
+      tableRows += `  <Row ss:Height="25">
+    <Cell ss:StyleID="Title" ss:MergeAcross="4"><Data ss:Type="String">${escXml(title)}</Data></Cell>
+  </Row>\n`;
+      rowNum++;
+
+      // 表头行
+      tableRows += `  <Row ss:Height="20">
+    <Cell ss:StyleID="Header" ss:MergeAcross="1"><Data ss:Type="String">指标名称</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">数值</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">单位</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">备注</Data></Cell>
+  </Row>\n`;
+      rowNum++;
+
+      // 数据行
+      const merges = []; // 记录合并信息
+      let currentRow = rowNum;
+
+      items.forEach((item, idx) => {
+        if (item.type === 'normal') {
+          // 普通行：A和B合并
+          tableRows += `  <Row ss:Height="18">
+    <Cell ss:StyleID="Normal" ss:MergeAcross="1"><Data ss:Type="String">${escXml(item.name)}</Data></Cell>
+    <Cell ss:StyleID="NormalRight"><Data ss:Type="String">${escXml(item.val)}</Data></Cell>
+    <Cell ss:StyleID="Normal"><Data ss:Type="String">${escXml(item.unit)}</Data></Cell>
+    <Cell ss:StyleID="Normal"><Data ss:Type="String">${escXml(item.remark)}</Data></Cell>
+  </Row>\n`;
+          currentRow++;
+        } else if (item.type === 'parent') {
+          // 父项行：A和B合并，灰色背景
+          tableRows += `  <Row ss:Height="18">
+    <Cell ss:StyleID="Parent" ss:MergeAcross="1"><Data ss:Type="String">${escXml(item.name)}</Data></Cell>
+    <Cell ss:StyleID="ParentRight"><Data ss:Type="String">${escXml(item.val)}</Data></Cell>
+    <Cell ss:StyleID="Parent"><Data ss:Type="String">${escXml(item.unit)}</Data></Cell>
+    <Cell ss:StyleID="Parent"><Data ss:Type="String">${escXml(item.remark)}</Data></Cell>
+  </Row>\n`;
+          currentRow++;
+        } else if (item.type === 'sub') {
+          // 子项行
+          const isFirst = item.label === '其中';
+          if (isFirst) {
+            // 第一个子项：A列="其中"，且A列与下一个子项的A列合并
+            // 先记录合并：A[currentRow] : A[currentRow+1]
+            merges.push(`<MergeCell ss:Ref="A${currentRow}:A${currentRow + 1}"/>`);
+          }
+          tableRows += `  <Row ss:Height="18">
+    <Cell ss:StyleID="SubItem"${isFirst ? ' ss:MergeDown="1"' : ''}><Data ss:Type="String">${escXml(item.label)}</Data></Cell>
+    <Cell ss:StyleID="SubItem"><Data ss:Type="String">${escXml(item.name)}</Data></Cell>
+    <Cell ss:StyleID="SubItemRight"><Data ss:Type="String">${escXml(item.val)}</Data></Cell>
+    <Cell ss:StyleID="SubItem"><Data ss:Type="String">${escXml(item.unit)}</Data></Cell>
+    <Cell ss:StyleID="SubItem"><Data ss:Type="String">${escXml(item.remark)}</Data></Cell>
+  </Row>\n`;
+          currentRow++;
+        }
+      });
+
+      // 列定义
+      let colsXml = '';
+      colWidths.forEach(w => {
+        colsXml += `  <Column ss:Width="${w}"/>\n`;
+      });
+
+      // 组装完整 XML
+      const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>${styles}
+  </Styles>
+  <Worksheet ss:Name="综合指标估算">
+    <Table>${colsXml}${tableRows}    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <Print>
+        <ValidPrinterInfo/>
+        <HorizontalResolution>600</HorizontalResolution>
+        <VerticalResolution>600</VerticalResolution>
+      </Print>
+      <Selected/>
+      <Panes>
+        <Pane>
+          <Number>3</Number>
+          <ActiveRow>1</ActiveRow>
+          <ActiveCol>1</ActiveCol>
+        </Pane>
+      </Panes>
+      <ProtectObjects>False</ProtectObjects>
+      <ProtectScenarios>False</ProtectScenarios>
+    </WorksheetOptions>
+  </Worksheet>
+</Workbook>`;
+
       // 生成文件名
       const today = new Date();
       const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-      const fileName = (title || '综合指标估算') + '_' + dateStr + '.csv';
-      
-      // 创建下载链接
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const fileName = (title || '综合指标估算') + '_' + dateStr + '.xml';
+
+      // 下载
+      const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = fileName;
@@ -548,8 +683,16 @@
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
-      
+
       showToast('表格已下载');
+    }
+
+    function escXml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
     }
 
     function resetForm() {
