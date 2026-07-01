@@ -507,6 +507,7 @@
       .table-scroll-hint { display: block; }
     }
     /* ---------- 指标表（无遮罩，自适应列宽） ---------- */
+    .mobile-example-btn { display: none; }
     .indicator-table-wrap {
       width: 100%;
     }
@@ -559,6 +560,9 @@
       .product-chip.selected .mobile-options { display: block; }
       /* 手机端隐藏右侧独立的 Step2 折叠面板 */
       #sub-options-card { display: none !important; }
+      /* 手机端：左侧显示一键录入，右侧隐藏 */
+      .mobile-example-btn { display: block !important; }
+      .config-right > .btn-secondary { display: none !important; }
     }
   </style>
 </head>
@@ -661,6 +665,10 @@
               <div class="card-title">Step 1 · 产品类型</div>
               <div id="product-grid"></div>
               <div id="product-validation-msg" style="color:var(--danger);font-size:0.75rem;margin-top:10px;display:none;"></div>
+              <!-- 手机端：一键录入按钮放在这里更醒目 -->
+              <button class="btn btn-secondary mobile-example-btn" style="width:100%;padding:10px;font-size:0.85rem;margin-top:12px;" onclick="fillExampleConfig()">
+                ⚡ 一键录入示例配置
+              </button>
             </div>
           </div>
 
