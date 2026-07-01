@@ -1333,306 +1333,298 @@
     // ==================== 核心配置算法 ====================
     function calculateProductConfig() {
       const products = [];
-      let totalBase = 0, totalArea = 0, totalCap = 0, totalCount = 0;
-
       const landArea = projectData.landArea;
       const far = projectData.far;
-      const targetDensity = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
-      const targetAboveGround = landArea * far;
+      const density = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+      const targetBase = landArea * density;
+      const targetCap = landArea * far;
+      const heightLimit = projectData.heightLimit || 150;
       const ancillaryRatio = projectData.ancillaryRatio || 0;
       const rdRatio = projectData.rdRatio || 0;
-      const heightLimit = projectData.heightLimit || 150;
-
-      // 计算各类型面积配额
-      const factoryRatio = 1 - ancillaryRatio - rdRatio;
-      let factoryQuota = targetAboveGround * factoryRatio;
-      let ancillaryQuota = targetAboveGround * ancillaryRatio;
-      let rdQuota = targetAboveGround * rdRatio;
-
-      // 产品类型处理顺序（优先低层）
-      const processOrder = ['light-steel', 'split', 'layer', 'tower', 'dorm', 'support'];
-
-      // 先收集用户选择的分层厂房最高高度（用于产业大厦参考）
-      let maxLayerHeight = 0;
-      let minLayerHeight = Infinity;
-      if (selectedProducts.has('layer')) {
-        const layerOpts = productOptions['layer'];
-        if (layerOpts && layerOpts.floors) {
-          layerOpts.floors.forEach(floor => {
-            const h = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2;
-            if (h > maxLayerHeight) maxLayerHeight = h;
-            if (h < minLayerHeight) minLayerHeight = h;
+      
+      // 1. 收集所有配置（可变 + 固定）
+      const allConfigs = [];
+      
+      // 轻钢
+      if (selectedProducts.has('light-steel')) {
+        productOptions['light-steel'].areas.forEach(area => {
+          allConfigs.push({
+            id: 'light-steel', type: '轻钢厂房', base: area,
+            unitCap: (area - 200) * 2 + 600, unitArea: area + 400,
+            floors: 1, totalHeight: 13.2, isVariable: true, isLow: true,
+            elevator: '无', load: '首层2000kg',
+            fl: { first: 12, second: 4.8, standard: 3.6, top: 3.6 },
+            flSuffix: { second: '（夹）', standard: '（夹）', top: '（夹）' },
+            productType: '1F-D(' + area + ')'
           });
+        });
+      }
+      
+      // 分栋
+      if (selectedProducts.has('split')) {
+        productOptions['split'].floors.forEach(floor => {
+          productOptions['split'].areas.forEach(area => {
+            const cap = floor === 3.5 ? area * 3.5 : area * floor;
+            const unitArea = area * (floor === 3.5 ? 4 : floor);
+            const totalH = floor === 3.5 ? 22.5 : (7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2);
+            if (totalH > heightLimit) return;
+            const elevator = area < 1500 ? '0客1货' : (area < 4000 ? '1客1货' : '1客2货');
+            allConfigs.push({
+              id: 'split', type: '分栋厂房', base: area,
+              unitCap: cap, unitArea, floors: floor, totalHeight: totalH,
+              isVariable: true, isLow: floor <= 3, elevator, load: '首层2000kg，二层800kg，二层及以上500kg',
+              fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
+              flSuffix: { second: '', standard: '', top: '' },
+              productType: floor + 'F-D(' + area + ')'
+            });
+          });
+        });
+      }
+      
+      // 分层
+      if (selectedProducts.has('layer')) {
+        productOptions['layer'].floors.forEach(floor => {
+          productOptions['layer'].areas.forEach(area => {
+            const totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2;
+            if (totalH > heightLimit) return;
+            const cargoLift = Math.ceil(area * floor / 4000);
+            const paxLift = area * floor <= 4000 ? 1 : 2;
+            const elevator = paxLift + '客' + cargoLift + '货';
+            allConfigs.push({
+              id: 'layer', type: '分层厂房', base: area,
+              unitCap: area * floor, unitArea: area * floor, floors: floor,
+              totalHeight: totalH, isVariable: true, isLow: false, elevator,
+              load: '首层2000kg，二层800kg，二层及以上500kg',
+              fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
+              flSuffix: { second: '', standard: '', top: '' },
+              productType: floor + 'F-F(' + area + ')'
+            });
+          });
+        });
+      }
+      
+      // 产业大厦（固定1栋）
+      let towerBase = 0, towerCap = 0;
+      if (selectedProducts.has('tower')) {
+        const area = productOptions['tower'].areas[0];
+        // 简化：默认10层，根据研发面积调整
+        let floors = 10;
+        const rdArea = targetCap * rdRatio;
+        if (rdArea > 0) {
+          floors = Math.max(3, Math.ceil(rdArea / area));
+        }
+        // 限高检查
+        let totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+        if (totalH > 80) {
+          floors = Math.floor((80 - 6.6 - 4.5 - 1.2) / 4.5) + 2;
+          totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+        }
+        const unitArea = area * floors;
+        const unitCap = area * floors;
+        const paxLift = Math.max(1, Math.ceil(unitArea / 4000) - 2);
+        const elevator = paxLift + '客2货';
+        
+        allConfigs.push({
+          id: 'tower', type: '产业大厦', base: area, unitCap, unitArea,
+          floors, totalHeight: totalH, isVariable: false, count: 1,
+          elevator, load: '首层2000kg，标准层350kg',
+          fl: { first: 6.6, second: 4.5, standard: 4.5, top: 4.5 },
+          flSuffix: { second: '', standard: '', top: '' },
+          productType: floors + 'F-D(' + area + ')'
+        });
+        towerBase = area;
+        towerCap = unitCap;
+      }
+      
+      // 配套宿舍（固定1栋）
+      let dormBase = 0, dormCap = 0;
+      if (selectedProducts.has('dorm')) {
+        const ancillaryArea = targetCap * ancillaryRatio;
+        let floors = 6;
+        let base = 1000;
+        if (ancillaryArea > 0) {
+          const estFloors = Math.floor((30 - 4.8 - 1.2) / 3.6) + 1;
+          const singleArea = ancillaryArea / estFloors;
+          if (singleArea < 800) base = 800;
+          else if (singleArea > 1200) base = 1200;
+          else base = Math.round(singleArea / 100) * 100;
+          floors = Math.max(3, Math.ceil(ancillaryArea / base));
+        }
+        const unitArea = base * floors;
+        const unitCap = base * floors;
+        const totalH = 4.8 + 3.6 * (floors - 2) + 3.6 + 1.2;
+        const paxLift = Math.ceil(unitArea / 5000);
+        const elevator = paxLift + '客0货';
+        
+        allConfigs.push({
+          id: 'dorm', type: '配套宿舍', base, unitCap, unitArea, floors,
+          totalHeight: totalH, isVariable: false, count: 1,
+          elevator, load: '标准层350kg',
+          fl: { first: 4.8, second: 3.6, standard: 3.6, top: 3.6 },
+          flSuffix: { second: '', standard: '', top: '' },
+          productType: floors + 'F-D(' + base + ')'
+        });
+        dormBase = base;
+        dormCap = unitCap;
+      }
+      
+      // 配套楼（固定1栋）
+      let supportBase = 0, supportCap = 0;
+      if (selectedProducts.has('support')) {
+        const area = productOptions['support'].areas[0];
+        const floors = 3;
+        const base = Math.round(area / 3);
+        const totalH = 7.2 + 5.1 + 4.5 + 1.2;
+        const elevator = base < 1500 ? '0客1货' : (base < 4000 ? '1客1货' : '1客2货');
+        
+        allConfigs.push({
+          id: 'support', type: '配套楼', base, unitCap: area, unitArea: area,
+          floors, totalHeight: totalH, isVariable: false, count: 1,
+          elevator, load: '首层2000kg，二层800kg，二层及以上500kg',
+          fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
+          flSuffix: { second: '', standard: '', top: '' },
+          productType: '3F-D(' + base + ')'
+        });
+        supportBase = base;
+        supportCap = area;
+      }
+      
+      // 2. 分离可变和固定配置
+      const variableConfigs = allConfigs.filter(c => c.isVariable);
+      const fixedConfigs = allConfigs.filter(c => !c.isVariable);
+      
+      // 固定产品总基底和计容
+      const fixedBase = towerBase + dormBase + supportBase;
+      const fixedCap = towerCap + dormCap + supportCap;
+      
+      // 剩余配额
+      const remainingBase = targetBase - fixedBase;
+      const remainingCap = targetCap - fixedCap;
+      
+      // 3. 计算目标平均层数
+      const targetAvgFloor = remainingCap / remainingBase;
+      
+      // 4. 按"计容效率"接近目标平均层数排序
+      variableConfigs.sort((a, b) => {
+        const effA = a.unitCap / a.base;
+        const effB = b.unitCap / b.base;
+        const diffA = Math.abs(effA - targetAvgFloor);
+        const diffB = Math.abs(effB - targetAvgFloor);
+        return diffA - diffB;
+      });
+      
+      // 5. 先分配最小栋数（2栋）
+      const counts = variableConfigs.map(() => 2);
+      let currentBase = variableConfigs.reduce((sum, c, i) => sum + c.base * counts[i], 0);
+      let currentCap = variableConfigs.reduce((sum, c, i) => sum + c.unitCap * counts[i], 0);
+      
+      // 6. 密度调整
+      if (currentBase < remainingBase) {
+        // 密度不够，增加最优先配置的栋数
+        while (currentBase < remainingBase * 0.95) {
+          counts[0]++;
+          currentBase += variableConfigs[0].base;
+          currentCap += variableConfigs[0].unitCap;
+        }
+      } else if (currentBase > remainingBase) {
+        // 密度超了，减少密度大的配置
+        while (currentBase > remainingBase * 1.05) {
+          let maxIdx = -1, maxBase = 0;
+          variableConfigs.forEach((c, i) => {
+            if (counts[i] > 2 && c.base > maxBase) {
+              maxBase = c.base;
+              maxIdx = i;
+            }
+          });
+          if (maxIdx === -1) break;
+          counts[maxIdx]--;
+          currentBase -= variableConfigs[maxIdx].base;
+          currentCap -= variableConfigs[maxIdx].unitCap;
         }
       }
-      if (maxLayerHeight === 0) maxLayerHeight = 34.8 + 1.2; // 默认7层高度
-      if (minLayerHeight === Infinity) minLayerHeight = 30.3 + 1.2; // 默认6层高度
-
-      // 处理每个选中的产品
-      processOrder.forEach(id => {
-        if (!selectedProducts.has(id)) return;
-        const opts = productOptions[id];
-
-        if (id === 'light-steel') {
-          // 轻钢厂房：固定1层+火车头
-          opts.areas.forEach(area => {
-            const count = 2; // 至少2栋
-            const base = area;
-            const unitArea = base + 400; // 基底 - 200 + 200*3 = 基底 + 400
-            const unitCap = (base - 200) * 2 + 600; // 轻钢部分双倍计容
-            const totalH = 13.2; // 12m轻钢 + 1.2m
-
-            products.push({
-              type: '轻钢厂房', productType: `1F-D(${area})`, form: '独栋',
-              load: '首层2000kg', floors: 1, elevator: '无',
-              fl: { first: 12, second: 4.8, standard: 3.6, top: 3.6 },
-              flSuffix: { second: '（夹）', standard: '（夹）', top: '（夹）' },
-              totalHeight: totalH, base, unitArea, unitCap,
-              count, totalBase: base * count, totalArea: unitArea * count, totalCap: unitCap * count
-            });
-            totalBase += base * count;
-            totalArea += unitArea * count;
-            totalCap += unitCap * count;
-            totalCount += count;
-          });
-
-        } else if (id === 'split') {
-          // 分栋厂房
-          opts.floors.forEach(floor => {
-            opts.areas.forEach(area => {
-              const count = 2; // 至少2栋
-              const base = area;
-              const flVal = { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 };
-              let totalH, unitArea, unitCap;
-
-              if (floor === 3.5) {
-                totalH = 7.2 + 5.1 + 4.5 + 4.5; // 同4层高度
-                unitArea = base * 4; // 实际4层面积
-                unitCap = base * 3.5; // 计容按3.5
-              } else {
-                totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5;
-                unitArea = base * floor;
-                unitCap = base * floor;
-              }
-              totalH += 1.2; // 加女儿墙
-
-              // 限高检查
-              if (totalH > heightLimit) return;
-
-              const elevator = area < 1500 ? '0客1货' : (area < 4000 ? '1客1货' : '1客2货');
-
-              products.push({
-                type: '分栋厂房', productType: `${floor}F-D(${area})`, form: '独栋',
-                load: '首层2000kg，二层800kg，二层及以上500kg',
-                floors: floor, elevator,
-                fl: flVal, flSuffix: { second: '', standard: '', top: '' },
-                totalHeight: totalH, base, unitArea, unitCap,
-                count, totalBase: base * count, totalArea: unitArea * count, totalCap: unitCap * count
-              });
-              totalBase += base * count;
-              totalArea += unitArea * count;
-              totalCap += unitCap * count;
-              totalCount += count;
-            });
-          });
-
-        } else if (id === 'layer') {
-          // 分层厂房
-          opts.floors.forEach(floor => {
-            opts.areas.forEach(area => {
-              const count = 2; // 至少2栋
-              const base = area;
-              const unitArea = base * floor;
-              const unitCap = base * floor;
-              const totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2;
-
-              // 限高检查
-              if (totalH > heightLimit) return;
-
-              // 600/800默认双拼，1000/1200优先双拼
-              const isDefaultSplit = area <= 800;
-              const form = isDefaultSplit ? '双拼' : '优先双拼';
-              const productType = `${floor}F-F(${area})`;
-
-              // 电梯计算
-              const totalUnitArea = unitArea;
-              const cargoLift = Math.ceil(totalUnitArea / 4000);
-              const paxLift = totalUnitArea <= 4000 ? 1 : 2;
-              const elevator = `${paxLift}客${cargoLift}货`;
-
-              products.push({
-                type: '分层厂房', productType, form,
-                load: '首层2000kg，二层800kg，二层及以上500kg',
-                floors: floor, elevator,
-                fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
-                flSuffix: { second: '', standard: '', top: '' },
-                totalHeight: totalH, base, unitArea, unitCap,
-                count, totalBase: base * count, totalArea: unitArea * count, totalCap: unitCap * count
-              });
-              totalBase += base * count;
-              totalArea += unitArea * count;
-              totalCap += unitCap * count;
-              totalCount += count;
-            });
-          });
-
-        } else if (id === 'tower') {
-          // 产业大厦
-          const area = opts.areas[0]; // 单选
-          const base = area;
-
-          // 层数反推
-          const refHeight = maxLayerHeight; // 参考较高分层厂房高度
-          let estFloors = Math.floor((refHeight - 6.6 - 1.2) / 4.5) + 1;
-          if (estFloors < 3) estFloors = 3;
-
-          let singleArea = rdQuota / estFloors;
-          let actualBase = base;
-
-          // 面积调整
-          if (singleArea < 1200) actualBase = 1200;
-          else if (singleArea > 2400) actualBase = 2400;
-          else actualBase = Math.round(singleArea / 100) * 100; // 取100的倍数
-
-          // 重新计算层数
-          let floors = Math.ceil(rdQuota / actualBase);
-          if (floors < 3) floors = 3;
-
-          // 检查高度限制
-          let totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
-          if (totalH > 80) {
-            // 先降标准层到4.2m
-            totalH = 6.6 + 4.2 * (floors - 2) + 4.5 + 1.2;
-            if (totalH > 80) {
-              // 仍超限，减少层数
-              while (totalH > 80 && floors > 3) {
-                floors--;
-                totalH = 6.6 + 4.2 * (floors - 2) + 4.5 + 1.2;
-              }
+      
+      // 7. 计容调整
+      if (currentCap < remainingCap) {
+        // 计容不够，增加计容效率高的配置
+        while (currentCap < remainingCap * 0.9995) {
+          let maxIdx = -1, maxEff = 0;
+          variableConfigs.forEach((c, i) => {
+            const eff = c.unitCap / c.base;
+            if (eff > maxEff) {
+              maxEff = eff;
+              maxIdx = i;
             }
-          }
-
-          const unitArea = actualBase * floors;
-          const unitCap = actualBase * floors;
-          const count = 1; // 最多1栋
-
-          // 电梯
-          const totalUnitArea = unitArea;
-          const paxLift = Math.ceil(totalUnitArea / 4000) - 2;
-          const elevator = `${paxLift > 0 ? paxLift : 1}客2货`;
-
-          products.push({
-            type: '产业大厦', productType: `${floors}F-D(${actualBase})`, form: '独栋',
-            load: '首层2000kg，标准层350kg',
-            floors, elevator,
-            fl: { first: 6.6, second: 4.5, standard: 4.5, top: 4.5 },
-            flSuffix: { second: '', standard: '', top: '' },
-            totalHeight: totalH, base: actualBase, unitArea, unitCap,
-            count, totalBase: actualBase * count, totalArea: unitArea * count, totalCap: unitCap * count
           });
-          totalBase += actualBase * count;
-          totalArea += unitArea * count;
-          totalCap += unitCap * count;
-          totalCount += count;
-
-        } else if (id === 'dorm') {
-          // 配套宿舍
-          const ancillaryArea = targetAboveGround * ancillaryRatio;
-
-          // 层数反推
-          const refHeight = minLayerHeight; // 参考较低分层厂房高度
-          let estFloors = Math.floor((refHeight - 4.8 - 1.2) / 3.6) + 1;
-          if (estFloors < 3) estFloors = 3;
-
-          let singleArea = ancillaryArea / estFloors;
-          let actualBase;
-
-          if (singleArea < 800) actualBase = 800;
-          else if (singleArea > 1200) actualBase = 1200;
-          else actualBase = Math.round(singleArea / 100) * 100;
-
-          let floors = Math.ceil(ancillaryArea / actualBase);
-          if (floors < 3) floors = 3;
-
-          // 检查高度
-          let totalH = 4.8 + 3.6 * (floors - 2) + 3.6 + 1.2;
-          if (totalH > refHeight) {
-            // 降标准层到3.3m
-            totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
-            if (totalH > refHeight) {
-              while (totalH > refHeight && floors > 3) {
-                floors--;
-                totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
-              }
-            }
-          }
-
-          const unitArea = actualBase * floors;
-          const unitCap = actualBase * floors;
-          const count = 1;
-
-          // 电梯
-          const paxLift = Math.ceil(unitArea / 5000);
-          const elevator = `${paxLift}客0货`;
-
-          products.push({
-            type: '配套宿舍', productType: `${floors}F-D(${actualBase})`, form: '独栋',
-            load: '标准层350kg',
-            floors, elevator,
-            fl: { first: 4.8, second: 3.6, standard: 3.6, top: 3.6 },
-            flSuffix: { second: '', standard: '', top: '' },
-            totalHeight: totalH, base: actualBase, unitArea, unitCap,
-            count, totalBase: actualBase * count, totalArea: unitArea * count, totalCap: unitCap * count
-          });
-          totalBase += actualBase * count;
-          totalArea += unitArea * count;
-          totalCap += unitCap * count;
-          totalCount += count;
-
-        } else if (id === 'support') {
-          // 配套楼：默认3层
-          const area = opts.areas[0]; // 单选
-          const floors = 3;
-          const base = Math.round(area / 3);
-          const unitArea = area;
-          const unitCap = area;
-          const totalH = 7.2 + 5.1 + 4.5 + 1.2;
-          const count = 1;
-
-          // 电梯
-          const elevator = base < 1500 ? '0客1货' : (base < 4000 ? '1客1货' : '1客2货');
-
-          products.push({
-            type: '配套楼', productType: `3F-D(${base})`, form: '独栋',
-            load: '首层2000kg，二层800kg，二层及以上500kg',
-            floors, elevator,
-            fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
-            flSuffix: { second: '', standard: '', top: '' },
-            totalHeight: totalH, base, unitArea, unitCap,
-            count, totalBase: base * count, totalArea: unitArea * count, totalCap: unitCap * count
-          });
-          totalBase += base * count;
-          totalArea += unitArea * count;
-          totalCap += unitCap * count;
-          totalCount += count;
+          if (maxIdx === -1) break;
+          counts[maxIdx]++;
+          currentCap += variableConfigs[maxIdx].unitCap;
+          currentBase += variableConfigs[maxIdx].base;
         }
+      } else if (currentCap > remainingCap) {
+        // 计容超了，减少计容效率高的配置
+        while (currentCap > remainingCap * 1.0005) {
+          let maxIdx = -1, maxEff = 0;
+          variableConfigs.forEach((c, i) => {
+            if (counts[i] > 2) {
+              const eff = c.unitCap / c.base;
+              if (eff > maxEff) {
+                maxEff = eff;
+                maxIdx = i;
+              }
+            }
+          });
+          if (maxIdx === -1) break;
+          counts[maxIdx]--;
+          currentCap -= variableConfigs[maxIdx].unitCap;
+          currentBase -= variableConfigs[maxIdx].base;
+        }
+      }
+      
+      // 8. 生成产品数组
+      let totalBase = 0, totalArea = 0, totalCap = 0, totalCount = 0;
+      
+      // 可变产品
+      variableConfigs.forEach((c, i) => {
+        const count = counts[i];
+        if (count <= 0) return;
+        const form = c.id === 'layer' ? '分层分户' : '独栋';
+        
+        products.push({
+          type: c.type, productType: c.productType, form,
+          load: c.load, floors: c.floors, elevator: c.elevator,
+          fl: c.fl, flSuffix: c.flSuffix, totalHeight: c.totalHeight,
+          base: c.base, unitArea: c.unitArea, unitCap: c.unitCap, count,
+          totalBase: c.base * count, totalArea: c.unitArea * count,
+          totalCap: c.unitCap * count
+        });
+        totalBase += c.base * count;
+        totalArea += c.unitArea * count;
+        totalCap += c.unitCap * count;
+        totalCount += count;
       });
-
-      // 密度校验与调整
+      
+      // 固定产品
+      fixedConfigs.forEach(c => {
+        products.push({
+          type: c.type, productType: c.productType, form: '独栋',
+          load: c.load, floors: c.floors, elevator: c.elevator,
+          fl: c.fl, flSuffix: c.flSuffix, totalHeight: c.totalHeight,
+          base: c.base, unitArea: c.unitArea, unitCap: c.unitCap, count: 1,
+          totalBase: c.base, totalArea: c.unitArea, totalCap: c.unitCap
+        });
+        totalBase += c.base;
+        totalArea += c.unitArea;
+        totalCap += c.unitCap;
+        totalCount += 1;
+      });
+      
+      // 9. 最终校验
       const actualDensity = totalBase / landArea;
-      const densityError = Math.abs(actualDensity - targetDensity) / targetDensity;
-
-      // 容积率校验
       const actualFar = totalCap / landArea;
-      const farError = Math.abs(actualFar - far) / far;
-
+      
       return {
         products, totalBase, totalArea, totalCap, totalCount,
-        _check: {
-          targetDensity, actualDensity, densityError,
-          targetFar: far, actualFar, farError,
-          targetAboveGround, actualAboveGround: totalArea
-        }
+        _check: { targetDensity: density, actualDensity, targetFar: far, actualFar, targetBase, targetCap }
       };
     }
 
@@ -1659,10 +1651,22 @@
           <td class="num">${fmtNum(p.totalHeight, 1)}m</td>
           <td class="num">${fmtInt(p.unitArea)}</td>
           <td class="num">${p.count}</td>
+          <td class="num">${fmtInt(p.totalBase)}</td>
           <td class="num">${fmtInt(p.totalArea)}</td>
           <td class="num">${fmtInt(p.totalCap)}</td>
         </tr>
       `).join('');
+
+      // 总计行
+      const totalRow = `
+        <tr style="background:var(--brand-light);font-weight:600;">
+          <td colspan="5">合计</td>
+          <td class="num">${fmtInt(result.totalCount)}</td>
+          <td class="num">${fmtInt(result.totalBase)}</td>
+          <td class="num">${fmtInt(result.totalArea)}</td>
+          <td class="num">${fmtInt(result.totalCap)}</td>
+        </tr>
+      `;
 
       document.getElementById('config-overview-content').innerHTML = `
         <div class="card">
@@ -1670,9 +1674,9 @@
             <table class="data-table indicator-table">
               <thead><tr>
                 <th>厂房类型</th><th>产品类型</th><th>形式</th><th>总层高</th>
-                <th>单栋面积</th><th>栋数</th><th>户型总面积</th><th>户型总计容面积</th>
+                <th>单栋面积</th><th>栋数</th><th>户型总占地面积</th><th>户型总面积</th><th>户型总计容面积</th>
               </tr></thead>
-              <tbody>${tbody}</tbody>
+              <tbody>${tbody}${totalRow}</tbody>
             </table>
           </div>
         </div>`;
