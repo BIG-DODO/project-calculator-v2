@@ -690,8 +690,8 @@
 
       let groundNonVehicle = 0, undergroundNonVehicle = 0;
       // 先计算地面机动车位（假设非机动车全放地面）
-      let groundNonVehicle = totalNonVehicle;
-      let undergroundNonVehicle = 0;
+      groundNonVehicle = totalNonVehicle;
+      undergroundNonVehicle = 0;
       const groundNonVehicleArea = groundNonVehicle * 1.5;
       const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
       let groundVehicle = Math.floor(availableParkingArea / 35);
