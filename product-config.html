@@ -221,12 +221,17 @@
     }
 
     /* ---------- 产品类型选择（Step1） ---------- */
-    .product-grid { display: flex; flex-direction: column; gap: 8px; }
+    .product-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
     .product-chip {
       background: #fff;
       border: 2px solid var(--neutral-200);
       border-radius: var(--radius-xs);
-      padding: 10px 12px;
+      padding: 16px 12px;
+      text-align: center;
       cursor: pointer;
       transition: all 0.2s;
       position: relative;
@@ -238,13 +243,15 @@
       box-shadow: 0 0 0 3px rgba(59,141,216,0.15);
     }
     .product-chip.disabled {
-      opacity: 0.35;
+      opacity: 0.4;
       cursor: not-allowed;
       border-color: var(--neutral-200);
     }
     .product-chip .chip-icon { font-size: 1.5rem; margin-bottom: 6px; }
     .product-chip .chip-name { font-size: 0.85rem; font-weight: 600; }
     .product-chip .chip-hint { font-size: 0.7rem; color: var(--neutral-400); margin-top: 2px; }
+    .product-chip .chip-mobile { display: none; }
+    .product-chip .chip-desktop { display: block; }
     .product-chip .multi-badge {
       position: absolute;
       top: 6px; right: 6px;
@@ -255,12 +262,13 @@
       border-radius: 10px;
       font-weight: 600;
     }
-    /* 手机端：产品内联配置选项 */
+    /* 手机端内联配置选项 */
     .product-chip .mobile-options {
       display: none;
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px dashed var(--neutral-200);
+      text-align: left;
     }
     .product-chip.selected .mobile-options {
       display: block;
@@ -490,7 +498,10 @@
       .config-left .product-chip {
         padding: 10px;
         margin-bottom: 0;
+        text-align: left;
       }
+      .product-chip .chip-desktop { display: none; }
+      .product-chip .chip-mobile { display: block; }
       /* 手机端隐藏右侧独立的 Step2 折叠面板 */
       #sub-options-card { display: none !important; }
     }
@@ -714,13 +725,23 @@
         return `
           <div class="product-chip ${isSelected ? 'selected' : ''} ${!isAvailable ? 'disabled' : ''}"
                data-id="${p.id}" onclick="${isAvailable ? `toggleProduct('${p.id}')` : ''}">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:1.3rem;">${p.icon}</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-weight:600;font-size:0.85rem;">${p.name}</div>
-                <div style="font-size:0.7rem;color:var(--neutral-400);">${isAvailable ? p.hint : '不可用'}</div>
+            <!-- 桌面端：居中显示 -->
+            <div class="chip-desktop">
+              <div class="chip-icon">${p.icon}</div>
+              <div class="chip-name">${p.name}</div>
+              <div class="chip-hint">${isAvailable ? p.hint : '当前容积率不可用'}</div>
+              ${isSelected ? '<div style="color:var(--success);font-size:0.8rem;margin-top:4px;">✓ 已选择</div>' : ''}
+            </div>
+            <!-- 手机端：横向显示 -->
+            <div class="chip-mobile">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:1.3rem;">${p.icon}</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:0.85rem;">${p.name}</div>
+                  <div style="font-size:0.7rem;color:var(--neutral-400);">${isAvailable ? p.hint : '不可用'}</div>
+                </div>
+                ${isSelected ? '<span style="color:var(--success);font-size:1rem;">✓</span>' : ''}
               </div>
-              ${isSelected ? '<span style="color:var(--success);font-size:1rem;">✓</span>' : ''}
             </div>
             ${mobileOpts}
           </div>`;
