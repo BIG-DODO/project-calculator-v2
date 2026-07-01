@@ -1794,31 +1794,99 @@
       });
     }
 
-    // ==================== 综合指标一览 ====================
+    // ==================== 综合指标一览（基于产品配置重新计算） ====================
     function renderIndicatorOverview(result) {
       const acre = projectData.landArea / 666.7;
-      const calc = projectData.calculated;
+      const landArea = projectData.landArea;
+      const greenRate = projectData.greenRate;
+      const region = projectData.region;
+      const isHangzhou = region === '杭州' || region === '长三角';
+
+      // 根据产品配置重新计算各指标
+      const actualAboveGround = result.totalArea;      // 地上建筑面积（产品配置实际值）
+      const actualCap = result.totalCap;               // 总计容面积
+      const actualDensity = result.totalBase / landArea; // 实际建筑密度
+      const actualFar = actualCap / landArea;            // 实际容积率
+
+      // 厂房面积和配套面积（用于车位计算）
+      let factoryArea = 0, ancillaryArea = 0, rdArea = 0;
+      result.products.forEach(p => {
+        if (p.type === '产业大厦') {
+          // C65下产业大厦是研发办公用房
+          if (projectData.region === '上海' && projectData.landUseType === 'C65') {
+            rdArea += p.totalArea;
+          } else {
+            factoryArea += p.totalArea;
+          }
+        } else if (p.type === '配套宿舍' || p.type === '配套楼') {
+          ancillaryArea += p.totalArea;
+        } else {
+          factoryArea += p.totalArea;
+        }
+      });
+
+      // 车位计算（同第一页逻辑，但基于实际配置面积）
+      const factoryRate = projectData.factoryRate || 0.5;
+      const ancillaryRate = projectData.ancillaryRate || 1.0;
+      const totalVehicle = Math.ceil(factoryArea * factoryRate / 100) + Math.ceil(ancillaryArea * ancillaryRate / 100);
+      const totalNonVehicle = Math.ceil(actualAboveGround * 1.0 / 100);
+
+      // 道路、绿地、基底面积
+      const roadArea = landArea * 0.30;
+      const greenArea = landArea * greenRate;
+      const buildingBaseArea = result.totalBase; // 实际基底
+
+      // 非机动车分配
+      let groundNonVehicle = totalNonVehicle;
+      let undergroundNonVehicle = 0;
+      const groundNonVehicleArea = groundNonVehicle * 1.5;
+      const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
+      let groundVehicle = Math.floor(availableParkingArea / 35);
+      if (groundVehicle < 10) groundVehicle = 0;
+
+      let undergroundVehicle = 0;
+      let undergroundArea = 0;
+      let undergroundRemark = '含地下车库与设备用房';
+
+      if (groundVehicle >= totalVehicle) {
+        groundVehicle = totalVehicle;
+        undergroundVehicle = 0;
+        undergroundArea = 500;
+        undergroundRemark = '设备用房';
+      } else {
+        if (totalNonVehicle > 500) {
+          groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+          undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+        }
+        undergroundVehicle = totalVehicle - groundVehicle;
+        undergroundArea = isHangzhou
+          ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
+          : undergroundVehicle * 35 + undergroundNonVehicle * 1.5;
+      }
+
+      const totalBuildingArea = actualAboveGround + undergroundArea;
+
       document.getElementById('indicator-overview-content').innerHTML = `
         <div class="card">
           <div class="indicator-table-wrap">
             <table class="data-table indicator-table">
               <tbody>
-                <tr><td>规划用地面积</td><td class="num">${fmtNum(projectData.landArea, 1)}</td><td class="unit">m²</td><td>约${fmtNum(acre, 1)}亩</td></tr>
-              <tr><td>总建筑面积</td><td class="num">${fmtNum(result.totalArea + calc.undergroundArea, 1)}</td><td class="unit">m²</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地上建筑面积</td><td class="num">${fmtNum(result.totalArea, 1)}</td><td class="unit">m²</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地下建筑面积</td><td class="num">${fmtNum(calc.undergroundArea, 1)}</td><td class="unit">m²</td><td>含地下车库与设备用房</td></tr>
-              <tr><td><strong>计容总建筑面积</strong></td><td class="num"><strong>${fmtNum(result.totalCap, 1)}</strong></td><td class="unit">m²</td><td>—</td></tr>
-              <tr><td>容积率</td><td class="num">${fmtNum(projectData.far, 2)}</td><td class="unit">—</td><td>—</td></tr>
-              <tr><td>绿地率</td><td class="num">${(projectData.greenRate * 100).toFixed(2)}%</td><td class="unit">—</td><td>—</td></tr>
-              <tr><td>建筑密度</td><td class="num">${(calc.buildingDensity * 100).toFixed(0)}%</td><td class="unit">—</td><td>—</td></tr>
-              <tr style="background:var(--neutral-100);"><td>机动车停车位数量</td><td class="num">${fmtInt(calc.totalVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地面机动车停车位</td><td class="num">${fmtInt(calc.groundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地下机动车停车位</td><td class="num">${fmtInt(calc.undergroundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-              <tr style="background:var(--neutral-100);"><td>非机动车停车位数量</td><td class="num">${fmtInt(calc.totalNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地面非机动车停车位</td><td class="num">${fmtInt(calc.groundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-              <tr><td style="padding-left:32px;">地下非机动车停车位</td><td class="num">${fmtInt(calc.undergroundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
-            </tbody>
-          </table>
+                <tr><td>规划用地面积</td><td class="num">${fmtNum(landArea, 1)}</td><td class="unit">m²</td><td>约${fmtNum(acre, 1)}亩</td></tr>
+                <tr><td>总建筑面积</td><td class="num">${fmtNum(totalBuildingArea, 1)}</td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地上建筑面积</td><td class="num">${fmtNum(actualAboveGround, 1)}</td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下建筑面积</td><td class="num">${fmtNum(undergroundArea, 1)}</td><td class="unit">m²</td><td>${undergroundRemark}</td></tr>
+                <tr><td><strong>计容总建筑面积</strong></td><td class="num"><strong>${fmtNum(actualCap, 1)}</strong></td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td>容积率</td><td class="num">${fmtNum(actualFar, 2)}</td><td class="unit">—</td><td>目标${fmtNum(projectData.far, 2)}</td></tr>
+                <tr><td>绿地率</td><td class="num">${(greenRate * 100).toFixed(2)}%</td><td class="unit">—</td><td>—</td></tr>
+                <tr><td>建筑密度</td><td class="num">${(actualDensity * 100).toFixed(0)}%</td><td class="unit">—</td><td>目标${(projectData.far < 1.5 ? 45 : (projectData.far < 2.0 ? 42 : 40))}%</td></tr>
+                <tr style="background:var(--neutral-100);"><td>机动车停车位数量</td><td class="num">${fmtInt(totalVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地面机动车停车位</td><td class="num">${fmtInt(groundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下机动车停车位</td><td class="num">${fmtInt(undergroundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr style="background:var(--neutral-100);"><td>非机动车停车位数量</td><td class="num">${fmtInt(totalNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地面非机动车停车位</td><td class="num">${fmtInt(groundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下非机动车停车位</td><td class="num">${fmtInt(undergroundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>`;
     }
