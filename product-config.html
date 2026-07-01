@@ -687,6 +687,9 @@
               </div>
             </div>
 
+            <button class="btn btn-secondary" style="width:100%;padding:10px;font-size:0.85rem;margin-bottom:10px;" onclick="fillExampleConfig()">
+              ⚡ 一键录入示例配置
+            </button>
             <button class="btn btn-primary" style="width:100%;padding:14px;font-size:1rem;" onclick="generateConfig()">
               🚀 生成产品配置
             </button>
@@ -751,6 +754,39 @@
       projectData = JSON.parse(raw);
       renderProductGrid();
     })();
+
+    // ---------- 一键录入示例配置 ----------
+    function fillExampleConfig() {
+      // 清空当前选择
+      selectedProducts.clear();
+      productOptions = {};
+
+      // 分栋厂房：4层 / 800m² / 1000m²
+      selectedProducts.add('split');
+      productOptions['split'] = { floors: [4], areas: [800, 1000] };
+
+      // 分层厂房：8层 / 1000m² / 1200m²
+      selectedProducts.add('layer');
+      productOptions['layer'] = { floors: [8], areas: [1000, 1200] };
+
+      // 产业大厦：2000m²
+      selectedProducts.add('tower');
+      productOptions['tower'] = { areas: [2000] };
+
+      // 配套宿舍：勾选
+      selectedProducts.add('dorm');
+      productOptions['dorm'] = {};
+
+      // 配套楼：1800m²
+      selectedProducts.add('support');
+      productOptions['support'] = { areas: [1800] };
+
+      lastExpandedProduct = 'support';
+
+      renderProductGrid();
+      renderSubOptions();
+      showToast('示例配置已录入');
+    }
 
     // ==================== 产品类型网格 ====================
 
@@ -1303,6 +1339,16 @@
       } else {
         el.classList.remove('scrolled-right');
       }
+    }
+
+    // Toast 提示
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(11,43,92,0.95);color:#fff;padding:12px 28px;border-radius:10px;font-size:0.875rem;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2000);
+      setTimeout(() => t.remove(), 2300);
     }
   </script>
 </body>
