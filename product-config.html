@@ -1436,9 +1436,9 @@
           const dormTarget = totalAncillary * 2 / 3; // 宿舍占2/3
           
           // 先确定配套楼（固定3层）
-          const supportArea = productOptions['support'].areas[0];
+          const supportAreaInput = productOptions['support'].areas[0];
           const supportFloors = 3;
-          const supportBase = Math.round(supportArea / 3);
+          const supportBaseInput = Math.round(supportAreaInput / 3);
           
           // 宿舍面积
           let dormUnitArea = dormTarget;
@@ -1468,11 +1468,11 @@
           unitCap = unitArea;
           
           // 检查配套占比误差
-          const actualAncillary = unitArea + supportArea;
+          const actualAncillary = unitArea + supportAreaInput;
           const actualRatio = actualAncillary / targetAboveGround;
           if (Math.abs(actualRatio - ancillaryRatio) > 0.001) {
             // 微调宿舍面积
-            const targetDorm = targetAncillaryArea - supportArea;
+            const targetDorm = targetAncillaryArea - supportAreaInput;
             floors = Math.max(3, Math.round(targetDorm / base));
             unitArea = base * floors;
             unitCap = unitArea;
@@ -1494,17 +1494,14 @@
           
           // 配套楼
           allConfigs.push({
-            id: 'support', type: '配套楼', base: supportBase, unitCap: supportArea, unitArea: supportArea,
+            id: 'support', type: '配套楼', base: supportBaseInput, unitCap: supportAreaInput, unitArea: supportAreaInput,
             floors: supportFloors, totalHeight: 7.2 + 5.1 + 4.5 + 1.2, isVariable: false, count: 1,
-            elevator: supportBase < 1500 ? '0客1货' : (supportBase < 4000 ? '1客1货' : '1客2货'),
+            elevator: supportBaseInput < 1500 ? '0客1货' : (supportBaseInput < 4000 ? '1客1货' : '1客2货'),
             load: '首层2000kg，二层800kg，二层及以上500kg',
             fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
             flSuffix: { second: '', standard: '', top: '' },
-            productType: '3F-D(' + supportBase + ')'
+            productType: '3F-D(' + supportBaseInput + ')'
           });
-          supportArea = supportArea;
-          supportBase = supportBase;
-          supportCap = supportArea;
         } else {
           // 仅选宿舍
           const estFloors = Math.floor((minLayerHeight - 4.8 - 1.2) / 3.6) + 1;
@@ -1554,31 +1551,31 @@
         }
       } else if (selectedProducts.has('support')) {
         // 仅选配套楼
-        const area = productOptions['support'].areas[0];
+        const supportAreaInput = productOptions['support'].areas[0];
         const floors = 3;
-        const base = Math.round(area / 3);
+        const supportBaseInput = Math.round(supportAreaInput / 3);
         const totalH = 7.2 + 5.1 + 4.5 + 1.2;
         
         // 检查占比误差
-        const actualRatio = area / targetAboveGround;
-        let finalArea = area;
+        const actualRatio = supportAreaInput / targetAboveGround;
+        let finalArea = supportAreaInput;
         if (Math.abs(actualRatio - ancillaryRatio) > 0.001) {
           // 尝试调整建筑面积到接近目标
           const targetArea = targetAncillaryArea;
           const rounded = Math.round(targetArea / 100) * 100;
-          if (Math.abs(rounded - area) / targetAboveGround <= 0.001) {
+          if (Math.abs(rounded - supportAreaInput) / targetAboveGround <= 0.001) {
             finalArea = rounded;
           }
         }
         
         allConfigs.push({
-          id: 'support', type: '配套楼', base, unitCap: finalArea, unitArea: finalArea,
+          id: 'support', type: '配套楼', base: supportBaseInput, unitCap: finalArea, unitArea: finalArea,
           floors, totalHeight: totalH, isVariable: false, count: 1,
-          elevator: base < 1500 ? '0客1货' : (base < 4000 ? '1客1货' : '1客2货'),
+          elevator: supportBaseInput < 1500 ? '0客1货' : (supportBaseInput < 4000 ? '1客1货' : '1客2货'),
           load: '首层2000kg，二层800kg，二层及以上500kg',
           fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
           flSuffix: { second: '', standard: '', top: '' },
-          productType: '3F-D(' + base + ')'
+          productType: '3F-D(' + supportBaseInput + ')'
         });
         supportArea = finalArea;
         supportBase = base;
