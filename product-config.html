@@ -641,9 +641,12 @@
     .mobile-example-btn { display: none; }
     .indicator-table-wrap {
       width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .indicator-table {
       width: 100%;
+      min-width: 640px;
     }
     .indicator-table td:first-child {
       white-space: nowrap;
