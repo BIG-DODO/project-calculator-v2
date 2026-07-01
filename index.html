@@ -3,81 +3,235 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>项目综合指标估算工具</title>
+  <title>项目综合指标估算 - 未来园</title>
   <style>
     :root {
-      --primary: #2563eb;
-      --primary-light: #3b82f6;
-      --danger: #dc2626;
-      --success: #16a34a;
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --radius: 12px;
-      --shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+      /* 品牌色 */
+      --brand-primary: #0B2B5C;
+      --brand-secondary: #1E4E8C;
+      --brand-accent: #3B8DD8;
+      --brand-gradient: linear-gradient(135deg, #0B2B5C, #1E4E8C);
+      --brand-gradient-hover: linear-gradient(135deg, #1E4E8C, #3B8DD8);
+      --brand-light: rgba(59, 141, 216, 0.08);
+
+      /* 中性色 */
+      --neutral-900: #0F172A;
+      --neutral-700: #334155;
+      --neutral-600: #475569;
+      --neutral-400: #94A3B8;
+      --neutral-300: #CBD5E1;
+      --neutral-200: #E2E8F0;
+      --neutral-100: #F1F5F9;
+      --neutral-50: #F8FAFC;
+
+      /* 功能色 */
+      --success: #059669;
+      --success-bg: #ECFDF5;
+      --warning: #D97706;
+      --danger: #DC2626;
+      --danger-bg: #FEF2F2;
+      --info-bg: #EFF6FF;
+
+      --bg: var(--neutral-50);
+      --card: #FFFFFF;
+      --text: var(--neutral-900);
+      --text-muted: var(--neutral-600);
+      --text-subtle: var(--neutral-400);
+      --border: var(--neutral-200);
+      --radius: 16px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      --shadow-lg: 0 4px 6px -1px rgba(0,0,0,0.08), 0 10px 24px -4px rgba(0,0,0,0.06);
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .container { max-width: 640px; margin: 0 auto; padding: 16px; }
-    header {
-      text-align: center;
-      padding: 24px 0 12px;
-    }
-    header h1 { font-size: 1.5rem; font-weight: 700; color: var(--text); }
-    header p { color: var(--text-muted); font-size: 0.875rem; margin-top: 4px; }
 
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 16px;
+      width: 100%;
+      flex: 1;
+    }
+
+    /* ---------- 品牌横幅 ---------- */
+    .brand-banner {
+      background: var(--brand-gradient);
+      color: #fff;
+      padding: 24px 20px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .brand-banner::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+      border-radius: 50%;
+      transform: translate(50%, -40%);
+    }
+    .brand-banner::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%; height: 1px;
+      background: rgba(255,255,255,0.1);
+    }
+    .brand-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: relative;
+      z-index: 1;
+    }
+    .brand-logo {
+      width: 48px; height: 48px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      backdrop-filter: blur(8px);
+      flex-shrink: 0;
+    }
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      line-height: 1.3;
+    }
+    .brand-text h1 .en {
+      font-size: 0.75rem;
+      font-weight: 400;
+      opacity: 0.7;
+      margin-left: 6px;
+      letter-spacing: 1px;
+    }
+    .brand-text .tagline {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-top: 3px;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+    }
+    .brand-text .version-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      background: rgba(255,255,255,0.15);
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-left: 8px;
+      letter-spacing: 0.5px;
+      vertical-align: middle;
+    }
+
+    /* ---------- 工具标题区 ---------- */
+    .tool-header {
+      text-align: center;
+      padding: 28px 0 16px;
+    }
+    .tool-header h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--neutral-900);
+      letter-spacing: 0.3px;
+    }
+    .tool-header p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    /* ---------- 卡片 ---------- */
     .card {
       background: var(--card);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-lg);
     }
     .card-header {
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      background: var(--brand-gradient);
       color: #fff;
       padding: 16px 20px;
       font-weight: 600;
-      font-size: 1.05rem;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .card-body { padding: 16px 20px; }
+    .card-header .icon {
+      font-size: 1.1rem;
+      opacity: 0.8;
+    }
+    .card-body { padding: 20px 20px 24px; }
 
+    /* ---------- 表单 ---------- */
     .form-group { margin-bottom: 16px; }
+    .form-group:last-child { margin-bottom: 0; }
     .form-group label {
       display: block;
       font-weight: 600;
-      font-size: 0.875rem;
+      font-size: 0.85rem;
       margin-bottom: 6px;
-      color: var(--text);
+      color: var(--neutral-700);
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
-    .form-group label .required { color: var(--danger); margin-left: 2px; }
-    .form-group label .optional { color: var(--text-muted); font-weight: 400; font-size: 0.75rem; }
-    .form-group .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
-    .form-group .error { font-size: 0.75rem; color: var(--danger); margin-top: 4px; display: none; }
+    .form-group label .required { color: var(--danger); font-weight: 700; }
+    .form-group label .optional { color: var(--text-subtle); font-weight: 400; font-size: 0.75rem; }
+    .form-group .hint { font-size: 0.75rem; color: var(--text-subtle); margin-top: 4px; }
+    .form-group .error { font-size: 0.75rem; color: var(--danger); margin-top: 4px; display: none; font-weight: 500; }
     .form-group.error .error { display: block; }
-    .form-group.error input, .form-group.error select { border-color: var(--danger); }
+    .form-group.error input,
+    .form-group.error select { border-color: var(--danger); background: var(--danger-bg); }
+    .form-group.error input:focus,
+    .form-group.error select:focus { box-shadow: 0 0 0 3px rgba(220,38,38,0.1); }
+
     input[type="text"], input[type="number"], select {
       width: 100%;
       padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-xs);
       font-size: 1rem;
       color: var(--text);
       background: #fff;
-      transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+      transition: all 0.2s ease;
       -webkit-appearance: none;
     }
-    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-    input::placeholder { color: #cbd5e1; }
-    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--brand-accent);
+      box-shadow: 0 0 0 3px rgba(59,141,216,0.12);
+    }
+    input::placeholder { color: var(--neutral-300); }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394A3B8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
 
     .row { display: flex; gap: 12px; }
     .row .form-group { flex: 1; }
@@ -85,92 +239,174 @@
 
     .hidden { display: none !important; }
 
+    /* ---------- 按钮 ---------- */
     .btn {
       display: block;
       width: 100%;
       padding: 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-xs);
       font-size: 1rem;
       font-weight: 600;
       text-align: center;
       cursor: pointer;
-      transition: transform 0.1s, opacity 0.2s;
+      transition: all 0.2s ease;
+      letter-spacing: 0.5px;
     }
     .btn:active { transform: scale(0.98); }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-light); }
-    .btn-secondary { background: var(--border); color: var(--text); margin-top: 10px; }
-    .btn-secondary:hover { background: #cbd5e1; }
-    .btn-accent { background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; margin-top: 10px; }
-    .btn-accent:hover { opacity: 0.92; }
 
-    .result-section { display: none; margin-top: 16px; }
+    .btn-primary {
+      background: var(--brand-gradient);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(11,43,92,0.25);
+    }
+    .btn-primary:hover {
+      background: var(--brand-gradient-hover);
+      box-shadow: 0 4px 12px rgba(11,43,92,0.3);
+    }
+
+    .btn-secondary {
+      background: var(--neutral-100);
+      color: var(--neutral-700);
+      border: 1px solid var(--neutral-200);
+    }
+    .btn-secondary:hover { background: var(--neutral-200); }
+
+    .btn-accent {
+      background: var(--brand-gradient-hover);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(30,78,140,0.3);
+    }
+    .btn-accent:hover {
+      opacity: 0.92;
+      box-shadow: 0 4px 12px rgba(30,78,140,0.35);
+    }
+
+    /* ---------- 结果区域 ---------- */
+    .result-section { display: none; margin-top: 20px; }
     .result-section.show { display: block; }
+
     .result-title {
-      background: var(--primary);
+      background: var(--brand-gradient);
       color: #fff;
       text-align: center;
-      padding: 12px;
+      padding: 14px;
       font-weight: 700;
       font-size: 1.1rem;
-      border-radius: 8px 8px 0 0;
+      border-radius: var(--radius) var(--radius) 0 0;
+      letter-spacing: 0.5px;
     }
-    .result-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-    .result-table th, .result-table td {
+
+    .result-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .result-table th,
+    .result-table td {
       padding: 10px 12px;
       border: 1px solid var(--border);
       text-align: left;
       vertical-align: top;
     }
     .result-table th {
-      background: #f1f5f9;
+      background: var(--neutral-100);
       font-weight: 600;
-      color: var(--text-muted);
-      font-size: 0.75rem;
+      color: var(--neutral-600);
+      font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
     .result-table td { background: #fff; }
     .result-table tr:nth-child(even) td { background: #fafafa; }
-    .result-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .result-table td.unit { text-align: center; color: var(--text-muted); font-size: 0.8rem; }
-    .result-table td.remark { font-size: 0.8rem; color: var(--text-muted); }
-    .result-table .group-row td { background: #f1f5f9; font-weight: 600; padding-left: 28px; }
+    .result-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--neutral-900); }
+    .result-table td.unit { text-align: center; color: var(--text-subtle); font-size: 0.75rem; }
+    .result-table td.remark { font-size: 0.78rem; color: var(--text-subtle); }
+
+    .result-table .group-row td {
+      background: var(--brand-light);
+      font-weight: 600;
+      padding-left: 28px;
+      color: var(--brand-primary);
+      border-left: 3px solid var(--brand-accent);
+    }
     .result-table .group-row td:first-child { padding-left: 12px; }
     .result-table .sub-row td { padding-left: 32px; }
     .result-table .sub-row td:first-child { padding-left: 28px; color: var(--text-muted); font-size: 0.8rem; }
 
-    .action-bar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-    .action-bar .btn { flex: 1; margin-top: 0; min-width: 120px; }
+    .result-table .highlight-row td { background: var(--info-bg); }
+    .result-table .highlight-row td.num { color: var(--brand-primary); font-weight: 700; }
 
+    .action-bar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; padding: 12px 16px 16px; }
+    .action-bar .btn { flex: 1; margin-top: 0; min-width: 100px; font-size: 0.85rem; padding: 11px; }
+
+    /* ---------- 页脚 ---------- */
+    footer {
+      background: var(--brand-primary);
+      color: rgba(255,255,255,0.6);
+      text-align: center;
+      padding: 20px 16px;
+      margin-top: 40px;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+    }
+    footer .brand {
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    footer .tagline { opacity: 0.8; margin-top: 2px; }
+
+    /* ---------- Toast ---------- */
     #toast {
       position: fixed;
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%) translateY(100px);
-      background: rgba(30,41,59,0.95);
+      background: rgba(11,43,92,0.95);
       color: #fff;
-      padding: 12px 24px;
-      border-radius: 8px;
+      padding: 12px 28px;
+      border-radius: 10px;
       font-size: 0.875rem;
       opacity: 0;
       transition: all 0.3s ease;
       z-index: 1000;
       pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      backdrop-filter: blur(8px);
     }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>项目综合指标估算</h1>
-      <p>输入基础规划数据，快速生成项目指标表</p>
-    </header>
+  <!-- 品牌横幅 -->
+  <div class="brand-banner">
+    <div class="container">
+      <div class="brand-content">
+        <div class="brand-logo">⬡</div>
+        <div class="brand-text">
+          <h1>
+            未来园 <span class="en">FUTURE PARK</span>
+            <span class="version-badge">V1.1</span>
+          </h1>
+          <div class="tagline">让产业空间 链接未来</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <div class="container">
+    <div class="tool-header">
+      <h2>项目综合指标估算</h2>
+      <p>输入基础规划数据，快速生成项目指标表</p>
+    </div>
+
+    <!-- 输入表单 -->
     <div class="card">
-      <div class="card-header">基础参数输入</div>
+      <div class="card-header">
+        <span class="icon">📋</span> 基础参数输入
+      </div>
       <div class="card-body">
         <div class="form-group" id="group-name">
           <label>项目名称 <span class="optional">（选填）</span></label>
@@ -263,6 +499,7 @@
       </div>
     </div>
 
+    <!-- 结果区域 -->
     <div class="result-section" id="result-section">
       <div class="card" style="margin-bottom: 24px;">
         <div class="result-title" id="result-title">综合指标估算</div>
@@ -277,20 +514,28 @@
           </thead>
           <tbody id="result-body"></tbody>
         </table>
-        <div class="action-bar" style="padding: 12px 16px 16px;">
-          <button class="btn btn-secondary" onclick="copyResult()">复制结果</button>
-          <button class="btn btn-secondary" onclick="downloadTable()">下载表格</button>
-          <button class="btn btn-secondary" onclick="resetForm()">重新计算</button>
-          <button class="btn btn-accent" onclick="goToProductConfig()">为本项目进行产品配置</button>
+        <div class="action-bar">
+          <button class="btn btn-secondary" onclick="copyResult()">📋 复制结果</button>
+          <button class="btn btn-secondary" onclick="downloadTable()">⬇️ 下载表格</button>
+          <button class="btn btn-secondary" onclick="resetForm()">🔄 重新计算</button>
+          <button class="btn btn-accent" onclick="goToProductConfig()">🏗️ 产品配置 ➜</button>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- 页脚 -->
+  <footer>
+    <div class="brand">
+      <span>⬡</span> 未来园 FUTURE PARK
+    </div>
+    <div class="tagline">让产业空间 链接未来</div>
+  </footer>
+
   <div id="toast">已复制到剪贴板</div>
 
   <script>
-    // ---------- 格式化工具 ----------
+    // ========== 格式化工具 ==========
     function fmtNum(n, decimals = 1) {
       if (n === undefined || n === null) return '-';
       const s = Number(n).toFixed(decimals);
@@ -306,18 +551,17 @@
       return (Number(n) * 100).toFixed(decimals) + '%';
     }
 
-    // ---------- 业务逻辑 ----------
+    // ========== 业务逻辑 ==========
     function getBuildingDensity(far) {
       if (far < 1.5) return 0.45;
       if (far < 2.0) return 0.42;
       return 0.40;
     }
-
     function isHangzhou(region) {
       return region === '杭州';
     }
 
-    // ---------- 动态字段显隐 ----------
+    // ========== 动态字段显隐 ==========
     const regionEl = document.getElementById('input-region');
     const landUseEl = document.getElementById('input-land-use');
     const groupLandUse = document.getElementById('group-land-use');
@@ -345,7 +589,7 @@
     regionEl.addEventListener('change', updateConditionalFields);
     landUseEl.addEventListener('change', updateConditionalFields);
 
-    // ---------- 表单验证 ----------
+    // ========== 表单验证 ==========
     function validate() {
       let ok = true;
       const region = regionEl.value;
@@ -362,11 +606,9 @@
         { id: 'support', required: true, min: 0 },
       ];
 
-      // 上海区域必须选用地性质
       if (region === '上海') {
         fields.push({ id: 'land-use', required: true });
       }
-      // 上海+C65必须填研发占比
       if (region === '上海' && landUse === 'C65') {
         fields.push({ id: 'rd-ratio', required: true, min: 0, max: 15 });
       }
@@ -375,7 +617,6 @@
       fields.forEach(f => {
         const el = document.getElementById('input-' + f.id);
         const group = document.getElementById('group-' + f.id);
-        // 跳过隐藏字段
         if (group && group.classList.contains('hidden')) return;
 
         const val = el.value.trim();
@@ -402,7 +643,7 @@
       return { ok, missing };
     }
 
-    // ---------- 核心计算 ----------
+    // ========== 核心计算 ==========
     function calculate() {
       const v = validate();
       if (!v.ok) {
@@ -458,7 +699,6 @@
       const totalArea = aboveGroundArea + undergroundArea;
       const acre = landArea / 666.7;
 
-      // 保存数据供第二页使用
       const projectData = {
         projectName: name,
         region: region,
@@ -490,25 +730,23 @@
       };
       sessionStorage.setItem('projectCalculatorData', JSON.stringify(projectData));
 
-      const titleText = name ? (name + '综合指标估算') : '综合指标估算';
+      const titleText = name ? (name + ' 综合指标估算') : '综合指标估算';
       document.getElementById('result-title').textContent = titleText;
 
-      // 构建结果表格（带新增字段显示）
       const tbody = document.getElementById('result-body');
       let html = '';
 
-      html += `
-        <tr>
-          <td>规划用地面积</td>
-          <td class="num">${fmtNum(landArea, 1)}</td>
-          <td class="unit">m²</td>
-          <td class="remark">约${fmtNum(acre, 1)}亩</td>
-        </tr>`;
+      // 规划信息组
+      html += `<tr class="highlight-row">
+        <td>规划用地面积</td>
+        <td class="num">${fmtNum(landArea, 1)}</td>
+        <td class="unit">m²</td>
+        <td class="remark">约 ${fmtNum(acre, 1)} 亩</td>
+      </tr>`;
 
       if (landUse) {
         const landUseText = landUse === 'M' ? 'M（工业用地）' : 'C65（科研设计用地）';
-        html += `
-        <tr>
+        html += `<tr>
           <td>用地性质</td>
           <td class="num">${landUseText}</td>
           <td class="unit">—</td>
@@ -516,53 +754,54 @@
         </tr>`;
       }
 
-      html += `
-        <tr>
-          <td>总建筑面积</td>
-          <td class="num">${fmtNum(totalArea, 1)}</td>
-          <td class="unit">m²</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr>
-          <td>地上建筑面积</td>
-          <td class="num">${fmtNum(aboveGroundArea, 1)}</td>
-          <td class="unit">m²</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr>
-          <td>地下建筑面积</td>
-          <td class="num">${fmtNum(undergroundArea, 1)}</td>
-          <td class="unit">m²</td>
-          <td class="remark">含地下车库与设备用房</td>
-        </tr>
-        <tr>
-          <td>容积率</td>
-          <td class="num">${fmtNum(far, 2)}</td>
-          <td class="unit">—</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr>
-          <td>限高</td>
-          <td class="num">${fmtNum(heightLimit, 0)}</td>
-          <td class="unit">m</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr>
-          <td>绿地率</td>
-          <td class="num">${fmtPercent(greenRate, 2)}</td>
-          <td class="unit">—</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr>
-          <td>建筑密度</td>
-          <td class="num">${fmtPercent(buildingDensity, 0)}</td>
-          <td class="unit">—</td>
-          <td class="remark">—</td>
-        </tr>`;
+      // 面积指标组
+      html += `<tr class="group-row">
+        <td>总建筑面积</td>
+        <td class="num">${fmtNum(totalArea, 1)}</td>
+        <td class="unit">m²</td>
+        <td class="remark">地上 + 地下</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地上建筑面积</td>
+        <td class="num">${fmtNum(aboveGroundArea, 1)}</td>
+        <td class="unit">m²</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地下建筑面积</td>
+        <td class="num">${fmtNum(undergroundArea, 1)}</td>
+        <td class="unit">m²</td>
+        <td class="remark">含地下车库与设备用房</td>
+      </tr>`;
+
+      // 规划指标组
+      html += `<tr class="highlight-row">
+        <td>容积率</td>
+        <td class="num">${fmtNum(far, 2)}</td>
+        <td class="unit">—</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr>
+        <td>限高</td>
+        <td class="num">${fmtNum(heightLimit, 0)}</td>
+        <td class="unit">m</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr>
+        <td>绿地率</td>
+        <td class="num">${fmtPercent(greenRate, 2)}</td>
+        <td class="unit">—</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr>
+        <td>建筑密度</td>
+        <td class="num">${fmtPercent(buildingDensity, 0)}</td>
+        <td class="unit">—</td>
+        <td class="remark">—</td>
+      </tr>`;
 
       if (rdRatio > 0) {
-        html += `
-        <tr>
+        html += `<tr>
           <td>研发办公用房占比</td>
           <td class="num">${fmtPercent(rdRatio, 2)}</td>
           <td class="unit">—</td>
@@ -570,57 +809,59 @@
         </tr>`;
       }
 
-      html += `
-        <tr>
-          <td>配套用房占比</td>
-          <td class="num">${fmtPercent(ancillaryRatio, 2)}</td>
-          <td class="unit">—</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr class="group-row">
-          <td>机动车停车位数量</td>
-          <td class="num">${fmtInt(totalVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">厂房按照${factoryIndex.toFixed(2)}辆/100m²，配套用房按照${supportIndex.toFixed(2)}辆/100m²</td>
-        </tr>
-        <tr class="sub-row">
-          <td>地面机动车停车位</td>
-          <td class="num">${fmtInt(groundVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr class="sub-row">
-          <td>地下机动车停车位</td>
-          <td class="num">${fmtInt(undergroundVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr class="group-row">
-          <td>非机动车停车位数量</td>
-          <td class="num">${fmtInt(totalNonVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">1.0辆/100m²</td>
-        </tr>
-        <tr class="sub-row">
-          <td>地面非机动车停车位</td>
-          <td class="num">${fmtInt(groundNonVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">—</td>
-        </tr>
-        <tr class="sub-row">
-          <td>地下非机动车停车位</td>
-          <td class="num">${fmtInt(undergroundNonVehicle)}</td>
-          <td class="unit">辆</td>
-          <td class="remark">—</td>
-        </tr>`;
+      html += `<tr>
+        <td>配套用房占比</td>
+        <td class="num">${fmtPercent(ancillaryRatio, 2)}</td>
+        <td class="unit">—</td>
+        <td class="remark">—</td>
+      </tr>`;
+
+      // 机动车组
+      html += `<tr class="group-row">
+        <td>机动车停车位数量</td>
+        <td class="num">${fmtInt(totalVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">厂房 ${factoryIndex.toFixed(2)} 辆/100m²，配套 ${supportIndex.toFixed(2)} 辆/100m²</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地面机动车停车位</td>
+        <td class="num">${fmtInt(groundVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地下机动车停车位</td>
+        <td class="num">${fmtInt(undergroundVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">—</td>
+      </tr>`;
+
+      // 非机动车组
+      html += `<tr class="group-row">
+        <td>非机动车停车位数量</td>
+        <td class="num">${fmtInt(totalNonVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">1.0 辆/100m²</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地面非机动车停车位</td>
+        <td class="num">${fmtInt(groundNonVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">—</td>
+      </tr>
+      <tr class="sub-row">
+        <td>地下非机动车停车位</td>
+        <td class="num">${fmtInt(undergroundNonVehicle)}</td>
+        <td class="unit">辆</td>
+        <td class="remark">—</td>
+      </tr>`;
 
       tbody.innerHTML = html;
-
       document.getElementById('result-section').classList.add('show');
       document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // ---------- 复制结果 ----------
+    // ========== 复制结果 ==========
     function copyResult() {
       const title = document.getElementById('result-title').textContent;
       const rows = document.querySelectorAll('#result-body tr');
@@ -639,11 +880,10 @@
       navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
     }
 
-    // ---------- 下载表格 ----------
+    // ========== 下载表格 ==========
     function downloadTable() {
       const title = document.getElementById('result-title').textContent;
       const rows = Array.from(document.querySelectorAll('#result-body tr'));
-
       const parentItems = ['总建筑面积', '机动车停车位数量', '非机动车停车位数量'];
       const items = [];
 
@@ -661,8 +901,7 @@
             const subName = subCells[0].textContent.trim();
             if (parentItems.includes(subName)) break;
             items.push({
-              type: 'sub',
-              label: j === 1 ? '其中' : '',
+              type: 'sub', label: j === 1 ? '其中' : '',
               name: subName,
               val: subCells[1].textContent.trim().replace(/,/g, ''),
               unit: subCells[2].textContent.trim(),
@@ -676,7 +915,7 @@
       }
 
       let tableRows = '';
-      items.forEach((item) => {
+      items.forEach(item => {
         if (item.type === 'normal') {
           tableRows += `
             <tr>
@@ -739,7 +978,6 @@
       const today = new Date();
       const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
       const fileName = (title || '综合指标估算') + '_' + dateStr + '.xls';
-
       const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -748,15 +986,12 @@
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
-
       showToast('表格已下载');
     }
 
     function escHtml(str) {
       if (!str) return '';
-      return str.replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function resetForm() {
@@ -770,13 +1005,9 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ---------- 跳转到产品配置 ----------
     function goToProductConfig() {
       const data = sessionStorage.getItem('projectCalculatorData');
-      if (!data) {
-        showToast('请先生成指标估算表');
-        return;
-      }
+      if (!data) { showToast('请先生成指标估算表'); return; }
       window.location.href = 'product-config.html';
     }
 
