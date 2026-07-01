@@ -731,6 +731,13 @@
       /* 手机端：左侧显示一键录入，右侧隐藏 */
       .mobile-example-btn { display: block !important; }
       .config-right > .btn-secondary { display: none !important; }
+      /* 手机端导航栏横向滑动 */
+      .sidebar { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+      .nav-group { display: inline-block; vertical-align: top; margin-right: 16px; border-bottom: none; }
+      .nav-group-title { display: none; }
+      .nav-group .nav-items { display: block; padding: 0; }
+      .nav-item { display: inline-flex; padding: 8px 14px; border-left: none; border-radius: 20px; white-space: nowrap; }
+      .nav-item.active { border-left: none; background: var(--brand-light); }
     }
   </style>
 </head>
