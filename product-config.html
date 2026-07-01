@@ -1261,8 +1261,8 @@
 
       document.getElementById('config-overview-content').innerHTML = `
         <div class="card">
-          <div class="table-scroll" onscroll="checkScroll(this)">
-            <table class="data-table">
+          <div class="indicator-table-wrap">
+            <table class="data-table indicator-table">
               <thead><tr>
                 <th>厂房类型</th><th>产品类型</th><th>形式</th><th>总层高</th>
                 <th>单栋面积</th><th>栋数</th><th>户型总面积</th><th>户型总计容面积</th>
@@ -1270,7 +1270,6 @@
               <tbody>${tbody}</tbody>
             </table>
           </div>
-          <div class="table-scroll-hint">👈 左右滑动查看更多 👉</div>
         </div>`;
     }
 

@@ -689,14 +689,9 @@
       const totalNonVehicle = Math.ceil(aboveGroundArea * 1.0 / 100);
 
       let groundNonVehicle = 0, undergroundNonVehicle = 0;
-      if (totalNonVehicle <= 500) {
-        groundNonVehicle = totalNonVehicle;
-        undergroundNonVehicle = 0;
-      } else {
-        groundNonVehicle = Math.ceil(totalNonVehicle / 2);
-        undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
-      }
-
+      // 先计算地面机动车位（假设非机动车全放地面）
+      let groundNonVehicle = totalNonVehicle;
+      let undergroundNonVehicle = 0;
       const groundNonVehicleArea = groundNonVehicle * 1.5;
       const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
       let groundVehicle = Math.floor(availableParkingArea / 35);
@@ -707,12 +702,17 @@
       let undergroundRemark = '含地下车库与设备用房';
 
       if (groundVehicle >= totalVehicle) {
-        // 地面停车位足够，不需要地下
+        // 地面机动车位足够，不需要地下车位 → 非机动车也全放地面
         groundVehicle = totalVehicle;
         undergroundVehicle = 0;
         undergroundArea = 500;
         undergroundRemark = '设备用房';
       } else {
+        // 需要地下机动车位 → 非机动车按规则分配
+        if (totalNonVehicle > 500) {
+          groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+          undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+        }
         undergroundVehicle = totalVehicle - groundVehicle;
         undergroundArea = isHangzhou(region)
           ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
