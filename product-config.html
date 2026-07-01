@@ -790,15 +790,16 @@
       const selected = productOptions[productId][key] || [];
       const limit2 = key === 'floors' && productId === 'layer';
       const limit = limit2 && selected.length >= 2;
+      const modeAttr = limit2 ? 'data-limit2="true"' : (single ? 'data-single="true"' : '');
       return `
-        <div class="option-group">
+        <div class="option-group" ${modeAttr}>
           <label>${label}</label>
           <div class="option-pills">
             ${options.map(v => {
               const isSel = selected.includes(v);
               const disabled = limit && !isSel;
-              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}"
-                onclick="event.stopPropagation();${disabled ? '' : `toggleOption('${productId}', '${key}', ${v}, ${single || false})`}">${v}${key === 'areas' ? 'm²' : (key === 'floors' ? '层' : '')}</span>`;
+              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}" data-value="${v}"
+                onclick="event.stopPropagation();${disabled ? '' : `togglePill(this, '${productId}', '${key}', ${v}, ${single || false})`}">${v}${key === 'areas' ? 'm²' : (key === 'floors' ? '层' : '')}</span>`;
             }).join('')}
           </div>
         </div>`;
@@ -893,14 +894,14 @@
       const selected = productOptions[productId][key] || [];
       const limit = limit2 && selected.length >= 2;
       return `
-        <div class="option-group">
+        <div class="option-group" data-limit2="${limit2 || false}">
           <label>${label} ${limit2 ? '<span class="hint">最多选2项</span>' : '<span class="hint">可多选</span>'}</label>
           <div class="option-pills">
             ${options.map(v => {
               const isSel = selected.includes(v);
               const disabled = limit && !isSel;
-              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}"
-                onclick="${disabled ? '' : `toggleOption('${productId}', '${key}', ${v}, ${limit2})`}">${v}层</span>`;
+              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}" data-value="${v}"
+                onclick="${disabled ? '' : `togglePill(this, '${productId}', '${key}', ${v}, ${limit2 || false})`}">${v}层</span>`;
             }).join('')}
           </div>
         </div>`;
@@ -909,18 +910,64 @@
     function renderAreaPills(productId, label, options, key, single) {
       const selected = productOptions[productId][key] || [];
       return `
-        <div class="option-group">
+        <div class="option-group" data-single="${single || false}">
           <label>${label} ${single ? '<span class="hint">单选</span>' : '<span class="hint">可多选</span>'}</label>
           <div class="option-pills">
             ${options.map(v => {
               const isSel = selected.includes(v);
-              return `<span class="pill ${isSel ? 'selected' : ''}"
-                onclick="toggleOption('${productId}', '${key}', ${v}, ${single || false})">${v}m²</span>`;
+              return `<span class="pill ${isSel ? 'selected' : ''}" data-value="${v}"
+                onclick="togglePill(this, '${productId}', '${key}', ${v}, ${single || false})">${v}m²</span>`;
             }).join('')}
           </div>
         </div>`;
     }
 
+    function togglePill(el, productId, key, value, isLimitOrSingle) {
+      if (el.classList.contains('disabled')) return;
+
+      const opts = productOptions[productId];
+      if (!opts[key]) opts[key] = [];
+      const arr = opts[key];
+
+      const group = el.closest('.option-group');
+      const isSingle = group.dataset.single === 'true';
+      const isLimit2 = group.dataset.limit2 === 'true';
+
+      if (isSingle) {
+        // 单选：清空其他，只选当前
+        opts[key] = [value];
+        group.querySelectorAll('.pill').forEach(pill => pill.classList.remove('selected'));
+        el.classList.add('selected');
+      } else {
+        const idx = arr.indexOf(value);
+        if (idx >= 0) {
+          arr.splice(idx, 1);
+          el.classList.remove('selected');
+        } else {
+          arr.push(value);
+          el.classList.add('selected');
+        }
+      }
+
+      // limit2 动态禁用
+      if (isLimit2) {
+        const selectedCount = arr.length;
+        group.querySelectorAll('.pill').forEach(pill => {
+          const val = parseFloat(pill.dataset.value);
+          const isSelected = arr.includes(val);
+          if (selectedCount >= 2 && !isSelected) {
+            pill.classList.add('disabled');
+          } else {
+            pill.classList.remove('disabled');
+          }
+        });
+      }
+
+      // 同步更新手机端
+      renderProductGrid();
+    }
+
+    // 保留旧的 toggleOption 用于手机端内联选项
     function toggleOption(productId, key, value, single) {
       const opts = productOptions[productId];
       if (!opts[key]) opts[key] = [];
@@ -933,8 +980,7 @@
         if (idx >= 0) arr.splice(idx, 1);
         else arr.push(value);
       }
-      renderSubOptions();
-      renderProductGrid(); // 同步更新手机端内联选项
+      renderProductGrid();
     }
 
     // ==================== 生成配置 ====================
