@@ -1682,22 +1682,29 @@
         if (x > 0 && y > 0) {
           const targetAreaA = effA * x;
           const targetAreaB = effB * y;
-          const resultA = solveIntegerEquation(targetAreaA, configsA, x * 1.05);
-          const resultB = solveIntegerEquation(targetAreaB, configsB, y * 1.05);
+          const resultA = solveIntegerEquation(targetAreaA, configsA, x);
+          const resultB = solveIntegerEquation(targetAreaB, configsB, y);
           indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
           indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
         } else {
-          // 方程无解，分别求解确保每种类型都有分配
-          const totalEff = effA + effB;
-          const capA = remainingCap * (effA / totalEff);
-          const capB = remainingCap * (effB / totalEff);
-          const baseA = remainingBase * (effA / totalEff);
-          const baseB = remainingBase * (effB / totalEff);
+          // 方程无解：低效率类型给最小分配，剩余给高效率类型
+          const [lowEffType, highEffType] = effA < effB ? [typeA, typeB] : [typeB, typeA];
+          const [lowEffIndices, highEffIndices] = effA < effB ? [indicesA, indicesB] : [indicesB, indicesA];
+          const [lowEffConfigs, highEffConfigs] = effA < effB ? [configsA, configsB] : [configsB, configsA];
           
-          const resultA = solveIntegerEquation(capA, configsA, baseA);
-          const resultB = solveIntegerEquation(capB, configsB, baseB);
-          indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
-          indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
+          // 低效率类型：每种面积段2栋
+          const lowEffCounts = lowEffConfigs.map(() => 2);
+          const lowEffBase = lowEffConfigs.reduce((sum, c, i) => sum + c.base * lowEffCounts[i], 0);
+          const lowEffCap = lowEffConfigs.reduce((sum, c, i) => sum + c.unitCap * lowEffCounts[i], 0);
+          
+          // 高效率类型：剩余
+          const highEffBase = remainingBase - lowEffBase;
+          const highEffCap = remainingCap - lowEffCap;
+          const highEffResult = solveIntegerEquation(highEffCap, highEffConfigs, highEffBase);
+          
+          // 写入counts
+          lowEffIndices.forEach((idx, i) => { counts[idx] = lowEffCounts[i]; });
+          highEffIndices.forEach((idx, i) => { counts[idx] = highEffResult.counts[i]; });
         }
       } else if (selectedVariableTypes.length === 3) {
         // 3种：分层固定1栋（最小层数+最小面积段）
