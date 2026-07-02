@@ -1629,10 +1629,13 @@
         dfs(0, [], 0, 0);
         
         if (!best) {
-          //  fallback：单配置
-          const c = configs[0];
-          const n = Math.max(1, Math.round(targetArea / c.unitArea));
-          return { counts: Array(k).fill(0), totalArea: c.unitArea * n, totalBase: c.base * n };
+          // fallback：单配置全部分配给最高效的配置
+          const sortedConfigs = configs.map((c, i) => ({ c, i })).sort((a, b) => (b.c.unitCap / b.c.base) - (a.c.unitCap / a.c.base));
+          const primary = sortedConfigs[0].c;
+          const n = Math.max(2, Math.round(targetArea / primary.unitArea));
+          const result = Array(k).fill(0);
+          result[sortedConfigs[0].i] = n;
+          return { counts: result, totalArea: primary.unitArea * n, totalBase: primary.base * n };
         }
         
         let totalArea = 0, totalBase = 0;
@@ -1697,21 +1700,38 @@
         const newRemainingCap = targetCap - newFixedCap;
         const newRemainingBase = targetBase - newFixedBase;
         
-        const indicesA = getTypeIndices('light-steel');
-        const indicesB = getTypeIndices('split');
-        if (indicesA.length > 0 && indicesB.length > 0) {
-          const configsA = indicesA.map(i => variableConfigs[i]);
-          const configsB = indicesB.map(i => variableConfigs[i]);
-          const effA = configsA.reduce((s, c) => s + c.unitCap / c.base, 0) / configsA.length;
-          const effB = configsB.reduce((s, c) => s + c.unitCap / c.base, 0) / configsB.length;
-          const x = (newRemainingCap - effB * newRemainingBase) / (effA - effB);
-          const y = newRemainingBase - x;
-          if (x > 0 && y > 0) {
-            const resultA = solveIntegerEquation(effA * x, configsA, x * 1.05);
-            const resultB = solveIntegerEquation(effB * y, configsB, y * 1.05);
-            indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
-            indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
+        // 从剩余类型中选两种（非layer）
+        const remainingTypes = selectedVariableTypes.filter(id => id !== 'layer');
+        if (remainingTypes.length >= 2) {
+          const typeA = remainingTypes[0];
+          const typeB = remainingTypes[1];
+          const indicesA = getTypeIndices(typeA);
+          const indicesB = getTypeIndices(typeB);
+          if (indicesA.length > 0 && indicesB.length > 0) {
+            const configsA = indicesA.map(i => variableConfigs[i]);
+            const configsB = indicesB.map(i => variableConfigs[i]);
+            const effA = configsA.reduce((s, c) => s + c.unitCap / c.base, 0) / configsA.length;
+            const effB = configsB.reduce((s, c) => s + c.unitCap / c.base, 0) / configsB.length;
+            const x = (newRemainingCap - effB * newRemainingBase) / (effA - effB);
+            const y = newRemainingBase - x;
+            if (x > 0 && y > 0) {
+              const resultA = solveIntegerEquation(effA * x, configsA, x * 1.05);
+              const resultB = solveIntegerEquation(effB * y, configsB, y * 1.05);
+              indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
+              indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
+            } else {
+              // 方程无解，合并处理
+              const result = solveIntegerEquation(newRemainingCap, [...configsA, ...configsB], newRemainingBase * 1.05);
+              indicesA.forEach((idx, i) => { counts[idx] = result.counts[i]; });
+              indicesB.forEach((idx, i) => { counts[idx] = result.counts[i + indicesA.length]; });
+            }
           }
+        } else if (remainingTypes.length === 1) {
+          // 只剩1种
+          const indices = getTypeIndices(remainingTypes[0]);
+          const configs = indices.map(i => variableConfigs[i]);
+          const result = solveIntegerEquation(newRemainingCap, configs, newRemainingBase * 1.05);
+          indices.forEach((idx, i) => { counts[idx] = result.counts[i]; });
         }
       }
       
