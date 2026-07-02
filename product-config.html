@@ -1611,8 +1611,15 @@
               const tb = currentBase + c.base * nn;
               const diff = Math.abs(ta - targetArea);
               if (targetBaseLimit && tb > targetBaseLimit) continue;
-              if (diff < bestScore) {
-                bestScore = diff;
+              
+              // 均衡惩罚：如果用户选了多种面积段，但只有1种出现，大幅惩罚
+              const allCounts = [...current, nn];
+              const nonZeroCount = allCounts.filter(x => x > 0).length;
+              const penalty = (k >= 2 && nonZeroCount < 2) ? 50000 : 0;
+              const score = diff + penalty;
+              
+              if (score < bestScore) {
+                bestScore = score;
                 best = [...current, nn];
               }
             }
@@ -1629,13 +1636,18 @@
         dfs(0, [], 0, 0);
         
         if (!best) {
-          // fallback：单配置全部分配给最高效的配置
+          // fallback：至少分配给两种配置（如果k>=2）
           const sortedConfigs = configs.map((c, i) => ({ c, i })).sort((a, b) => (b.c.unitCap / b.c.base) - (a.c.unitCap / a.c.base));
           const primary = sortedConfigs[0].c;
           const n = Math.max(2, Math.round(targetArea / primary.unitArea));
           const result = Array(k).fill(0);
-          result[sortedConfigs[0].i] = n;
-          return { counts: result, totalArea: primary.unitArea * n, totalBase: primary.base * n };
+          result[sortedConfigs[0].i] = Math.max(1, n - 1);
+          if (k >= 2) {
+            result[sortedConfigs[1].i] = 1; // 至少1栋给第二大配置
+          }
+          const totalArea = configs.reduce((sum, c, i) => sum + c.unitArea * result[i], 0);
+          const totalBase = configs.reduce((sum, c, i) => sum + c.base * result[i], 0);
+          return { counts: result, totalArea, totalBase };
         }
         
         let totalArea = 0, totalBase = 0;
