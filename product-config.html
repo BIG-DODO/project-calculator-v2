@@ -1391,7 +1391,7 @@
       const targetRdArea = targetAboveGround * rdRatio;
       const targetAncillaryArea = targetAboveGround * ancillaryRatio;
       
-      // 1. 收集所有配置
+      // ===== 1. 收集所有配置 =====
       const allConfigs = [];
       let maxLayerHeight = 0, minLayerHeight = Infinity;
       
@@ -1399,16 +1399,16 @@
         const layerOpts = productOptions['layer'];
         if (layerOpts && layerOpts.floors) {
           layerOpts.floors.forEach(floor => {
-            const h = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2;
+            const h = 7.2 + 5.1 + 4.5 * (floor - 2) + 1.2; // 建筑高度 = 总层高 + 1.2
             if (h > maxLayerHeight) maxLayerHeight = h;
             if (h < minLayerHeight) minLayerHeight = h;
           });
         }
       }
-      if (maxLayerHeight === 0) maxLayerHeight = 34.8 + 1.2;
+      if (maxLayerHeight === 0) maxLayerHeight = 30.3 + 1.2; // 6层默认值
       if (minLayerHeight === Infinity) minLayerHeight = 30.3 + 1.2;
       
-      // 2. 处理固定产品
+      // ===== 2. 固定产品 =====
       let towerArea = 0, towerBase = 0, towerCap = 0;
       let dormArea = 0, dormBase = 0, dormCap = 0;
       let supportArea = 0, supportBase = 0, supportCap = 0;
@@ -1418,8 +1418,9 @@
         const area = productOptions['tower'].areas[0];
         let floors = Math.max(3, Math.round(targetRdArea / area));
         let totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
-        if (totalH > 80) {
-          floors = Math.floor((80 - 6.6 - 4.5 - 1.2) / 4.5) + 2;
+        // 限高：跟用户输入的限高比，不是80
+        if (totalH > heightLimit) {
+          floors = Math.max(3, Math.floor((heightLimit - 6.6 - 4.5 - 1.2) / 4.5) + 2);
           totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
         }
         let actualArea = area * floors;
@@ -1436,7 +1437,11 @@
         }
         totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
         if (maxLayerHeight > 0 && totalH < maxLayerHeight) {
-          while (totalH < maxLayerHeight) { floors++; totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2; if (totalH > 80) { floors--; totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2; break; } }
+          while (totalH < maxLayerHeight) {
+            floors++;
+            totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+            if (totalH > heightLimit) { floors--; totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2; break; }
+          }
           actualArea = area * floors;
         }
         const paxLift = Math.max(1, Math.ceil(actualArea / 4000) - 2);
@@ -1457,14 +1462,27 @@
           let singleArea = dormUnitArea / estFloors;
           if (singleArea < 800) base = 800; else if (singleArea > 1200) base = 1200; else base = Math.round(singleArea / 100) * 100;
           floors = Math.max(3, Math.ceil(dormUnitArea / base));
-          totalH = 4.8 + 3.6 * (floors - 2) + 3.6 + 1.2;
-          if (totalH > minLayerHeight) { totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; if (totalH > minLayerHeight) { while (totalH > minLayerHeight && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; } } }
-          const towerCfg = allConfigs.find(c => c.id === 'tower'); const towerH = towerCfg ? towerCfg.totalHeight : maxLayerHeight;
-          if (totalH > towerH) { totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; if (totalH > towerH) { while (totalH > towerH && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; } } }
+          totalH = 4.8 + 3.6 * (floors - 2) + 1.2; // 修复：去掉重复的+3.6
+          if (totalH > minLayerHeight) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 1.2;
+            if (totalH > minLayerHeight) {
+              while (totalH > minLayerHeight && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 1.2; }
+            }
+          }
+          const towerCfg = allConfigs.find(c => c.id === 'tower');
+          const towerH = towerCfg ? towerCfg.totalHeight : maxLayerHeight;
+          if (totalH > towerH) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 1.2;
+            if (totalH > towerH) { while (totalH > towerH && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 1.2; } }
+          }
           unitArea = base * floors; unitCap = unitArea;
           const actualAncillary = unitArea + supportAreaInput;
           const actualRatio = actualAncillary / targetAboveGround;
-          if (Math.abs(actualRatio - ancillaryRatio) > 0.001) { const targetDorm = targetAncillaryArea - supportAreaInput; floors = Math.max(3, Math.round(targetDorm / base)); unitArea = base * floors; unitCap = unitArea; }
+          if (Math.abs(actualRatio - ancillaryRatio) > 0.001) {
+            const targetDorm = targetAncillaryArea - supportAreaInput;
+            floors = Math.max(3, Math.round(targetDorm / base));
+            unitArea = base * floors; unitCap = unitArea;
+          }
           const paxLift = Math.ceil(unitArea / 5000);
           allConfigs.push({ id: 'dorm', type: '配套宿舍', base, unitCap, unitArea, floors, totalHeight: totalH, isVariable: false, count: 1, elevator: paxLift + '客0货', load: '标准层350kg', fl: { first: 4.8, second: 3.6, standard: 3.6, top: 3.6 }, flSuffix: { second: '', standard: '', top: '' }, productType: floors + 'F-D(' + base + ')' });
           dormArea = unitArea; dormBase = base; dormCap = unitCap;
@@ -1474,10 +1492,17 @@
           let singleArea = targetAncillaryArea / estFloors;
           if (singleArea < 800) base = 800; else if (singleArea > 1200) base = 1200; else base = Math.round(singleArea / 100) * 100;
           floors = Math.max(3, Math.ceil(targetAncillaryArea / base));
-          totalH = 4.8 + 3.6 * (floors - 2) + 3.6 + 1.2;
-          if (totalH > minLayerHeight) { totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; if (totalH > minLayerHeight) { while (totalH > minLayerHeight && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; } } }
-          const towerCfg2 = allConfigs.find(c => c.id === 'tower'); const towerH2 = towerCfg2 ? towerCfg2.totalHeight : maxLayerHeight;
-          if (totalH > towerH2) { totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; if (totalH > towerH2) { while (totalH > towerH2 && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2; } } }
+          totalH = 4.8 + 3.6 * (floors - 2) + 1.2; // 修复
+          if (totalH > minLayerHeight) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 1.2;
+            if (totalH > minLayerHeight) { while (totalH > minLayerHeight && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 1.2; } }
+          }
+          const towerCfg2 = allConfigs.find(c => c.id === 'tower');
+          const towerH2 = towerCfg2 ? towerCfg2.totalHeight : maxLayerHeight;
+          if (totalH > towerH2) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 1.2;
+            if (totalH > towerH2) { while (totalH > towerH2 && floors > 3) { floors--; totalH = 4.8 + 3.3 * (floors - 2) + 1.2; } }
+          }
           unitArea = base * floors; unitCap = unitArea;
           const actualRatio = unitArea / targetAboveGround;
           if (Math.abs(actualRatio - ancillaryRatio) > 0.001) { floors = Math.max(3, Math.round(targetAncillaryArea / base)); unitArea = base * floors; unitCap = unitArea; }
@@ -1487,7 +1512,9 @@
         }
       } else if (selectedProducts.has('support')) {
         const supportAreaInput = productOptions['support'].areas[0];
-        const floors = 3; const supportBaseInput = Math.round(supportAreaInput / 3); const totalH = 7.2 + 5.1 + 4.5 + 1.2;
+        const floors = 3;
+        const supportBaseInput = Math.round(supportAreaInput / 3);
+        const totalH = 7.2 + 5.1 + 4.5 + 1.2;
         let finalArea = supportAreaInput;
         const actualRatio = supportAreaInput / targetAboveGround;
         if (Math.abs(actualRatio - ancillaryRatio) > 0.001) { const targetArea = targetAncillaryArea; const rounded = Math.round(targetArea / 100) * 100; if (Math.abs(rounded - supportAreaInput) / targetAboveGround <= 0.001) finalArea = rounded; }
@@ -1495,7 +1522,7 @@
         supportArea = finalArea; supportBase = supportBaseInput; supportCap = finalArea;
       }
       
-      // 3. 处理可变产品
+      // ===== 3. 处理可变产品 =====
       const variableConfigs = [];
       
       if (selectedProducts.has('light-steel')) {
@@ -1512,8 +1539,11 @@
           productOptions['split'].areas.forEach(area => {
             const base = area;
             let unitArea, unitCap, totalH;
-            if (floor === 3.5) { totalH = 22.5; unitArea = base * 4; unitCap = base * 3.5; }
-            else { totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2; unitArea = base * floor; unitCap = base * floor; }
+            if (floor === 3.5) { totalH = 22.5 + 1.2; unitArea = base * 4; unitCap = base * 3.5; }
+            else {
+              totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 1.2; // 修复：去掉重复的+4.5
+              unitArea = base * floor; unitCap = base * floor;
+            }
             if (totalH > heightLimit) return;
             const elevator = area < 1500 ? '0客1货' : (area < 4000 ? '1客1货' : '1客2货');
             variableConfigs.push({ id: 'split', type: '分栋厂房', base, unitCap, unitArea, floors: floor, totalHeight: totalH, isLow: true, elevator, load: '首层2000kg，二层800kg，二层及以上500kg', fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 }, flSuffix: { second: '', standard: '', top: '' }, productType: floor + 'F-D(' + area + ')' });
@@ -1527,7 +1557,7 @@
             const base = area;
             const unitArea = base * floor;
             const unitCap = base * floor;
-            const totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 4.5 + 1.2;
+            const totalH = 7.2 + 5.1 + 4.5 * (floor - 2) + 1.2; // 修复
             if (totalH > heightLimit) return;
             const cargoLift = Math.ceil(unitArea / 4000);
             const paxLift = unitArea <= 4000 ? 1 : 2;
@@ -1536,42 +1566,178 @@
         });
       }
       
-      // 4. 计算固定产品已占用
+      // ===== 4. 固定产品已占用 =====
       const fixedBase = towerBase + dormBase + supportBase;
       const fixedCap = towerCap + dormCap + supportCap;
       
-      // 剩余配额
       const remainingBase = targetBase - fixedBase;
       const remainingCap = targetCap - fixedCap;
       
-      // 5. 新算法：产品分布优化
-      // 优先级：轻钢 > 分栋 > 分层
-      const priorityOrder = ['light-steel', 'split', 'layer'];
-      const selectedVariableTypes = priorityOrder.filter(id => selectedProducts.has(id));
+      // ===== 5. 情况分类 =====
+      const selectedVariableTypes = ['light-steel', 'split', 'layer'].filter(id => selectedProducts.has(id));
+      
+      let counts = variableConfigs.map(() => 0);
       
       function getTypeIndices(typeId) {
         return variableConfigs.map((c, i) => i).filter(i => variableConfigs[i].id === typeId);
       }
       
-      function calcTypeStats(typeId, counts) {
+      function calcTotals(cts) {
+        let base = fixedBase, cap = fixedCap;
+        variableConfigs.forEach((c, i) => { base += c.base * cts[i]; cap += c.unitCap * cts[i]; });
+        return { base, cap };
+      }
+      
+      // 整数方程求解：找到面积段组合使总建面最接近目标
+      function solveIntegerEquation(targetArea, configs, targetBaseLimit) {
+        const k = configs.length;
+        if (k === 1) {
+          const c = configs[0];
+          const n = Math.max(1, Math.round(targetArea / c.unitArea));
+          return { counts: [n], totalArea: c.unitArea * n, totalBase: c.base * n };
+        }
+        
+        // 遍历搜索，范围±3栋
+        let best = null, bestScore = Infinity;
+        const baseCount = Math.max(1, Math.round(targetArea / configs[0].unitArea));
+        
+        function dfs(idx, current, currentArea, currentBase) {
+          if (idx === k - 1) {
+            const c = configs[idx];
+            const n = Math.max(0, Math.round((targetArea - currentArea) / c.unitArea));
+            for (let dn = -3; dn <= 3; dn++) {
+              const nn = Math.max(0, n + dn);
+              const ta = currentArea + c.unitArea * nn;
+              const tb = currentBase + c.base * nn;
+              const diff = Math.abs(ta - targetArea);
+              if (targetBaseLimit && tb > targetBaseLimit) continue;
+              if (diff < bestScore) {
+                bestScore = diff;
+                best = [...current, nn];
+              }
+            }
+            return;
+          }
+          const c = configs[idx];
+          const n = Math.max(0, Math.round((targetArea - currentArea) / c.unitArea));
+          for (let dn = -3; dn <= 3; dn++) {
+            const nn = Math.max(0, n + dn);
+            dfs(idx + 1, [...current, nn], currentArea + c.unitArea * nn, currentBase + c.base * nn);
+          }
+        }
+        
+        dfs(0, [], 0, 0);
+        
+        if (!best) {
+          //  fallback：单配置
+          const c = configs[0];
+          const n = Math.max(1, Math.round(targetArea / c.unitArea));
+          return { counts: Array(k).fill(0), totalArea: c.unitArea * n, totalBase: c.base * n };
+        }
+        
+        let totalArea = 0, totalBase = 0;
+        configs.forEach((c, i) => { totalArea += c.unitArea * best[i]; totalBase += c.base * best[i]; });
+        return { counts: best, totalArea, totalBase };
+      }
+      
+      if (selectedVariableTypes.length === 1) {
+        // 只有1种可变产品
+        const typeId = selectedVariableTypes[0];
+        const indices = getTypeIndices(typeId);
+        const configs = indices.map(i => variableConfigs[i]);
+        const result = solveIntegerEquation(remainingCap, configs, remainingBase * 1.05);
+        indices.forEach((idx, i) => { counts[idx] = result.counts[i]; });
+      } else if (selectedVariableTypes.length === 2) {
+        // 2种可变产品：解方程
+        const typeA = selectedVariableTypes[0];
+        const typeB = selectedVariableTypes[1];
+        const indicesA = getTypeIndices(typeA);
+        const indicesB = getTypeIndices(typeB);
+        const configsA = indicesA.map(i => variableConfigs[i]);
+        const configsB = indicesB.map(i => variableConfigs[i]);
+        
+        // 计算平均效率
+        const effA = configsA.reduce((s, c) => s + c.unitCap / c.base, 0) / configsA.length;
+        const effB = configsB.reduce((s, c) => s + c.unitCap / c.base, 0) / configsB.length;
+        
+        // 解方程：x + y = remainingBase, effA*x + effB*y = remainingCap
+        const x = (remainingCap - effB * remainingBase) / (effA - effB); // A占地
+        const y = remainingBase - x; // B占地
+        
+        if (x > 0 && y > 0) {
+          const targetAreaA = effA * x;
+          const targetAreaB = effB * y;
+          const resultA = solveIntegerEquation(targetAreaA, configsA, x * 1.05);
+          const resultB = solveIntegerEquation(targetAreaB, configsB, y * 1.05);
+          indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
+          indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
+        } else {
+          // 方程无解，用整数规划
+          const result = solveIntegerEquation(remainingCap, [...configsA, ...configsB], remainingBase * 1.05);
+          indicesA.forEach((idx, i) => { counts[idx] = result.counts[i]; });
+          indicesB.forEach((idx, i) => { counts[idx] = result.counts[i + indicesA.length]; });
+        }
+      } else if (selectedVariableTypes.length === 3) {
+        // 3种：分层固定1栋（最小层数+最小面积段）
+        const layerIndices = getTypeIndices('layer');
+        if (layerIndices.length > 0) {
+          // 选层数最小、面积段最小的
+          layerIndices.sort((a, b) => {
+            const da = variableConfigs[a];
+            const db = variableConfigs[b];
+            if (da.floors !== db.floors) return da.floors - db.floors;
+            return da.base - db.base;
+          });
+          counts[layerIndices[0]] = 1;
+        }
+        
+        // 剩余退化为2种
+        const newFixedCap = fixedCap + (counts[layerIndices[0]] ? variableConfigs[layerIndices[0]].unitCap : 0);
+        const newFixedBase = fixedBase + (counts[layerIndices[0]] ? variableConfigs[layerIndices[0]].base : 0);
+        const newRemainingCap = targetCap - newFixedCap;
+        const newRemainingBase = targetBase - newFixedBase;
+        
+        const indicesA = getTypeIndices('light-steel');
+        const indicesB = getTypeIndices('split');
+        if (indicesA.length > 0 && indicesB.length > 0) {
+          const configsA = indicesA.map(i => variableConfigs[i]);
+          const configsB = indicesB.map(i => variableConfigs[i]);
+          const effA = configsA.reduce((s, c) => s + c.unitCap / c.base, 0) / configsA.length;
+          const effB = configsB.reduce((s, c) => s + c.unitCap / c.base, 0) / configsB.length;
+          const x = (newRemainingCap - effB * newRemainingBase) / (effA - effB);
+          const y = newRemainingBase - x;
+          if (x > 0 && y > 0) {
+            const resultA = solveIntegerEquation(effA * x, configsA, x * 1.05);
+            const resultB = solveIntegerEquation(effB * y, configsB, y * 1.05);
+            indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
+            indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
+          }
+        }
+      }
+      
+      // ===== 6. 产品分布优化（循环最多3次） =====
+      const CAP_LO = targetCap * 0.995, CAP_HI = targetCap * 1.005;
+      const DEN_LO = density * 0.95, DEN_HI = density * 1.05;
+      
+      function calcTypeStats(typeId, cts) {
         const indices = getTypeIndices(typeId);
         let totalCount = 0, totalBase = 0, totalArea = 0, totalCap = 0;
         indices.forEach(i => {
-          totalCount += counts[i];
-          totalBase += variableConfigs[i].base * counts[i];
-          totalArea += variableConfigs[i].unitArea * counts[i];
-          totalCap += variableConfigs[i].unitCap * counts[i];
+          totalCount += cts[i];
+          totalBase += variableConfigs[i].base * cts[i];
+          totalArea += variableConfigs[i].unitArea * cts[i];
+          totalCap += variableConfigs[i].unitCap * cts[i];
         });
         return { totalCount, totalBase, totalArea, totalCap, indices };
       }
       
-      function needsOptimization(typeId, counts) {
-        const stats = calcTypeStats(typeId, counts);
+      function needsOptimization(typeId, cts) {
+        const stats = calcTypeStats(typeId, cts);
         if (stats.totalCount < 5) return false;
         const areaCounts = {};
         stats.indices.forEach(i => {
           const area = variableConfigs[i].base;
-          areaCounts[area] = (areaCounts[area] || 0) + counts[i];
+          areaCounts[area] = (areaCounts[area] || 0) + cts[i];
         });
         const areas = Object.keys(areaCounts).map(Number);
         for (const a of areas) {
@@ -1580,185 +1746,6 @@
         }
         return false;
       }
-      
-      function calcTotals(counts) {
-        let base = fixedBase, cap = fixedCap;
-        variableConfigs.forEach((c, i) => { base += c.base * counts[i]; cap += c.unitCap * counts[i]; });
-        return { base, cap };
-      }
-      
-      const CAP_LO = targetCap * 0.995, CAP_HI = targetCap * 1.005;
-      const DEN_LO = density * 0.95, DEN_HI = density * 1.05;
-      
-      // 初始分配：先计算各产品类型的总建面配额
-      // 从低优先级到高优先级分配
-      let counts = variableConfigs.map(() => 0);
-      
-      // 计算每种类型平均 cap/base
-      const typeEfficiencies = {};
-      selectedVariableTypes.forEach(typeId => {
-        const indices = getTypeIndices(typeId);
-        if (indices.length === 0) return;
-        typeEfficiencies[typeId] = indices.reduce((sum, i) => sum + variableConfigs[i].unitCap / variableConfigs[i].base, 0) / indices.length;
-      });
-      
-      // 分层优先满足容积率（cap 效率最高）
-      if (selectedVariableTypes.includes('layer')) {
-        const indices = getTypeIndices('layer');
-        const eff = typeEfficiencies['layer'];
-        // 尽量用分层满足大部分 cap
-        let targetLayerCap = remainingCap * 0.7;
-        let targetLayerBase = targetLayerCap / eff;
-        // 但不超过 density 上限
-        if (fixedBase + targetLayerBase > targetBase * 1.05) {
-          targetLayerBase = targetBase * 1.05 - fixedBase;
-          targetLayerCap = targetLayerBase * eff;
-        }
-        // 分配到各配置，优先选 cap/base 最接近平均的
-        const avgEff = targetLayerCap / targetLayerBase;
-        indices.sort((a, b) => Math.abs(variableConfigs[a].unitCap / variableConfigs[a].base - avgEff) - Math.abs(variableConfigs[b].unitCap / variableConfigs[b].base - avgEff));
-        const primaryIdx = indices[0];
-        const primaryCount = Math.max(2, Math.round(targetLayerCap / variableConfigs[primaryIdx].unitCap));
-        counts[primaryIdx] = primaryCount;
-      }
-      
-      // 分栋分配
-      if (selectedVariableTypes.includes('split')) {
-        const indices = getTypeIndices('split');
-        const eff = typeEfficiencies['split'];
-        let totals = calcTotals(counts);
-        let remainingCap2 = targetCap - totals.cap;
-        let remainingBase2 = targetBase - totals.base;
-        let targetSplitCap = remainingCap2 * 0.6;
-        let targetSplitBase = targetSplitCap / eff;
-        if (totals.base + targetSplitBase > targetBase * 1.05) {
-          targetSplitBase = targetBase * 1.05 - totals.base;
-          targetSplitCap = targetSplitBase * eff;
-        }
-        const avgEff = targetSplitCap / targetSplitBase;
-        indices.sort((a, b) => Math.abs(variableConfigs[a].unitCap / variableConfigs[a].base - avgEff) - Math.abs(variableConfigs[b].unitCap / variableConfigs[b].base - avgEff));
-        const primaryIdx = indices[0];
-        const primaryCount = Math.max(2, Math.round(targetSplitCap / variableConfigs[primaryIdx].unitCap));
-        counts[primaryIdx] = primaryCount;
-      }
-      
-      // 轻钢分配
-      if (selectedVariableTypes.includes('light-steel')) {
-        const indices = getTypeIndices('light-steel');
-        const eff = typeEfficiencies['light-steel'];
-        let totals = calcTotals(counts);
-        let remainingCap3 = targetCap - totals.cap;
-        let targetLsCap = remainingCap3;
-        let targetLsBase = targetLsCap / eff;
-        if (totals.base + targetLsBase > targetBase * 1.05) {
-          targetLsBase = targetBase * 1.05 - totals.base;
-          targetLsCap = targetLsBase * eff;
-        }
-        const avgEff = targetLsCap / (targetLsBase || 1);
-        indices.sort((a, b) => Math.abs(variableConfigs[a].unitCap / variableConfigs[a].base - avgEff) - Math.abs(variableConfigs[b].unitCap / variableConfigs[b].base - avgEff));
-        const primaryIdx = indices[0];
-        const primaryCount = Math.max(2, Math.round(targetLsCap / variableConfigs[primaryIdx].unitCap));
-        counts[primaryIdx] = primaryCount;
-      }
-      
-      // 调整 cap 到范围内
-      let totals = calcTotals(counts);
-      while (totals.cap < CAP_LO) {
-        let bestIdx = -1, bestEff = 0;
-        variableConfigs.forEach((c, i) => { const eff = c.unitCap / c.base; if (eff > bestEff) { bestEff = eff; bestIdx = i; } });
-        if (bestIdx === -1) break;
-        counts[bestIdx]++; totals = calcTotals(counts);
-      }
-      while (totals.cap > CAP_HI) {
-        let bestIdx = -1, bestScore = Infinity;
-        variableConfigs.forEach((c, i) => {
-          if (counts[i] <= 0) return;
-          const score = c.isLow ? c.unitCap / c.base - 100 : c.unitCap / c.base;
-          if (score < bestScore) { bestScore = score; bestIdx = i; }
-        });
-        if (bestIdx === -1) break;
-        counts[bestIdx]--; totals = calcTotals(counts);
-      }
-      
-      // 6. 产品分布优化
-      const optimizeOrder = ['light-steel', 'split', 'layer'];
-      optimizeOrder.forEach(typeId => {
-        if (!selectedProducts.has(typeId)) return;
-        if (!needsOptimization(typeId, counts)) return;
-        
-        const stats = calcTypeStats(typeId, counts);
-        if (stats.totalCount < 5) return;
-        
-        const newTotalCount = stats.totalCount - 1;
-        const indices = getTypeIndices(typeId);
-        const areas = [...new Set(indices.map(i => variableConfigs[i].base))].sort((a, b) => b - a);
-        
-        const baseCount = Math.floor(newTotalCount / areas.length);
-        const remainder = newTotalCount % areas.length;
-        const newCounts = {};
-        areas.forEach((area, idx) => { newCounts[area] = baseCount + (idx < remainder ? 1 : 0); });
-        
-        let newTotalCap = 0, newTotalBase = 0;
-        indices.forEach(i => {
-          const area = variableConfigs[i].base;
-          const count = newCounts[area] || 0;
-          newTotalCap += variableConfigs[i].unitCap * count;
-          newTotalBase += variableConfigs[i].base * count;
-        });
-        
-        const capLoss = stats.totalCap - newTotalCap;
-        const baseLoss = stats.totalBase - newTotalBase;
-        
-        const currentPriority = optimizeOrder.indexOf(typeId);
-        const nextTypeId = optimizeOrder.slice(currentPriority + 1).find(id => selectedProducts.has(id));
-        
-        if (nextTypeId) {
-          const nextIndices = getTypeIndices(nextTypeId);
-          if (nextIndices.length > 0) {
-            const maxCap = Math.max(...nextIndices.map(i => variableConfigs[i].unitCap));
-            const minCap = Math.min(...nextIndices.map(i => variableConfigs[i].unitCap));
-            const minAdd = Math.max(1, Math.ceil(capLoss / maxCap));
-            const maxAdd = Math.max(1, Math.floor(capLoss / minCap));
-            const b = Math.max(minAdd, maxAdd);
-            
-            const nextStats = calcTypeStats(nextTypeId, counts);
-            const currentNextCount = nextStats.totalCount;
-            
-            let bestSolution = null;
-            let bestScore = -Infinity;
-            
-            for (let addCount = 1; addCount <= b; addCount++) {
-              const targetNextCount = currentNextCount + addCount;
-              const nextAreas = [...new Set(nextIndices.map(i => variableConfigs[i].base))].sort((a, b) => b - a);
-              const combinations = generateBalancedCombinations(targetNextCount, nextAreas.length);
-              
-              combinations.forEach(combo => {
-                const testCounts = [...counts];
-                nextIndices.forEach((idx, i) => { testCounts[idx] = combo[i] || 0; });
-                indices.forEach(i => { const area = variableConfigs[i].base; testCounts[i] = newCounts[area] || 0; });
-                
-                let tBase = fixedBase, tCap = fixedCap;
-                variableConfigs.forEach((c, i) => { tBase += c.base * testCounts[i]; tCap += c.unitCap * testCounts[i]; });
-                
-                const tDensity = tBase / landArea;
-                const tFar = tCap / landArea;
-                
-                if (tCap >= CAP_LO && tCap <= CAP_HI && tDensity >= DEN_LO && tDensity <= DEN_HI) {
-                  const densityScore = 1 - Math.abs(tDensity - density) / density;
-                  if (densityScore > bestScore) {
-                    bestScore = densityScore;
-                    bestSolution = testCounts;
-                  }
-                }
-              });
-            }
-            
-            if (bestSolution) {
-              counts = bestSolution;
-            }
-          }
-        }
-      });
       
       function generateBalancedCombinations(total, numTypes) {
         if (numTypes === 1) return [[total]];
@@ -1775,15 +1762,13 @@
           for (let a = 0; a <= total; a++) {
             for (let b = 0; b <= total - a; b++) {
               const c = total - a - b;
-              if (a <= (b + c) * 2 && b <= (a + c) * 2 && c <= (a + b) * 2) {
-                result.push([a, b, c]);
-              }
+              if (a <= (b + c) * 2 && b <= (a + c) * 2 && c <= (a + b) * 2) result.push([a, b, c]);
             }
           }
           return result;
         }
         const result = [];
-        function dfs(remaining, current, start) {
+        function dfs(remaining, current) {
           if (current.length === numTypes - 1) {
             const last = remaining;
             const all = [...current, last];
@@ -1792,19 +1777,112 @@
             if (max <= (sum - max) * 2) result.push(all);
             return;
           }
-          for (let i = start; i <= remaining; i++) {
-            dfs(remaining - i, [...current, i], 0);
+          for (let i = 0; i <= remaining; i++) {
+            dfs(remaining - i, [...current, i]);
           }
         }
-        dfs(total, [], 0);
+        dfs(total, []);
         return result;
       }
       
-      // 7. 最终调整
-      totals = calcTotals(counts);
+      // 优化循环
+      const optimizeOrder = ['light-steel', 'split', 'layer'];
+      for (let round = 0; round < 3; round++) {
+        let optimized = false;
+        
+        for (const typeId of optimizeOrder) {
+          if (!selectedProducts.has(typeId)) continue;
+          if (!needsOptimization(typeId, counts)) continue;
+          
+          const stats = calcTypeStats(typeId, counts);
+          if (stats.totalCount < 5) continue;
+          
+          // 找到下一优先级类型
+          const currentPriority = optimizeOrder.indexOf(typeId);
+          const nextTypeId = optimizeOrder.slice(currentPriority + 1).find(id => selectedProducts.has(id));
+          if (!nextTypeId) continue;
+          
+          // 当前类型：总栋数-1，面积段均分（从大到小分配余数）
+          const newTotalCount = stats.totalCount - 1;
+          const indices = getTypeIndices(typeId);
+          const areas = [...new Set(indices.map(i => variableConfigs[i].base))].sort((a, b) => b - a);
+          const baseCount = Math.floor(newTotalCount / areas.length);
+          const remainder = newTotalCount % areas.length;
+          const newCountsByArea = {};
+          areas.forEach((area, idx) => { newCountsByArea[area] = baseCount + (idx < remainder ? 1 : 0); });
+          
+          // 计算面积损失
+          let newTotalCap = 0;
+          indices.forEach(i => {
+            const area = variableConfigs[i].base;
+            const count = newCountsByArea[area] || 0;
+            newTotalCap += variableConfigs[i].unitCap * count;
+          });
+          const capLoss = stats.totalCap - newTotalCap;
+          
+          // 下一优先级类型增加栋数
+          const nextIndices = getTypeIndices(nextTypeId);
+          if (nextIndices.length === 0) continue;
+          
+          const nextStats = calcTypeStats(nextTypeId, counts);
+          const maxCap = Math.max(...nextIndices.map(i => variableConfigs[i].unitCap));
+          const minCap = Math.min(...nextIndices.map(i => variableConfigs[i].unitCap));
+          const minAdd = Math.max(1, Math.ceil(capLoss / maxCap));
+          const maxAdd = Math.max(1, Math.floor(capLoss / minCap));
+          const b = Math.max(minAdd, maxAdd);
+          
+          let bestSolution = null;
+          let bestScore = -Infinity;
+          
+          for (let addCount = 1; addCount <= b; addCount++) {
+            const targetNextCount = nextStats.totalCount + addCount;
+            const nextAreas = [...new Set(nextIndices.map(i => variableConfigs[i].base))].sort((a, b) => b - a);
+            const combinations = generateBalancedCombinations(targetNextCount, nextAreas.length);
+            
+            for (const combo of combinations) {
+              const testCounts = [...counts];
+              // 更新当前类型
+              indices.forEach(i => {
+                const area = variableConfigs[i].base;
+                testCounts[i] = newCountsByArea[area] || 0;
+              });
+              // 更新下一优先级类型
+              nextIndices.forEach((idx, i) => { testCounts[idx] = combo[i] || 0; });
+              
+              // 计算总计
+              const t = calcTotals(testCounts);
+              const tDensity = t.base / landArea;
+              const tFar = t.cap / landArea;
+              
+              if (t.cap >= CAP_LO && t.cap <= CAP_HI && tDensity >= DEN_LO && tDensity <= DEN_HI) {
+                const densityScore = 1 - Math.abs(tDensity - density) / density;
+                if (densityScore > bestScore) {
+                  bestScore = densityScore;
+                  bestSolution = testCounts;
+                }
+              }
+            }
+          }
+          
+          if (bestSolution) {
+            counts = bestSolution;
+            optimized = true;
+          }
+        }
+        
+        if (!optimized) break;
+      }
+      
+      // ===== 7. 最终调整 =====
+      let totals = calcTotals(counts);
       while (totals.cap < CAP_LO) {
         let bestIdx = -1, bestEff = 0;
-        variableConfigs.forEach((c, i) => { const eff = c.unitCap / c.base; if (eff > bestEff) { bestEff = eff; bestIdx = i; } });
+        variableConfigs.forEach((c, i) => {
+          if (c.id === 'layer' || c.id === 'split' || c.id === 'light-steel') {
+            const eff = c.unitCap / c.base;
+            if (eff > bestEff) { bestEff = eff; bestIdx = i; }
+          }
+        });
         if (bestIdx === -1) break;
         counts[bestIdx]++; totals = calcTotals(counts);
       }
@@ -1812,6 +1890,7 @@
         let bestIdx = -1, bestScore = Infinity;
         variableConfigs.forEach((c, i) => {
           if (counts[i] <= 0) return;
+          if (c.id !== 'layer' && c.id !== 'split' && c.id !== 'light-steel') return;
           const score = c.isLow ? c.unitCap / c.base - 100 : c.unitCap / c.base;
           if (score < bestScore) { bestScore = score; bestIdx = i; }
         });
@@ -1819,7 +1898,7 @@
         counts[bestIdx]--; totals = calcTotals(counts);
       }
       
-      // 8. 生成产品数组
+      // ===== 8. 生成产品数组 =====
       let totalBase = 0, totalArea = 0, totalCap = 0, totalCount = 0;
       
       variableConfigs.forEach((c, i) => {
@@ -1842,7 +1921,7 @@
       return { products, totalBase, totalArea, totalCap, totalCount, _check: { targetDensity: density, actualDensity, targetFar: far, actualFar, targetBase, targetCap } };
     }
     
-    // ==================== 数字卡片 ====================    // ==================== 数字卡片 ====================
+    // ==================== 数字卡片 ====================    // ==================== 数字卡片 ====================    // ==================== 数字卡片 ====================
     function renderStatCards(result) {
       const types = new Set(result.products.map(p => p.type)).size;
       const acre = projectData.landArea / 666.7;
