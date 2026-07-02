@@ -1747,7 +1747,7 @@
       const remainingBase = targetBase - fixedBase;
       const remainingCap = targetCap - fixedCap;
       
-      // 5. 分配栋数（计容优先，密度软约束，修正比较基准）
+      // 5. 分配栋数（新策略：分层主导满足容积率，分栋微调密度）
       const counts = variableConfigs.map(() => 2);
       
       // 计算总计容和总基底（含固定产品）
@@ -1763,36 +1763,37 @@
       let totals = calcTotal();
       const targetDensityVal = density;
       const targetCapVal = targetCap;
+      const CAP_LO = targetCapVal * 0.995;  // 计容下限
+      const CAP_HI = targetCapVal * 1.005;  // 计容上限
+      const DEN_LO = targetDensityVal * 0.95; // 密度下限
+      const DEN_HI = targetDensityVal * 1.05; // 密度上限
       
-      // 辅助：计算增加/减少某配置后的总计
-      function totalIfAdd(idx) {
-        const t = calcTotal();
-        return { base: t.base + variableConfigs[idx].base, cap: t.cap + variableConfigs[idx].unitCap };
-      }
-      function totalIfRemove(idx) {
-        const t = calcTotal();
-        return { base: t.base - variableConfigs[idx].base, cap: t.cap - variableConfigs[idx].unitCap };
-      }
+      // 辅助函数
+      function capIfAdd(idx) { return totals.cap + variableConfigs[idx].unitCap; }
+      function capIfRemove(idx) { return totals.cap - variableConfigs[idx].unitCap; }
+      function denIfAdd(idx) { return (totals.base + variableConfigs[idx].base) / landArea; }
+      function denIfRemove(idx) { return (totals.base - variableConfigs[idx].base) / landArea; }
       
-      // ---- 第一阶段：保证总计容在 target±0.5% ----
-      
-      // 5.1 计容不够 → 增加栋数（优先低层，但密度不超+5%）
-      while (totals.cap < targetCapVal * 0.995) {
+      // 5.1 先满足容积率（用 cap 效率最高的产品，优先分层）
+      // 同时确保 density 不超过上限（否则无法后续调节）
+      while (totals.cap < CAP_LO) {
         let bestIdx = -1, bestScore = -Infinity;
         
         variableConfigs.forEach((c, i) => {
-          const t = totalIfAdd(i);
-          const newDensity = t.base / landArea;
-          let score = 0;
+          const newCap = capIfAdd(i);
+          const newDen = denIfAdd(i);
           
-          if (newDensity > targetDensityVal * 1.05) {
-            if (c.isLow) return;
-            score = 1;
-          } else {
-            score = c.isLow ? 100 : 10;
-          }
+          // 如果加这栋后 density 超上限，完全禁止（不能依赖后续密度微调来修复）
+          if (newDen > DEN_HI) return;
           
-          score += (c.unitCap / c.base) * 0.5;
+          // 如果加这栋后 cap 仍然不够下限，优先 cap 效率高的
+          // 如果加这栋后 cap 超上限，不要加（避免后续还要减）
+          if (newCap > CAP_HI) return;
+          
+          // 计容效率越高越好，但 density 越接近上限越好（避免太低）
+          const eff = c.unitCap / c.base;
+          const denGap = DEN_HI - newDen; // 越小越好（越接近上限）
+          const score = eff * 100 - denGap * 1000;
           
           if (score > bestScore) {
             bestScore = score;
@@ -1805,25 +1806,25 @@
         totals = calcTotal();
       }
       
-      // 5.2 计容超了 → 减少栋数（优先高层，密度不低于-5%）
-      while (totals.cap > targetCapVal * 1.005) {
+      // 5.2 如果 cap 超了，减少栋数（优先减 cap 效率低的 = 分栋）
+      while (totals.cap > CAP_HI) {
         let bestIdx = -1, bestScore = -Infinity;
         
         variableConfigs.forEach((c, i) => {
           if (counts[i] <= 2) return;
           
-          const t = totalIfRemove(i);
-          const newDensity = t.base / landArea;
-          let score = 0;
+          const newCap = capIfRemove(i);
+          const newDen = denIfRemove(i);
           
-          if (newDensity < targetDensityVal * 0.95) {
-            if (c.isLow) return;
-            score = 1;
-          } else {
-            score = !c.isLow ? 100 : 10;
-          }
+          // 减后 cap 不能跌破下限
+          if (newCap < CAP_LO) return;
           
-          score += (c.unitCap / c.base) * 0.5;
+          // 优先减低层（分栋），因为它们的 cap 效率低
+          // 同时考虑减后 density 的变化：如果 density 会跌破下限，不优先减
+          let score = c.isLow ? 100 : 10;
+          if (newDen < DEN_LO) score -= 50; // 惩罚：减后 density 太低
+          
+          score += (c.unitCap / c.base) * 0.5; // cap 效率低的优先减
           
           if (score > bestScore) {
             bestScore = score;
@@ -1836,73 +1837,62 @@
         totals = calcTotal();
       }
       
-      // ---- 第二阶段：密度微调 ----
+      // 5.3 密度微调（只减分栋 / 只加分栋，不碰分层）
       
-      // 6.1 密度太低
-      if (totals.base / landArea < targetDensityVal * 0.95) {
-        while (true) {
-          let added = false;
+      // 密度太低 → 加分栋（低层，密度大）
+      while (totals.base / landArea < DEN_LO) {
+        let bestIdx = -1, bestScore = -Infinity;
+        
+        variableConfigs.forEach((c, i) => {
+          if (!c.isLow) return; // 只加低层
           
-          const sortedIdx = variableConfigs
-            .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow }))
-            .filter(x => x.isLow)
-            .sort((a, b) => b.base - a.base);
+          const newCap = capIfAdd(i);
+          const newDen = denIfAdd(i);
           
-          for (const item of sortedIdx) {
-            const i = item.idx;
-            const c = variableConfigs[i];
-            const newCap = totals.cap + c.unitCap;
-            if (newCap <= targetCapVal * 1.005) {
-              counts[i]++;
-              totals = calcTotal();
-              added = true;
-              break;
-            }
+          // cap 不能超上限
+          if (newCap > CAP_HI) return;
+          // density 不需要检查上限（因为加的是低层，可能刚好补足）
+          
+          // 优先加 base 大的（更快提升 density）
+          const score = c.base + (newDen >= DEN_LO ? 100 : 0); // 如果加这栋后 density 就达标了，额外奖励
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
           }
-          
-          if (!added) break;
-          if (totals.base / landArea >= targetDensityVal * 0.95) break;
-        }
+        });
+        
+        if (bestIdx === -1) break;
+        counts[bestIdx]++;
+        totals = calcTotal();
       }
       
-      // 6.2 密度太高
-      if (totals.base / landArea > targetDensityVal * 1.05) {
-        while (true) {
-          let changed = false;
+      // 密度太高 → 减分栋（低层，density 大）
+      while (totals.base / landArea > DEN_HI) {
+        let bestIdx = -1, bestScore = -Infinity;
+        
+        variableConfigs.forEach((c, i) => {
+          if (!c.isLow) return; // 只减低层
+          if (counts[i] <= 2) return; // 最少2栋
           
-          const sortedLow = variableConfigs
-            .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow, count: counts[i] }))
-            .filter(x => x.isLow && x.count > 2)
-            .sort((a, b) => b.base - a.base);
+          const newCap = capIfRemove(i);
+          const newDen = denIfRemove(i);
           
-          for (const item of sortedLow) {
-            counts[item.idx]--;
-            totals = calcTotal();
-            changed = true;
-            break;
+          // cap 不能跌破下限
+          if (newCap < CAP_LO) return;
+          
+          // 优先减 base 大的（更快降低 density）
+          const score = c.base + (newDen <= DEN_HI ? 100 : 0);
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
           }
-          
-          if (!changed) {
-            const sortedHigh = variableConfigs
-              .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow }))
-              .filter(x => !x.isLow)
-              .sort((a, b) => a.base - b.base);
-            
-            for (const item of sortedHigh) {
-              const i = item.idx;
-              const c = variableConfigs[i];
-              const newCap = totals.cap + c.unitCap;
-              if (newCap <= targetCapVal * 1.005) {
-                counts[i]++;
-                totals = calcTotal();
-                changed = true;
-                break;
-              }
-            }
-          }
-          
-          if (!changed || totals.base / landArea <= targetDensityVal * 1.05) break;
-        }
+        });
+        
+        if (bestIdx === -1) break;
+        counts[bestIdx]--;
+        totals = calcTotal();
       }
       
       // 7. 生成产品数组
