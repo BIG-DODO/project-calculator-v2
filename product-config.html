@@ -1376,7 +1376,8 @@
     }
 
     // ==================== 核心配置算法 ====================
-    function calculateProductConfig() {
+    function calculateProductConfig(attempt = 0) {
+      const MAX_ATTEMPTS = 4;
       const products = [];
       const landArea = projectData.landArea;
       const far = projectData.far;
@@ -1453,6 +1454,21 @@
           }
         }
         
+        // 高度约束：产业大厦 >= 较高分层厂房
+        totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+        if (maxLayerHeight > 0 && totalH < maxLayerHeight) {
+          while (totalH < maxLayerHeight) {
+            floors++;
+            totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+            if (totalH > 80) {
+              floors--;
+              totalH = 6.6 + 4.5 * (floors - 2) + 4.5 + 1.2;
+              break;
+            }
+          }
+          actualArea = area * floors;
+        }
+        
         const unitArea = actualArea;
         const unitCap = actualArea;
         const paxLift = Math.max(1, Math.ceil(actualArea / 4000) - 2);
@@ -1503,6 +1519,19 @@
             totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
             if (totalH > minLayerHeight) {
               while (totalH > minLayerHeight && floors > 3) {
+                floors--;
+                totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
+              }
+            }
+          }
+          
+          // 高度约束：宿舍 <= 产业大厦
+          const towerCfg = allConfigs.find(c => c.id === 'tower');
+          const towerH = towerCfg ? towerCfg.totalHeight : maxLayerHeight;
+          if (totalH > towerH) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
+            if (totalH > towerH) {
+              while (totalH > towerH && floors > 3) {
                 floors--;
                 totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
               }
@@ -1563,6 +1592,19 @@
             totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
             if (totalH > minLayerHeight) {
               while (totalH > minLayerHeight && floors > 3) {
+                floors--;
+                totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
+              }
+            }
+          }
+          
+          // 高度约束：宿舍 <= 产业大厦
+          const towerCfg2 = allConfigs.find(c => c.id === 'tower');
+          const towerH2 = towerCfg2 ? towerCfg2.totalHeight : maxLayerHeight;
+          if (totalH > towerH2) {
+            totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
+            if (totalH > towerH2) {
+              while (totalH > towerH2 && floors > 3) {
                 floors--;
                 totalH = 4.8 + 3.3 * (floors - 2) + 3.6 + 1.2;
               }
@@ -1664,7 +1706,7 @@
             const elevator = area < 1500 ? '0客1货' : (area < 4000 ? '1客1货' : '1客2货');
             variableConfigs.push({
               id: 'split', type: '分栋厂房', base, unitCap, unitArea,
-              floors: floor, totalHeight: totalH, isLow: floor <= 3,
+              floors: floor, totalHeight: totalH, isLow: true,
               elevator, load: '首层2000kg，二层800kg，二层及以上500kg',
               fl: { first: 7.2, second: 5.1, standard: 4.5, top: 4.5 },
               flSuffix: { second: '', standard: '', top: '' },
@@ -1705,11 +1747,12 @@
       const remainingBase = targetBase - fixedBase;
       const remainingCap = targetCap - fixedCap;
       
-      // 5. 分配栋数（新策略：容积率为硬约束，密度为软约束，优先低层产品）
+      // 5. 分配栋数（计容优先，密度软约束，修正比较基准）
       const counts = variableConfigs.map(() => 2);
       
-      function calcVariableState() {
-        let base = 0, cap = 0;
+      // 计算总计容和总基底（含固定产品）
+      function calcTotal() {
+        let base = fixedBase, cap = fixedCap;
         variableConfigs.forEach((c, i) => {
           base += c.base * counts[i];
           cap += c.unitCap * counts[i];
@@ -1717,38 +1760,38 @@
         return { base, cap };
       }
       
-      let vState = calcVariableState();
+      let totals = calcTotal();
       const targetDensityVal = density;
       const targetCapVal = targetCap;
       
-      // 辅助：计算增加/减少某配置后的密度
-      function densityIfAdd(idx) {
-        return (fixedBase + vState.base + variableConfigs[idx].base) / landArea;
+      // 辅助：计算增加/减少某配置后的总计
+      function totalIfAdd(idx) {
+        const t = calcTotal();
+        return { base: t.base + variableConfigs[idx].base, cap: t.cap + variableConfigs[idx].unitCap };
       }
-      function densityIfRemove(idx) {
-        return (fixedBase + vState.base - variableConfigs[idx].base) / landArea;
+      function totalIfRemove(idx) {
+        const t = calcTotal();
+        return { base: t.base - variableConfigs[idx].base, cap: t.cap - variableConfigs[idx].unitCap };
       }
       
-      // ---- 第一阶段：保证容积率在 [target*0.99995, target*1.00005] ----
+      // ---- 第一阶段：保证总计容在 target±0.5% ----
       
       // 5.1 计容不够 → 增加栋数（优先低层，但密度不超+5%）
-      while (vState.cap < targetCapVal * 0.99995) {
+      while (totals.cap < targetCapVal * 0.995) {
         let bestIdx = -1, bestScore = -Infinity;
         
         variableConfigs.forEach((c, i) => {
-          const newDensity = densityIfAdd(i);
+          const t = totalIfAdd(i);
+          const newDensity = t.base / landArea;
           let score = 0;
           
-          // 密度硬上限：+5%
           if (newDensity > targetDensityVal * 1.05) {
-            if (c.isLow) return; // 低层会导致密度超限，不能选
-            score = 1; // 高层勉强可选
+            if (c.isLow) return;
+            score = 1;
           } else {
-            // 密度不超 → 优先低层（让密度尽量高 = 尽量多做低楼层产品）
             score = c.isLow ? 100 : 10;
           }
           
-          // 计容效率加成：越高效率越快达标
           score += (c.unitCap / c.base) * 0.5;
           
           if (score > bestScore) {
@@ -1759,32 +1802,27 @@
         
         if (bestIdx === -1) break;
         counts[bestIdx]++;
-        vState = calcVariableState();
+        totals = calcTotal();
       }
       
       // 5.2 计容超了 → 减少栋数（优先高层，密度不低于-5%）
-      while (vState.cap > targetCapVal * 1.00005) {
+      while (totals.cap > targetCapVal * 1.005) {
         let bestIdx = -1, bestScore = -Infinity;
         
         variableConfigs.forEach((c, i) => {
-          if (counts[i] <= 2) return; // 最少2栋
+          if (counts[i] <= 2) return;
           
-          const newDensity = densityIfRemove(i);
+          const t = totalIfRemove(i);
+          const newDensity = t.base / landArea;
           let score = 0;
           
-          // 密度硬下限：-5%
           if (newDensity < targetDensityVal * 0.95) {
-            // 密度会跌破下限，不能减低层（减低层降密度快）
-            // 实际上减高层降密度慢（因为高层base小？不对，base是一样的...）
-            // 简化：如果密度会跌破下限，只能减高层（因为高层计容效率高，减1栋降计容多而密度降得相对少）
             if (c.isLow) return;
             score = 1;
           } else {
-            // 密度安全 → 优先减高层（高层计容效率高，减1栋更快把计容拉回来）
             score = !c.isLow ? 100 : 10;
           }
           
-          // 计容效率加成
           score += (c.unitCap / c.base) * 0.5;
           
           if (score > bestScore) {
@@ -1795,19 +1833,16 @@
         
         if (bestIdx === -1) break;
         counts[bestIdx]--;
-        vState = calcVariableState();
+        totals = calcTotal();
       }
       
-      // ---- 第二阶段：密度微调（不破坏容积率约束）----
+      // ---- 第二阶段：密度微调 ----
       
-      const currentDensity = (fixedBase + vState.base) / landArea;
-      
-      // 6.1 密度太低（<-5%）：增加低层（如果计容不超上限）
-      if (currentDensity < targetDensityVal * 0.95) {
+      // 6.1 密度太低
+      if (totals.base / landArea < targetDensityVal * 0.95) {
         while (true) {
           let added = false;
           
-          // 按base从大到小排序（优先加base大的，更快提升密度）
           const sortedIdx = variableConfigs
             .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow }))
             .filter(x => x.isLow)
@@ -1816,26 +1851,25 @@
           for (const item of sortedIdx) {
             const i = item.idx;
             const c = variableConfigs[i];
-            const newCap = vState.cap + c.unitCap;
-            if (newCap <= targetCapVal * 1.00005) {
+            const newCap = totals.cap + c.unitCap;
+            if (newCap <= targetCapVal * 1.005) {
               counts[i]++;
-              vState = calcVariableState();
+              totals = calcTotal();
               added = true;
-              break; // 一次只加一栋
+              break;
             }
           }
           
           if (!added) break;
-          if ((fixedBase + vState.base) / landArea >= targetDensityVal * 0.95) break;
+          if (totals.base / landArea >= targetDensityVal * 0.95) break;
         }
       }
       
-      // 6.2 密度太高（>+5%）：减少低层 或 增加高层
-      if (currentDensity > targetDensityVal * 1.05) {
+      // 6.2 密度太高
+      if (totals.base / landArea > targetDensityVal * 1.05) {
         while (true) {
           let changed = false;
           
-          // 优先减少低层（base大的优先减，更快降密度）
           const sortedLow = variableConfigs
             .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow, count: counts[i] }))
             .filter(x => x.isLow && x.count > 2)
@@ -1843,32 +1877,31 @@
           
           for (const item of sortedLow) {
             counts[item.idx]--;
-            vState = calcVariableState();
+            totals = calcTotal();
             changed = true;
             break;
           }
           
           if (!changed) {
-            // 低层减完了，增加高层（计容不超的前提下）
             const sortedHigh = variableConfigs
               .map((c, i) => ({ idx: i, base: c.base, isLow: c.isLow }))
               .filter(x => !x.isLow)
-              .sort((a, b) => a.base - b.base); // 优先加base小的（对密度影响小）
+              .sort((a, b) => a.base - b.base);
             
             for (const item of sortedHigh) {
               const i = item.idx;
               const c = variableConfigs[i];
-              const newCap = vState.cap + c.unitCap;
-              if (newCap <= targetCapVal * 1.00005) {
+              const newCap = totals.cap + c.unitCap;
+              if (newCap <= targetCapVal * 1.005) {
                 counts[i]++;
-                vState = calcVariableState();
+                totals = calcTotal();
                 changed = true;
                 break;
               }
             }
           }
           
-          if (!changed || (fixedBase + vState.base) / landArea <= targetDensityVal * 1.05) break;
+          if (!changed || totals.base / landArea <= targetDensityVal * 1.05) break;
         }
       }
       
@@ -1909,14 +1942,91 @@
         totalCount += 1;
       });
       
-      // 8. 最终校验
+      // 8. 最终校验 + 自查 + 面积段丰富
       const actualDensity = totalBase / landArea;
       const actualFar = totalCap / landArea;
       
-      return {
+      const result = {
         products, totalBase, totalArea, totalCap, totalCount,
         _check: { targetDensity: density, actualDensity, targetFar: far, actualFar, targetBase, targetCap }
       };
+      
+      // ---- 自查 ----
+      const farDiff = Math.abs(actualFar - far) / far;
+      const densityDiff = Math.abs(actualDensity - density) / density;
+      
+      if ((farDiff > 0.005 || densityDiff > 0.05) && attempt < MAX_ATTEMPTS) {
+        if (tryEnrichAreas()) {
+          return calculateProductConfig(attempt + 1);
+        }
+      }
+      
+      return result;
+    }
+    
+    function tryEnrichAreas() {
+      const enrichOrder = ['light-steel', 'split', 'layer'];
+      const maxEnrich = projectData.landArea <= 20000 ? 1 : (projectData.landArea <= 50000 ? 2 : 3);
+      
+      for (const productId of enrichOrder) {
+        if (!selectedProducts.has(productId)) continue;
+        
+        const currentAreas = productOptions[productId].areas;
+        if (!currentAreas || currentAreas.length === 0) continue;
+        
+        const areas = [...currentAreas].sort((a, b) => a - b);
+        const existing = new Set(areas);
+        let newAreas = [];
+        
+        if (areas.length === 1) {
+          // 递减法
+          const base = areas[0];
+          if (base - 50 > 0 && !existing.has(base - 50)) newAreas.push(base - 50);
+          if (maxEnrich >= 2 && base - 100 > 0 && !existing.has(base - 100)) newAreas.push(base - 100);
+        } else {
+          // 内插法
+          const gaps = [];
+          for (let i = 0; i < areas.length - 1; i++) {
+            gaps.push({ a: areas[i], b: areas[i+1], diff: areas[i+1] - areas[i] });
+          }
+          gaps.sort((a, b) => b.diff - a.diff);
+          
+          for (let i = 0; i < Math.min(maxEnrich, gaps.length); i++) {
+            const mid = Math.round((gaps[i].a + gaps[i].b) / 2 / 50) * 50;
+            if (!existing.has(mid) && !newAreas.includes(mid)) {
+              newAreas.push(mid);
+            }
+          }
+          
+          // 扩展
+          if (newAreas.length > 0) {
+            for (let i = 0; i < newAreas.length; i++) {
+              const val = newAreas[i] - 50;
+              if (!existing.has(val) && !newAreas.includes(val) && val > 0) {
+                newAreas.push(val);
+              }
+              if (newAreas.length >= maxEnrich) break;
+            }
+            for (let i = 0; i < newAreas.length; i++) {
+              const val = newAreas[i] + 50;
+              if (!existing.has(val) && !newAreas.includes(val)) {
+                newAreas.push(val);
+              }
+              if (newAreas.length >= maxEnrich) break;
+            }
+          }
+        }
+        
+        // 去重并限制
+        newAreas = newAreas.filter(a => !existing.has(a) && a > 0);
+        newAreas = newAreas.slice(0, maxEnrich);
+        
+        if (newAreas.length > 0) {
+          productOptions[productId].areas = [...areas, ...newAreas].sort((a, b) => a - b);
+          return true;
+        }
+      }
+      return false;
     }
 
     // ==================== 数字卡片 ====================
