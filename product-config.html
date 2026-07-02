@@ -1687,10 +1687,17 @@
           indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
           indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
         } else {
-          // 方程无解，用整数规划
-          const result = solveIntegerEquation(remainingCap, [...configsA, ...configsB], remainingBase * 1.05);
-          indicesA.forEach((idx, i) => { counts[idx] = result.counts[i]; });
-          indicesB.forEach((idx, i) => { counts[idx] = result.counts[i + indicesA.length]; });
+          // 方程无解，分别求解确保每种类型都有分配
+          const totalEff = effA + effB;
+          const capA = remainingCap * (effA / totalEff);
+          const capB = remainingCap * (effB / totalEff);
+          const baseA = remainingBase * (effA / totalEff);
+          const baseB = remainingBase * (effB / totalEff);
+          
+          const resultA = solveIntegerEquation(capA, configsA, baseA);
+          const resultB = solveIntegerEquation(capB, configsB, baseB);
+          indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
+          indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
         }
       } else if (selectedVariableTypes.length === 3) {
         // 3种：分层固定1栋（最小层数+最小面积段）
@@ -1742,8 +1749,28 @@
           // 只剩1种
           const indices = getTypeIndices(remainingTypes[0]);
           const configs = indices.map(i => variableConfigs[i]);
-          const result = solveIntegerEquation(newRemainingCap, configs, newRemainingBase * 1.05);
+          const result = solveIntegerEquation(newRemainingCap, configs, newRemainingBase);
           indices.forEach((idx, i) => { counts[idx] = result.counts[i]; });
+        } else {
+          // 方程无解，分别求解
+          const typeA = remainingTypes[0];
+          const typeB = remainingTypes[1];
+          const indicesA = getTypeIndices(typeA);
+          const indicesB = getTypeIndices(typeB);
+          const configsA = indicesA.map(i => variableConfigs[i]);
+          const configsB = indicesB.map(i => variableConfigs[i]);
+          const effA = configsA.reduce((s, c) => s + c.unitCap / c.base, 0) / configsA.length;
+          const effB = configsB.reduce((s, c) => s + c.unitCap / c.base, 0) / configsB.length;
+          const totalEff = effA + effB;
+          const capA = newRemainingCap * (effA / totalEff);
+          const capB = newRemainingCap * (effB / totalEff);
+          const baseA = newRemainingBase * (effA / totalEff);
+          const baseB = newRemainingBase * (effB / totalEff);
+          
+          const resultA = solveIntegerEquation(capA, configsA, baseA);
+          const resultB = solveIntegerEquation(capB, configsB, baseB);
+          indicesA.forEach((idx, i) => { counts[idx] = resultA.counts[i]; });
+          indicesB.forEach((idx, i) => { counts[idx] = resultB.counts[i]; });
         }
       }
       
@@ -1923,6 +1950,12 @@
         variableConfigs.forEach((c, i) => {
           if (counts[i] <= 0) return;
           if (c.id !== 'layer' && c.id !== 'split' && c.id !== 'light-steel') return;
+          
+          // 约束：不要删除某类型的最后非零配置（保证每种类型至少2个非零）
+          const typeIndices = getTypeIndices(c.id);
+          const typeNonZero = typeIndices.filter(idx => counts[idx] > 0);
+          if (typeNonZero.length <= 2) return; // 删除后只剩1个非零，跳过
+          
           const score = c.isLow ? c.unitCap / c.base - 100 : c.unitCap / c.base;
           if (score < bestScore) { bestScore = score; bestIdx = i; }
         });
