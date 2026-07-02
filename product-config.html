@@ -1747,8 +1747,21 @@
       const remainingBase = targetBase - fixedBase;
       const remainingCap = targetCap - fixedCap;
       
-            // 5. 分配栋数（初始化为0，算法自由分配，无下限约束）
+            // 5. 分配栋数（初始化为0，按产品类型最优配置给2栋，算法自由分配）
       const counts = variableConfigs.map(() => 0);
+      
+      // 按产品类型分组，给每种类型选最优配置分配2栋
+      const typeIds = [...new Set(variableConfigs.map(c => c.id))];
+      const targetAvgCap = targetCap / (targetBase || 1);
+      
+      typeIds.forEach(tid => {
+        const typeIndices = variableConfigs
+          .map((c, i) => ({ idx: i, eff: c.unitCap / c.base }))
+          .filter(x => variableConfigs[x.idx].id === tid);
+        if (typeIndices.length === 0) return;
+        typeIndices.sort((a, b) => Math.abs(a.eff - targetAvgCap) - Math.abs(b.eff - targetAvgCap));
+        counts[typeIndices[0].idx] = 2;
+      });
       
       // 计算总计容和总基底（含固定产品）
       function calcTotal() {
@@ -1773,6 +1786,13 @@
       function capIfRemove(idx) { return totals.cap - variableConfigs[idx].unitCap; }
       function denIfAdd(idx) { return (totals.base + variableConfigs[idx].base) / landArea; }
       function denIfRemove(idx) { return (totals.base - variableConfigs[idx].base) / landArea; }
+      
+      // 产品类型总栋数
+      function typeTotalCount(typeId) {
+        return variableConfigs.reduce((sum, c, i) => {
+          return c.id === typeId ? sum + counts[i] : sum;
+        }, 0);
+      }
       
       // 5.1 先满足容积率（用 cap 效率最高的产品，优先分层）
       while (totals.cap < CAP_LO) {
@@ -1806,6 +1826,7 @@
         
         variableConfigs.forEach((c, i) => {
           if (counts[i] <= 0) return; // 可以减到0
+          if (typeTotalCount(c.id) <= 2) return; // 产品类型总栋数不低于2
           
           const newCap = capIfRemove(i);
           const newDen = denIfRemove(i);
@@ -1862,6 +1883,7 @@
         variableConfigs.forEach((c, i) => {
           if (!c.isLow) return;
           if (counts[i] <= 0) return; // 可以减到0
+          if (typeTotalCount(c.id) <= 2) return; // 产品类型总栋数不低于2
           
           const newCap = capIfRemove(i);
           const newDen = denIfRemove(i);
@@ -1881,27 +1903,32 @@
         totals = calcTotal();
       }
       
-      // 5.4 最终检查：确保每种产品类型至少出现1种配置（至少1栋）
-      // 如果某种类型完全0栋，增加其最优配置1栋
-      const typeIds = [...new Set(variableConfigs.map(c => c.id))];
+      // 5.4 最终检查：确保每种产品类型至少2栋（如果选了该产品类型）
       typeIds.forEach(tid => {
         const typeIndices = variableConfigs
           .map((c, i) => ({ idx: i, eff: c.unitCap / c.base }))
           .filter(x => variableConfigs[x.idx].id === tid);
         if (typeIndices.length === 0) return;
         
-        const totalCount = typeIndices.reduce((sum, x) => sum + counts[x.idx], 0);
-        if (totalCount === 0) {
+        let totalCount = typeIndices.reduce((sum, x) => sum + counts[x.idx], 0);
+        while (totalCount < 2) {
           // 选cap效率最接近目标的配置加1栋
           const targetAvgCap = targetCap / (targetBase || 1);
           typeIndices.sort((a, b) => Math.abs(a.eff - targetAvgCap) - Math.abs(b.eff - targetAvgCap));
-          const idx = typeIndices[0].idx;
-          const newCap = totals.cap + variableConfigs[idx].unitCap;
-          const newDen = (totals.base + variableConfigs[idx].base) / landArea;
-          if (newCap <= CAP_HI && newDen <= DEN_HI) {
-            counts[idx]++;
-            totals = calcTotal();
+          let added = false;
+          for (const x of typeIndices) {
+            const idx = x.idx;
+            const newCap = totals.cap + variableConfigs[idx].unitCap;
+            const newDen = (totals.base + variableConfigs[idx].base) / landArea;
+            if (newCap <= CAP_HI && newDen <= DEN_HI) {
+              counts[idx]++;
+              totals = calcTotal();
+              totalCount++;
+              added = true;
+              break;
+            }
           }
+          if (!added) break;
         }
       });// 7. 生成产品数组
       let totalBase = 0, totalArea = 0, totalCap = 0, totalCount = 0;
