@@ -660,6 +660,7 @@
       white-space: nowrap;
       width: 1%;
     }
+    .type-filter {
       display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
     }
     .type-filter .pill { padding: 6px 14px; font-size: 0.8rem; }
@@ -788,7 +789,7 @@
           <div class="nav-item" data-view="config-overview" onclick="switchView('config-overview')">
             <span class="icon">📋</span> 产品配置一览
           </div>
-          <div class="nav-item" onclick="downloadConfigDetail()">
+          <div class="nav-item" data-view="config-detail" onclick="switchView('config-detail')">
             <span class="icon">⬇️</span> 产品配置详表下载
           </div>
         </div>
@@ -932,6 +933,7 @@
       <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
       <div class="view" id="view-chart-elevator"><div class="content-header">🛗 产品电梯配置</div><div id="chart-elevator-content"></div></div>
       <div class="view" id="view-chart-layout"><div class="content-header">🏠 产品户型建议</div><div id="chart-layout-content"></div></div>
+      <div class="view" id="view-config-detail"><div class="content-header">📋 产品配置详表</div><div id="config-detail-content"></div></div>
       <div class="view" id="view-indicator-overview"><div class="content-header">📋 综合指标一览</div><div id="indicator-overview-content"></div></div>
     </main>
   </div>
@@ -1309,8 +1311,50 @@
 
       msg.style.display = 'none';
 
-      // 执行配置计算（简化版 — 实际应走完整算法）
+      // 执行配置计算
       const result = calculateProductConfig();
+
+      // 读取租金售价
+      const prices = {
+        rentSplit: parseFloat(document.getElementById('rent-split').value) || 0,
+        priceSplit: parseFloat(document.getElementById('price-split').value) || 0,
+        rentLayer: parseFloat(document.getElementById('rent-layer').value) || 0,
+        priceLayer: parseFloat(document.getElementById('price-layer').value) || 0
+      };
+      result.prices = prices;
+      result.hasPrices = prices.rentSplit > 0 || prices.priceSplit > 0 || prices.rentLayer > 0 || prices.priceLayer > 0;
+
+      // 计算单单元面积、占比等完整字段
+      const totalAreaAll = result.totalArea;
+      const totalCapAll = result.totalCap;
+      result.products.forEach(p => {
+        // 单单元面积
+        if (p.form === '双拼') {
+          p.unitAreaSingle = p.unitArea / 2;
+        } else if (p.form === '分层分户') {
+          p.unitAreaSingle = p.base;
+        } else {
+          p.unitAreaSingle = p.unitArea;
+        }
+        // 占比
+        p.areaRatio = p.totalArea / totalAreaAll;
+        p.capRatio = p.totalCap / totalCapAll;
+        // 租金售价
+        if (p.type === '轻钢厂房') {
+          p.rent = prices.rentSplit;
+          p.price = prices.priceSplit;
+        } else if (p.type === '分栋厂房') {
+          p.rent = prices.rentSplit;
+          p.price = prices.priceSplit;
+        } else if (p.type === '分层厂房') {
+          p.rent = prices.rentLayer;
+          p.price = prices.priceLayer;
+        } else if (p.type === '产业大厦') {
+          p.rent = prices.rentLayer;
+          p.price = prices.priceLayer;
+        }
+      });
+
       window.configResult = result;
 
       // 切换视图
@@ -1322,6 +1366,7 @@
       renderStatCards(result);
       // 渲染各视图内容
       renderConfigOverview(result);
+      document.getElementById('config-detail-content').innerHTML = renderConfigDetail();
       renderCharts(result);
       renderIndicatorOverview(result);
 
@@ -1578,7 +1623,7 @@
           productType: '3F-D(' + supportBaseInput + ')'
         });
         supportArea = finalArea;
-        supportBase = base;
+        supportBase = supportBaseInput;
         supportCap = finalArea;
       }
       
@@ -2092,6 +2137,75 @@
         </div>`;
     }
 
+    // ==================== 产品配置详表（21字段完整表） ====================
+    function renderConfigDetail() {
+      if (!window.configResult) return '';
+      const result = window.configResult;
+      const rows = result.products.map(p => {
+        const rentPrice = [];
+        if (p.rent > 0) rentPrice.push(`租:${p.rent}元/天/m²`);
+        if (p.price > 0) {
+          if (p.price < 1000) rentPrice.push(`售价不可用`);
+          else rentPrice.push(`售:${fmtInt(p.price)}元`);
+        }
+        const rentPriceStr = rentPrice.join(' / ') || '—';
+        const fl2 = p.fl.second + (p.flSuffix.second || '') + 'm';
+        const flStd = p.fl.standard + (p.flSuffix.standard || '') + 'm';
+        const flTop = p.fl.top + (p.flSuffix.top || '') + 'm';
+        const totalFl = fmtNum(p.totalHeight - 1.2, 1) + 'm';
+        return `
+          <tr>
+            <td>${p.type}</td><td>${p.productType}</td><td>${p.form}</td><td>${p.load}</td>
+            <td class="num">${p.floors}</td><td>${p.elevator}</td>
+            <td class="num">${p.fl.first}m</td><td class="num">${fl2}</td>
+            <td class="num">${flStd}</td><td class="num">${flTop}</td>
+            <td class="num">${totalFl}</td>
+            <td class="num">${fmtInt(p.base)}</td><td class="num">${fmtInt(p.unitArea)}</td>
+            <td class="num">${fmtInt(p.unitAreaSingle)}</td>
+            <td class="num">${p.count}</td>
+            <td class="num">${fmtInt(p.totalBase)}</td><td class="num">${fmtInt(p.totalArea)}</td>
+            <td class="num">${(p.areaRatio * 100).toFixed(1)}%</td>
+            <td class="num">${fmtInt(p.totalCap)}</td>
+            <td class="num">${(p.capRatio * 100).toFixed(1)}%</td>
+            ${result.hasPrices ? `<td>${rentPriceStr}</td>` : ''}
+          </tr>`;
+      }).join('');
+      const headers = [
+        '厂房类型','产品类型','形式','荷载','层数','电梯配置',
+        '首层层高','二层层高','标准层层高','顶层层高','总层高(不含女儿墙)',
+        '单栋基底面积','单栋面积','单单元面积','栋数',
+        '户型总占地面积','户型总面积','建筑面积占比','户型总计容面积','计容面积占比'
+      ];
+      if (result.hasPrices) headers.push('租金与售价');
+      const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+      const totalRow = `
+        <tr style="background:var(--brand-light);font-weight:600;">
+          <td colspan="11">合计</td>
+          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          <td class="num">${fmtInt(result.totalCount)}</td>
+          <td class="num">${fmtInt(result.totalBase)}</td>
+          <td class="num">${fmtInt(result.totalArea)}</td>
+          <td class="num">100%</td>
+          <td class="num">${fmtInt(result.totalCap)}</td>
+          <td class="num">100%</td>
+          ${result.hasPrices ? '<td>—</td>' : ''}
+        </tr>`;
+      return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div class="card-title" style="margin-bottom:0;">📋 产品配置详表（${result.hasPrices ? 21 : 20}字段）</div>
+            <button class="btn btn-primary" style="padding:8px 16px;font-size:0.8rem;" onclick="downloadConfigDetail()">⬇️ 下载表格</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table" style="min-width:${result.hasPrices ? 1600 : 1500}px;">
+              <thead>${thead}</thead>
+              <tbody>${rows}${totalRow}</tbody>
+            </table>
+          </div>
+          <div class="table-scroll-hint">👈 左右滑动查看完整表格</div>
+        </div>`;
+    }
+
     // ==================== 视图切换 ====================
     function switchView(viewId) {
       if (viewId === 'input') {
@@ -2122,14 +2236,189 @@
       group.classList.toggle('open');
     }
 
-    // ==================== 下载占位 ====================
+    // ==================== 下载功能 ====================
     function downloadConfigDetail() {
       if (!window.configResult) { alert('请先生成产品配置'); return; }
-      alert('产品配置详表下载功能开发中...');
+      const result = window.configResult;
+      const projectName = projectData.projectName || '项目';
+      const rows = result.products.map(p => {
+        const rentPrice = [];
+        if (p.rent > 0) rentPrice.push(`租:${p.rent}元/天/m²`);
+        if (p.price > 0) {
+          if (p.price < 1000) rentPrice.push(`售价不可用`);
+          else rentPrice.push(`售:${fmtInt(p.price)}元`);
+        }
+        const rentPriceStr = rentPrice.join(' / ') || '—';
+        const fl2 = p.fl.second + (p.flSuffix.second || '');
+        const flStd = p.fl.standard + (p.flSuffix.standard || '');
+        const flTop = p.fl.top + (p.flSuffix.top || '');
+        return `
+          <tr>
+            <td>${p.type}</td><td>${p.productType}</td><td>${p.form}</td><td>${p.load}</td>
+            <td>${p.floors}</td><td>${p.elevator}</td>
+            <td>${p.fl.first}m</td><td>${fl2}m</td><td>${flStd}m</td><td>${flTop}m</td>
+            <td>${fmtNum(p.totalHeight - 1.2, 1)}m</td>
+            <td>${fmtInt(p.base)}</td><td>${fmtInt(p.unitArea)}</td><td>${fmtInt(p.unitAreaSingle)}</td>
+            <td>${p.count}</td><td>${fmtInt(p.totalBase)}</td><td>${fmtInt(p.totalArea)}</td>
+            <td>${(p.areaRatio * 100).toFixed(1)}%</td>
+            <td>${fmtInt(p.totalCap)}</td><td>${(p.capRatio * 100).toFixed(1)}%</td>
+            ${result.hasPrices ? `<td>${rentPriceStr}</td>` : ''}
+          </tr>`;
+      }).join('');
+      const headers = [
+        '厂房类型','产品类型','形式','荷载','层数','电梯配置',
+        '首层层高','二层层高','标准层层高','顶层层高','总层高(不含女儿墙)',
+        '单栋基底面积','单栋面积','单单元面积','栋数',
+        '户型总占地面积','户型总面积','建筑面积占比','户型总计容面积','计容面积占比'
+      ];
+      if (result.hasPrices) headers.push('租金与售价');
+      const thead = headers.map(h => `<th>${h}</th>`).join('');
+      const totalRow = `
+        <tr style="background:#f1f5f9;font-weight:600;">
+          <td colspan="11">合计</td>
+          <td>—</td><td>—</td><td>—</td>
+          <td>${fmtInt(result.totalCount)}</td>
+          <td>${fmtInt(result.totalBase)}</td>
+          <td>${fmtInt(result.totalArea)}</td>
+          <td>100%</td>
+          <td>${fmtInt(result.totalCap)}</td>
+          <td>100%</td>
+          ${result.hasPrices ? '<td>—</td>' : ''}
+        </tr>`;
+      const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8">
+<title>${projectName} - 产品配置详表</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;padding:40px;background:#f8fafc;color:#0f172a;}
+h1{font-size:1.3rem;color:#0B2B5C;margin-bottom:8px;}
+.meta{color:#64748b;font-size:0.85rem;margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;font-size:0.8rem;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+th,td{padding:10px 12px;border:1px solid #e2e8f0;text-align:left;vertical-align:top;}
+th{background:#0B2B5C;color:#fff;font-weight:600;font-size:0.75rem;white-space:nowrap;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;}
+tr:nth-child(even) td{background:#fafafa;}
+</style>
+</head>
+<body>
+<h1>📋 ${projectName} - 产品配置详表</h1>
+<div class="meta">生成时间：${new Date().toLocaleString('zh-CN')}</div>
+<table>
+<thead><tr>${thead}</tr></thead>
+<tbody>${rows}${totalRow}</tbody>
+</table>
+</body>
+</html>`;
+      downloadHtml(html, `${projectName}_产品配置详表.html`);
     }
+
     function downloadIndicatorDetail() {
       if (!window.configResult) { alert('请先生成产品配置'); return; }
-      alert('总体经济技术指标表下载功能开发中...');
+      const result = window.configResult;
+      const projectName = projectData.projectName || '项目';
+      const landArea = projectData.landArea;
+      const greenRate = projectData.greenRate;
+      const region = projectData.region;
+      const isHangzhou = region === '杭州' || region === '长三角';
+      const actualAboveGround = result.totalArea;
+      const actualCap = result.totalCap;
+      const actualDensity = result.totalBase / landArea;
+      const actualFar = actualCap / landArea;
+      let factoryArea = 0, ancillaryArea = 0;
+      result.products.forEach(p => {
+        if (p.type === '配套宿舍' || p.type === '配套楼') ancillaryArea += p.totalArea;
+        else if (p.type === '产业大厦' && projectData.region === '上海' && projectData.landUseType === 'C65') {
+          // 研发办公，用车位配套指标
+        } else {
+          factoryArea += p.totalArea;
+        }
+      });
+      const factoryRate = projectData.factoryRate || 0.5;
+      const ancillaryRate = projectData.ancillaryRate || 1.0;
+      const totalVehicle = Math.ceil(factoryArea * factoryRate / 100) + Math.ceil(ancillaryArea * ancillaryRate / 100);
+      const totalNonVehicle = Math.ceil(actualAboveGround * 1.0 / 100);
+      const roadArea = landArea * 0.30;
+      const greenArea = landArea * greenRate;
+      const buildingBaseArea = result.totalBase;
+      let groundNonVehicle = totalNonVehicle;
+      let undergroundNonVehicle = 0;
+      const groundNonVehicleArea = groundNonVehicle * 1.5;
+      const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
+      let groundVehicle = Math.floor(availableParkingArea / 35);
+      if (groundVehicle < 10) groundVehicle = 0;
+      let undergroundVehicle = 0;
+      let undergroundArea = 0;
+      let undergroundRemark = '含地下车库与设备用房';
+      if (groundVehicle >= totalVehicle) {
+        groundVehicle = totalVehicle;
+        undergroundArea = 500;
+        undergroundRemark = '设备用房';
+      } else {
+        if (totalNonVehicle > 500) {
+          groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+          undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+        }
+        undergroundVehicle = totalVehicle - groundVehicle;
+        undergroundArea = isHangzhou
+          ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
+          : undergroundVehicle * 35 + undergroundNonVehicle * 1.5;
+      }
+      const totalBuildingArea = actualAboveGround + undergroundArea;
+      const acre = landArea / 666.7;
+      const rows = [
+        ['规划用地面积', fmtNum(landArea, 1), 'm²', `约${fmtNum(acre, 1)}亩`],
+        ['总建筑面积', fmtNum(totalBuildingArea, 1), 'm²', '—'],
+        ['地上建筑面积', fmtNum(actualAboveGround, 1), 'm²', '—'],
+        ['地下建筑面积', fmtNum(undergroundArea, 1), 'm²', undergroundRemark],
+        ['计容总建筑面积', fmtNum(actualCap, 1), 'm²', '—'],
+        ['容积率', fmtNum(actualFar, 2), '—', `目标${fmtNum(projectData.far, 2)}`],
+        ['绿地率', (greenRate * 100).toFixed(2) + '%', '—', '—'],
+        ['建筑密度', (actualDensity * 100).toFixed(0) + '%', '—', `目标${(projectData.far < 1.5 ? 45 : (projectData.far < 2.0 ? 42 : 40))}%`],
+        ['机动车停车位数量', fmtInt(totalVehicle), '辆', '—'],
+        ['地面机动车停车位', fmtInt(groundVehicle), '辆', '—'],
+        ['地下机动车停车位', fmtInt(undergroundVehicle), '辆', '—'],
+        ['非机动车停车位数量', fmtInt(totalNonVehicle), '辆', '—'],
+        ['地面非机动车停车位', fmtInt(groundNonVehicle), '辆', '—'],
+        ['地下非机动车停车位', fmtInt(undergroundNonVehicle), '辆', '—'],
+      ];
+      const tbody = rows.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+      const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8">
+<title>${projectName} - 总体技术经济指标表</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;padding:40px;background:#f8fafc;color:#0f172a;}
+h1{font-size:1.3rem;color:#0B2B5C;margin-bottom:8px;}
+.meta{color:#64748b;font-size:0.85rem;margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;font-size:0.85rem;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+th,td{padding:12px 16px;border:1px solid #e2e8f0;text-align:left;vertical-align:top;}
+th{background:#0B2B5C;color:#fff;font-weight:600;font-size:0.8rem;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;}
+tr:nth-child(even) td{background:#fafafa;}
+</style>
+</head>
+<body>
+<h1>📋 ${projectName} - 总体技术经济指标表</h1>
+<div class="meta">生成时间：${new Date().toLocaleString('zh-CN')}</div>
+<table>
+<thead><tr><th>指标项</th><th>数值</th><th>单位</th><th>备注</th></tr></thead>
+<tbody>${tbody}</tbody>
+</table>
+</body>
+</html>`;
+      downloadHtml(html, `${projectName}_总体技术经济指标表.html`);
+    }
+
+    function downloadHtml(html, filename) {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     // ==================== 格式化工具 ====================
