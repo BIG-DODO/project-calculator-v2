@@ -1,0 +1,6 @@
+﻿#,问题,位置,说明
+**5**,**`enrichConfigs` 用全局基底估算类型基底**,`enrichConfigs` 5.5,`totalTargetBase = landArea * D` 是整个项目的目标基底，但 `enrichConfigs` 只用于某一类型。`targetBaseApprox` 应传入该类型的实际目标基底（如 `targetBaseBh`/`targetBaseBl`）。
+**6**,**`calc_dorm` 钳制后未二次调整层数**,步骤二,"`finalBase = max(600, min(1200, finalBase))` 后，`unitArea = finalBase * floors` 可能严重偏离 `dormCap`。例如 `dormCap=10000, finalBase=600` → `floors=17, unitArea=10200`，偏差2%尚可接受；但若 `dormCap=2000, finalBase=600` → `floors=4, unitArea=2400`，偏差20%。**建议钳制后重新计算 `floors`。**"
+**7**,**输入校验层数检查在 `step0` 之前**,输入验证,校验 `splitFloors.length > 2` 和 `layerFloors.length > 2` 时，`productOptions` 尚未被 `step0` 修改。如果分层降级后合并到分栋，导致分栋层数超过 2 种，此错误会被漏检。
+**8**,**`step0` 分层 1 层降级到分栋的公式不兼容**,第零步 0.3,"降到 1 层的""分栋""高度应为 `7.2 + 1.2 = 8.4`（单层），但 `step0` 和分栋统一用 `7.2 + 5.1 + 4.5*(N-2) + 1.2` 公式。1 层时该公式失效。"
+**9**,**`solveIntegerEquation` k=1 时搜索范围过大**,步骤四,"`startN = max(1, n-200)`，小项目时 `n=1` 会搜索 1~201 共 201 个值。虽然 201 次循环不算大，但 `n` 可能很大时（如 `n=50`），搜索 251 个值，其中大部分 `testBase` 会远超 `targetBaseLimit*1.05` 被跳过。可以改为 `max(1, n - max(50, n*0.5))` 更合理。"

@@ -503,9 +503,25 @@
         <div style="display:flex;gap:10px;margin-bottom:12px;">
           <button class="btn btn-primary" onclick="calculate()" style="flex:1;">生成指标估算表</button>
         </div>
-        <button class="btn btn-secondary" onclick="fillExampleData()" style="width:100%;font-size:0.85rem;padding:10px;">
-          ⚡ 一键录入示例基础参数
-        </button>
+        <label style="font-size:0.85rem;font-weight:500;margin-bottom:6px;display:block;">示例参数选择</label>
+        <div style="display:flex;gap:10px;margin-bottom:12px;align-items:stretch;">
+          <select id="example-scenario-select" onchange="fillExampleData()" style="flex:1;padding:10px;border-radius:6px;border:1px solid var(--neutral-200);font-size:0.85rem;background:#fff;">
+            <option value="" selected disabled>请选择示例</option>
+            <option value="0">示例0（默认：分栋+分层+产业大厦+配套）</option>
+            <option value="1">示例1（轻钢Only）</option>
+            <option value="2">示例2（轻钢+分栋+配套楼+配套宿舍）</option>
+            <option value="3">示例3（分栋+分层）</option>
+            <option value="4">示例4（分栋+分层+产业大厦+配套楼+配套宿舍）</option>
+            <option value="5">示例5（分层+产业大厦+配套楼+配套宿舍）</option>
+            <option value="6">示例6（分栋+分层）</option>
+            <option value="7">示例7（分栋+分层+配套楼）</option>
+            <option value="8">示例8（分栋+分层+配套宿舍）</option>
+            <option value="9">示例9（分栋+分层+配套宿舍）</option>
+          </select>
+          <button class="btn btn-secondary" onclick="fillExampleData()" style="font-size:0.85rem;padding:10px 16px;white-space:nowrap;">
+            ⚡ 录入
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1030,27 +1046,47 @@
     function goToProductConfig() {
       const data = sessionStorage.getItem('projectCalculatorData');
       if (!data) { showToast('请先生成指标估算表'); return; }
-      window.location.href = 'product-config.html';
+      window.location.href = 'product-config-v2.html';
     }
 
     // ---------- 一键录入示例基础参数 ----------
+    const EXAMPLE_SCENARIOS = [
+      { name: '示例0', label: '默认：分栋+分层+产业大厦+配套', region: '上海', landUse: 'C65', landArea: 50000, far: 3.0, heightLimit: 60, greenRate: 20, rdRatio: 15, ancillaryRatio: 15, factoryIndex: 0.5, supportIndex: 1.0 },
+      { name: '示例1', label: '轻钢Only', region: '杭州', landUse: '', landArea: 45000, far: 1.0, heightLimit: 20, greenRate: 10, rdRatio: 0, ancillaryRatio: 0, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例2', label: '轻钢+分栋+配套楼+配套宿舍', region: '长三角区域', landUse: '', landArea: 50000, far: 1.2, heightLimit: 30, greenRate: 10, rdRatio: 0, ancillaryRatio: 15, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例3', label: '分栋+分层', region: '湾区', landUse: '', landArea: 66000, far: 2.2, heightLimit: 40, greenRate: 10, rdRatio: 0, ancillaryRatio: 0, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例4', label: '分栋+分层+产业大厦+配套楼+配套宿舍', region: '上海', landUse: 'C65', landArea: 48000, far: 3.0, heightLimit: 60, greenRate: 10, rdRatio: 15, ancillaryRatio: 5, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例5', label: '分层+产业大厦+配套楼+配套宿舍', region: '上海', landUse: 'C65', landArea: 35000, far: 4.0, heightLimit: 80, greenRate: 10, rdRatio: 15, ancillaryRatio: 15, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例6', label: '分栋+分层', region: '其他区域', landUse: '', landArea: 78067, far: 1.3, heightLimit: 100, greenRate: 10, rdRatio: 0, ancillaryRatio: 0, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例7', label: '分栋+分层+配套楼', region: '杭州', landUse: '', landArea: 55738, far: 2.31, heightLimit: 100, greenRate: 10, rdRatio: 0, ancillaryRatio: 1.4, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例8', label: '分栋+分层+配套宿舍', region: '长三角区域', landUse: '', landArea: 20668, far: 2.12, heightLimit: 100, greenRate: 10, rdRatio: 0, ancillaryRatio: 15, factoryIndex: 0.3, supportIndex: 1.0 },
+      { name: '示例9', label: '分栋+分层+配套宿舍', region: '湾区', landUse: '', landArea: 20668, far: 2.5, heightLimit: 100, greenRate: 10, rdRatio: 0, ancillaryRatio: 15, factoryIndex: 0.3, supportIndex: 1.0 }
+    ];
+
     function fillExampleData() {
-      document.getElementById('input-name').value = '上海智能智造中心';
-      document.getElementById('input-region').value = '上海';
-      document.getElementById('input-land-use').value = 'C65';
-      document.getElementById('input-land').value = '50000';
-      document.getElementById('input-far').value = '3.0';
-      document.getElementById('input-height-limit').value = '60';
-      document.getElementById('input-green').value = '20';
-      document.getElementById('input-rd-ratio').value = '15';
-      document.getElementById('input-ancillary').value = '15';
-      document.getElementById('input-factory').value = '0.5';
-      document.getElementById('input-support').value = '1.0';
+      const idx = document.getElementById('example-scenario-select').value;
+      if (idx === '') {
+        showToast('请先选择示例');
+        return;
+      }
+      const s = EXAMPLE_SCENARIOS[parseInt(idx)];
+
+      document.getElementById('input-name').value = s.label;
+      document.getElementById('input-region').value = s.region;
+      document.getElementById('input-land-use').value = s.landUse;
+      document.getElementById('input-land').value = String(s.landArea);
+      document.getElementById('input-far').value = String(s.far);
+      document.getElementById('input-height-limit').value = String(s.heightLimit);
+      document.getElementById('input-green').value = String(s.greenRate);
+      document.getElementById('input-rd-ratio').value = s.rdRatio > 0 ? String(s.rdRatio) : '';
+      document.getElementById('input-ancillary').value = String(s.ancillaryRatio);
+      document.getElementById('input-factory').value = String(s.factoryIndex);
+      document.getElementById('input-support').value = String(s.supportIndex);
 
       // 触发条件字段显隐
       updateConditionalFields();
 
-      showToast('示例参数已录入');
+      showToast(s.name + ' 已录入');
     }
 
     function showToast(msg) {

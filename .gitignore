@@ -1,0 +1,17 @@
+# 调试与临时文件
+debug-*.js
+*.bak
+*.bak.*
+summary-check-output*.txt
+test-*-output*.txt
+test-report.txt
+
+# 本地备份目录
+退回版本/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log

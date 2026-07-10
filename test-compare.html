@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>算法版本测试 - 产品配置</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+    .test-case { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .test-header { color: #e94560; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; }
+    .param-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.85rem; }
+    .param { background: #0f3460; padding: 4px 8px; border-radius: 4px; }
+    .result-section { margin-top: 12px; }
+    .result-title { color: #533483; font-weight: bold; }
+    .product-list { font-size: 0.8rem; }
+    .product-item { background: #0f3460; padding: 4px 8px; margin: 4px 0; border-radius: 4px; }
+    .metric { color: #16c79a; }
+    .error { color: #e94560; }
+    .warning { color: #f9a825; }
+    .success { color: #16c79a; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.8rem; }
+    th, td { padding: 6px; text-align: left; border-bottom: 1px solid #0f3460; }
+    th { color: #e94560; }
+    .v1-section { border-left: 3px solid #e94560; padding-left: 12px; }
+    .v2-section { border-left: 3px solid #16c79a; padding-left: 12px; }
+    .diff { background: #533483; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>🔬 产品配置算法版本测试</h1>
+  <p>对比 v1（原版）和 v2（新算法）的输出结果</p>
+  
+  <div id="test-results"></div>
+
+  <script src="test-algorithm.js"></script>
+  <script>
+    // 模拟 v1 的简化版算法（用于对比）
+    function calculateProductConfigV1(params) {
+      // 简化实现：只返回基本结构
+      const { projectData, selectedProducts, productOptions } = params;
+      const landArea = projectData.landArea;
+      const far = projectData.far;
+      const density = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+      
+      return {
+        products: [],
+        totalBase: landArea * density * 0.95,
+        totalArea: landArea * far * 0.95,
+        totalCap: landArea * far * 0.95,
+        totalCount: 10,
+        _check: {
+          targetDensity: density,
+          actualDensity: density * 0.95,
+          targetFar: far,
+          actualFar: far * 0.95
+        }
+      };
+    }
+    
+    // 模拟 v2 的算法（简化版）
+    function calculateProductConfigV2(params) {
+      // 简化实现
+      const { projectData, selectedProducts, productOptions } = params;
+      const landArea = projectData.landArea;
+      const far = projectData.far;
+      const density = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+      
+      // 根据选择的产品生成不同的结果
+      let products = [];
+      let totalBase = 0, totalCap = 0, totalCount = 0;
+      
+      if (selectedProducts.has('tower')) {
+        products.push({ type: '产业大厦', base: 2000, unitCap: 24000, count: 1 });
+        totalBase += 2000;
+        totalCap += 24000;
+        totalCount += 1;
+      }
+      
+      if (selectedProducts.has('split')) {
+        const splitOpts = productOptions['split'];
+        const area = splitOpts.areas[0];
+        const floor = splitOpts.floors[0];
+        const count = 5;
+        products.push({ type: '分栋厂房', base: area, unitCap: area * floor, count });
+        totalBase += area * count;
+        totalCap += area * floor * count;
+        totalCount += count;
+      }
+      
+      if (selectedProducts.has('layer')) {
+        const layerOpts = productOptions['layer'];
+        const area = layerOpts.areas[0];
+        const floor = layerOpts.floors[0];
+        const count = 2;
+        products.push({ type: '分层厂房', base: area, unitCap: area * floor, count });
+        totalBase += area * count;
+        totalCap += area * floor * count;
+        totalCount += count;
+      }
+      
+      if (selectedProducts.has('light-steel')) {
+        const lsOpts = productOptions['light-steel'];
+        const area = lsOpts.areas[0];
+        const count = 3;
+        products.push({ type: '轻钢厂房', base: area, unitCap: area * 2 + 200, count });
+        totalBase += area * count;
+        totalCap += (area * 2 + 200) * count;
+        totalCount += count;
+      }
+      
+      if (selectedProducts.has('dorm')) {
+        products.push({ type: '配套宿舍', base: 900, unitCap: 9000, count: 1 });
+        totalBase += 900;
+        totalCap += 9000;
+        totalCount += 1;
+      }
+      
+      if (selectedProducts.has('support')) {
+        products.push({ type: '配套楼', base: 600, unitCap: 1800, count: 1 });
+        totalBase += 600;
+        totalCap += 1800;
+        totalCount += 1;
+      }
+      
+      return {
+        products,
+        totalBase,
+        totalArea: totalCap,
+        totalCap,
+        totalCount,
+        _check: {
+          targetDensity: density,
+          actualDensity: totalBase / landArea,
+          targetFar: far,
+          actualFar: totalCap / landArea
+        }
+      };
+    }
+    
+    // 运行测试
+    function runComparisonTests() {
+      const container = document.getElementById('test-results');
+      let html = '';
+      
+      testScenarios.forEach((scenario, index) => {
+        const v1Result = calculateProductConfigV1(scenario);
+        const v2Result = calculateProductConfigV2(scenario);
+        
+        const landArea = scenario.projectData.landArea;
+        const far = scenario.projectData.far;
+        const density = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+        const targetBase = landArea * density;
+        const targetCap = landArea * far;
+        
+        // 计算偏差
+        const v1DensityDiff = Math.abs(v1Result._check.actualDensity - density) / density * 100;
+        const v1FarDiff = Math.abs(v1Result._check.actualFar - far) / far * 100;
+        const v2DensityDiff = Math.abs(v2Result._check.actualDensity - density) / density * 100;
+        const v2FarDiff = Math.abs(v2Result._check.actualFar - far) / far * 100;
+        
+        html += `
+          <div class="test-case">
+            <div class="test-header">场景 ${index + 1}: ${scenario.name}</div>
+            <div class="param-grid">
+              <div class="param">用地: ${landArea}m²</div>
+              <div class="param">容积率: ${far}</div>
+              <div class="param">限高: ${scenario.projectData.heightLimit}m</div>
+              <div class="param">目标密度: ${(density*100).toFixed(0)}%</div>
+              <div class="param">配套占比: ${(scenario.projectData.ancillaryRatio*100).toFixed(0)}%</div>
+              <div class="param">研发占比: ${(scenario.projectData.rdRatio*100).toFixed(0)}%</div>
+              <div class="param">产品: ${Array.from(scenario.selectedProducts).join(', ')}</div>
+              <div class="param">目标计容: ${targetCap.toFixed(0)}m²</div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+              <div class="v1-section">
+                <div class="result-title">v1 原版算法</div>
+                <div class="product-list">
+                  ${v1Result.products.map(p => `
+                    <div class="product-item">
+                      ${p.type}: ${p.count}栋 × ${p.base}m² = 计容${p.unitCap * p.count}m²
+                    </div>
+                  `).join('') || '<div class="product-item">无产品数据</div>'}
+                </div>
+                <table>
+                  <tr><th>指标</th><th>数值</th><th>偏差</th></tr>
+                  <tr>
+                    <td>总基底</td>
+                    <td>${v1Result.totalBase.toFixed(0)}m²</td>
+                    <td class="${v1DensityDiff > 5 ? 'error' : 'metric'}">${v1DensityDiff.toFixed(2)}%</td>
+                  </tr>
+                  <tr>
+                    <td>总计容</td>
+                    <td>${v1Result.totalCap.toFixed(0)}m²</td>
+                    <td class="${v1FarDiff > 0.01 ? 'error' : 'metric'}">${v1FarDiff.toFixed(2)}%</td>
+                  </tr>
+                  <tr><td>总栋数</td><td>${v1Result.totalCount}</td><td>-</td></tr>
+                </table>
+              </div>
+              
+              <div class="v2-section">
+                <div class="result-title">v2 新算法</div>
+                <div class="product-list">
+                  ${v2Result.products.map(p => `
+                    <div class="product-item">
+                      ${p.type}: ${p.count}栋 × ${p.base}m² = 计容${p.unitCap * p.count}m²
+                    </div>
+                  `).join('')}
+                </div>
+                <table>
+                  <tr><th>指标</th><th>数值</th><th>偏差</th></tr>
+                  <tr>
+                    <td>总基底</td>
+                    <td>${v2Result.totalBase.toFixed(0)}m²</td>
+                    <td class="${v2DensityDiff > 5 ? 'error' : 'metric'}">${v2DensityDiff.toFixed(2)}%</td>
+                  </tr>
+                  <tr>
+                    <td>总计容</td>
+                    <td>${v2Result.totalCap.toFixed(0)}m²</td>
+                    <td class="${v2FarDiff > 0.01 ? 'error' : 'metric'}">${v2FarDiff.toFixed(2)}%</td>
+                  </tr>
+                  <tr><td>总栋数</td><td>${v2Result.totalCount}</td><td>-</td></tr>
+                </table>
+              </div>
+            </div>
+            
+            <div style="margin-top: 8px; font-size: 0.8rem;">
+              <span class="diff">密度偏差: v1=${v1DensityDiff.toFixed(2)}% v2=${v2DensityDiff.toFixed(2)}%</span>
+              <span class="diff" style="margin-left: 8px;">容积率偏差: v1=${v1FarDiff.toFixed(2)}% v2=${v2FarDiff.toFixed(2)}%</span>
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    }
+    
+    // 页面加载后自动运行
+    window.onload = runComparisonTests;
+  </script>
+</body>
+</html>

@@ -1,0 +1,2543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>产品配置 - 未来园</title>
+  <style>
+    :root {
+      --brand-primary: #0B2B5C;
+      --brand-secondary: #1E4E8C;
+      --brand-accent: #3B8DD8;
+      --brand-gradient: linear-gradient(135deg, #0B2B5C, #1E4E8C);
+      --brand-light: rgba(59, 141, 216, 0.08);
+      --neutral-900: #0F172A;
+      --neutral-700: #334155;
+      --neutral-600: #475569;
+      --neutral-400: #94A3B8;
+      --neutral-300: #CBD5E1;
+      --neutral-200: #E2E8F0;
+      --neutral-100: #F1F5F9;
+      --neutral-50: #F8FAFC;
+      --success: #059669;
+      --danger: #DC2626;
+      --warning: #D97706;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      --shadow-lg: 0 4px 6px -1px rgba(0,0,0,0.08), 0 10px 24px -4px rgba(0,0,0,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--neutral-100);
+      color: var(--neutral-900);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* ---------- 品牌横幅 ---------- */
+    .brand-banner {
+      background: var(--brand-gradient);
+      color: #fff;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .brand-banner::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+      border-radius: 50%;
+      transform: translate(50%, -40%);
+    }
+    .brand-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .config-summary {
+      margin-left: auto;
+    }
+    .brand-logo {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      filter: drop-shadow(0 1px 3px rgba(255,255,255,0.3));
+    }
+    .brand-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .brand-text h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      line-height: 1.3;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .brand-text h1 .en {
+      font-size: 0.95rem;
+      font-weight: 700;
+      opacity: 0.9;
+      letter-spacing: 1.5px;
+    }
+    .brand-text .tagline {
+      font-size: 0.75rem;
+      opacity: 0.7;
+      margin-top: 1px;
+    }
+
+    /* ---------- 主布局 ---------- */
+    .main-layout {
+      display: flex;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: calc(100vh - 78px);
+      overflow: hidden;
+    }
+
+    /* ---------- 左侧导航 ---------- */
+    .sidebar {
+      width: 240px;
+      background: #fff;
+      border-right: 1px solid var(--neutral-200);
+      padding: 20px 0;
+      flex-shrink: 0;
+      overflow-y: auto;
+      height: calc(100vh - 78px);
+    }
+    .nav-group { margin-bottom: 8px; }
+    .nav-group-title {
+      padding: 8px 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--neutral-400);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      font-size: 0.85rem;
+      color: var(--neutral-600);
+      cursor: pointer;
+      transition: all 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover {
+      background: var(--neutral-50);
+      color: var(--neutral-900);
+    }
+    .nav-item.active {
+      background: var(--brand-light);
+      color: var(--brand-primary);
+      border-left-color: var(--brand-accent);
+      font-weight: 600;
+    }
+    .nav-item .icon { font-size: 1rem; width: 20px; text-align: center; }
+
+    /* ---------- 右侧内容 ---------- */
+    .content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      height: calc(100vh - 78px);
+      position: relative;
+    }
+    /* 视图切换 */
+    .view { display: none; }
+    .view.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .content-header {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--neutral-900);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ---------- 卡片 ---------- */
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--neutral-900);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ---------- 配置摘要小卡片（折叠在brand-banner右侧） ---------- */
+    .config-summary {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: var(--radius-xs);
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: all 0.25s;
+      min-width: 160px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      flex-shrink: 0;
+    }
+    .config-summary:hover {
+      background: rgba(255,255,255,0.22);
+    }
+    .config-summary.open {
+      background: rgba(255,255,255,0.95);
+      border-color: var(--brand-accent);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      cursor: default;
+    }
+    .config-summary.open:hover {
+      background: rgba(255,255,255,0.95);
+    }
+    .config-summary-header {
+      font-weight: 600;
+      color: #fff;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .config-summary.open .config-summary-header {
+      color: var(--brand-primary);
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--neutral-200);
+    }
+    .config-summary-body {
+      display: none;
+      color: var(--neutral-600);
+      line-height: 1.5;
+      font-size: 0.75rem;
+    }
+    .config-summary.open .config-summary-body {
+      display: block;
+    }
+    .config-summary-body .summary-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 2px 0;
+      white-space: nowrap;
+    }
+    .config-summary-body .summary-item span:first-child {
+      color: var(--neutral-500);
+    }
+    .config-summary-footer {
+      display: none;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--neutral-200);
+      text-align: center;
+    }
+    .config-summary-footer .fold-btn,
+    .config-summary-footer .reconfig-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .config-summary-footer .fold-btn {
+      color: var(--neutral-500);
+      background: var(--neutral-100);
+      border: none;
+      margin-right: 6px;
+    }
+    .config-summary-footer .fold-btn:hover {
+      background: var(--neutral-200);
+    }
+    .config-summary-footer .reconfig-btn {
+      color: #fff;
+      background: var(--brand-gradient);
+      border: none;
+    }
+    .config-summary-footer .reconfig-btn:hover {
+      opacity: 0.9;
+    }
+    .config-summary.open .config-summary-footer {
+      display: flex;
+      justify-content: center;
+    }
+    .config-summary-hint {
+      color: rgba(255,255,255,0.65);
+      font-size: 0.7rem;
+      margin-top: 2px;
+      text-align: center;
+    }
+    .config-summary.open .config-summary-hint {
+      display: none;
+    }
+    @media (max-width: 640px) {
+      .config-summary {
+        position: static;
+        min-width: auto;
+        width: 100%;
+        margin-top: 8px;
+        margin-left: 0;
+      }
+      .brand-content {
+        flex-wrap: wrap;
+      }
+      .config-summary-header {
+        justify-content: center;
+      }
+    }
+
+    /* ---------- 数字卡片 ---------- */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #fff;
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      text-align: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: var(--neutral-400);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .stat-card .value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--brand-primary);
+      line-height: 1.2;
+    }
+    .stat-card .unit {
+      font-size: 0.7rem;
+      color: var(--neutral-400);
+      margin-top: 2px;
+    }
+
+    /* ---------- 产品类型选择（Step1） ---------- */
+    .product-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .product-chip {
+      background: #fff;
+      border: 2px solid var(--neutral-200);
+      border-radius: var(--radius-xs);
+      padding: 16px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .product-chip:hover { border-color: var(--brand-accent); }
+    .product-chip.selected {
+      border-color: var(--brand-accent);
+      background: var(--brand-light);
+      box-shadow: 0 0 0 3px rgba(59,141,216,0.15);
+    }
+    .product-chip.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      border-color: var(--neutral-200);
+    }
+    .product-chip .chip-icon { font-size: 1.5rem; margin-bottom: 6px; }
+    .product-chip .chip-name { font-size: 0.85rem; font-weight: 600; }
+    .product-chip .chip-hint { font-size: 0.7rem; color: var(--neutral-400); margin-top: 2px; }
+    .product-chip .chip-mobile { display: none; }
+    .product-chip .chip-desktop { display: block; }
+    .product-chip .multi-badge {
+      position: absolute;
+      top: 6px; right: 6px;
+      background: var(--brand-accent);
+      color: #fff;
+      font-size: 0.6rem;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    /* 手机端内联配置选项 */
+    .product-chip .mobile-options {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--neutral-200);
+      text-align: left;
+    }
+    .product-chip.selected .mobile-options {
+      display: none; /* 默认隐藏，只在手机端显示 */
+    }
+    .product-chip .mobile-options .option-group {
+      margin-bottom: 10px;
+    }
+    .product-chip .mobile-options .option-group:last-child {
+      margin-bottom: 0;
+    }
+    .product-chip .mobile-options label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--neutral-600);
+      margin-bottom: 6px;
+    }
+    .product-chip .mobile-options .option-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .product-chip .mobile-options .pill {
+      padding: 5px 10px;
+      font-size: 0.75rem;
+    }
+
+    /* ---------- 子选项展开区 ---------- */
+    .sub-options {
+      background: var(--neutral-50);
+      border-radius: var(--radius-xs);
+      padding: 16px;
+      margin-top: 12px;
+      border: 1px solid var(--neutral-200);
+    }
+    .sub-options-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--neutral-700);
+      margin-bottom: 12px;
+    }
+    .option-group { margin-bottom: 16px; }
+    .option-group:last-child { margin-bottom: 0; }
+    .option-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--neutral-600);
+      margin-bottom: 8px;
+    }
+    .option-group label .hint {
+      font-weight: 400;
+      color: var(--neutral-400);
+      margin-left: 4px;
+    }
+    .option-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      padding: 8px 16px;
+      border: 1.5px solid var(--neutral-200);
+      border-radius: 20px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: #fff;
+      color: var(--neutral-600);
+    }
+    .pill:hover { border-color: var(--brand-accent); color: var(--brand-primary); }
+    .pill.selected {
+      border-color: var(--brand-accent);
+      background: var(--brand-light);
+      color: var(--brand-primary);
+      font-weight: 600;
+    }
+    .pill.disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: var(--neutral-200);
+    }
+
+    /* ---------- 租金售价输入 ---------- */
+    .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .price-input { margin-bottom: 12px; }
+    .price-input label { font-size: 0.8rem; font-weight: 600; color: var(--neutral-600); margin-bottom: 6px; display: block; }
+    .price-input input {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid var(--neutral-200); border-radius: var(--radius-xs);
+      font-size: 0.9rem; transition: all 0.2s;
+    }
+    .price-input input:focus { outline: none; border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(59,141,216,0.12); }
+    .price-input .unit-hint { font-size: 0.7rem; color: var(--neutral-400); margin-top: 3px; }
+
+    /* ---------- 按钮 ---------- */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 12px 24px; border: none; border-radius: var(--radius-xs);
+      font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--brand-gradient); color: #fff;
+      box-shadow: 0 2px 8px rgba(11,43,92,0.25);
+    }
+    .btn-primary:hover { box-shadow: 0 4px 12px rgba(11,43,92,0.3); }
+    .btn-secondary {
+      background: var(--neutral-100); color: var(--neutral-700);
+      border: 1px solid var(--neutral-200);
+    }
+    .btn-secondary:hover { background: var(--neutral-200); }
+
+    /* ---------- 表格 ---------- */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .data-table th, .data-table td {
+      padding: 10px 12px; border: 1px solid var(--neutral-200);
+      text-align: left; vertical-align: top;
+    }
+    .data-table th {
+      background: var(--neutral-100);
+      font-weight: 600; color: var(--neutral-600);
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .data-table tr:nth-child(even) td { background: #fafafa; }
+    .data-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---------- 图表占位 ---------- */
+    .chart-placeholder {
+      background: var(--neutral-50);
+      border-radius: var(--radius-xs);
+      padding: 60px 40px;
+      text-align: center;
+      color: var(--neutral-400);
+      border: 2px dashed var(--neutral-200);
+    }
+    .chart-placeholder .icon { font-size: 3rem; margin-bottom: 12px; }
+
+    /* ---------- 楼层剖面图 ---------- */
+    .floor-section { display: flex; align-items: flex-end; gap: 24px; margin: 16px 0; }
+    .floor-stack {
+      display: flex; flex-direction: column-reverse;
+      border: 2px solid var(--neutral-300);
+      border-radius: 4px; overflow: hidden;
+    }
+    .floor-layer {
+      display: flex; align-items: center; justify-content: center;
+      padding: 8px 16px; font-size: 0.75rem; font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      min-width: 120px;
+    }
+    .floor-layer.first { background: var(--brand-primary); color: #fff; }
+    .floor-layer.second { background: var(--brand-secondary); color: #fff; }
+    .floor-layer.standard { background: var(--brand-accent); color: #fff; }
+    .floor-layer.top { background: #60A5FA; color: #fff; }
+    .floor-info { font-size: 0.8rem; color: var(--neutral-600); }
+
+    /* ---------- 电梯配置卡片 ---------- */
+    .elevator-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .elevator-card {
+      background: #fff; border: 1.5px solid var(--neutral-200);
+      border-radius: var(--radius-xs); padding: 16px; text-align: center;
+    }
+    .elevator-card .type-name { font-size: 0.8rem; font-weight: 600; color: var(--neutral-700); margin-bottom: 8px; }
+    .elevator-card .elevator-icons { display: flex; justify-content: center; gap: 16px; margin-top: 8px; }
+    .elevator-item { text-align: center; }
+    .elevator-item .icon { font-size: 1.5rem; }
+    .elevator-item .count { font-size: 1.1rem; font-weight: 700; color: var(--brand-primary); }
+    .elevator-item .label { font-size: 0.7rem; color: var(--neutral-400); }
+
+    /* ---------- 页脚 ---------- */
+    footer {
+      background: var(--brand-primary); color: rgba(255,255,255,0.6);
+      text-align: center; padding: 16px; font-size: 0.75rem;
+    }
+    footer .brand { color: #fff; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    footer .brand img { height: 14px; width: auto; filter: brightness(0) invert(1); }
+
+    /* ---------- 配置输入左右分栏 ---------- */
+    .config-layout { display: flex; gap: 20px; }
+    .config-left { width: 220px; flex-shrink: 0; }
+    .config-right { flex: 1; min-width: 0; }
+    .config-left .card { padding: 16px; }
+    .config-left .product-chip { margin-bottom: 8px; }
+
+    /* ---------- 折叠面板 ---------- */
+    .accordion-item { margin-bottom: 12px; border: 1.5px solid var(--neutral-200); border-radius: var(--radius-xs); overflow: hidden; }
+    .accordion-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--neutral-50); cursor: pointer;
+      font-weight: 600; font-size: 0.85rem; color: var(--neutral-700);
+    }
+    .accordion-header:hover { background: var(--neutral-100); }
+    .accordion-header .toggle { font-size: 0.7rem; color: var(--neutral-400); transition: transform 0.2s; }
+    .accordion-item.open .accordion-header .toggle { transform: rotate(180deg); }
+    .accordion-body { padding: 16px; display: none; background: #fff; }
+    .accordion-item.open .accordion-body { display: block; }
+
+    /* ---------- 表格横向滚动 ---------- */
+    .card { overflow: hidden; }
+    .table-scroll-wrapper {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+    }
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+    }
+    .table-scroll .data-table {
+      min-width: 640px;
+    }
+    .table-scroll .data-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    /* 右侧渐变遮罩提示（固定在 wrapper 上，不随滚动移动） */
+    .table-scroll-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 40px;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.95));
+      pointer-events: none;
+      z-index: 3;
+    }
+    /* 滚动到最右时隐藏遮罩 */
+    .table-scroll-wrapper.scrolled-right::after { opacity: 0; }
+    .table-scroll-hint {
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--neutral-400);
+      padding: 6px 0 0;
+      display: none;
+    }
+    @media (max-width: 640px) {
+      .table-scroll-hint { display: block; }
+    }
+    /* ---------- 指标表（无遮罩，自适应列宽） ---------- */
+    .mobile-example-btn { display: none; }
+    .indicator-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .indicator-table {
+      width: 100%;
+      min-width: 640px;
+    }
+    .indicator-table td:first-child {
+      white-space: nowrap;
+    }
+    .indicator-table td.num,
+    .indicator-table td.unit {
+      white-space: nowrap;
+      width: 1%;
+    }
+    .type-filter {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+    }
+    .type-filter .pill { padding: 6px 14px; font-size: 0.8rem; }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 200px; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .price-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .main-layout { flex-direction: column; height: auto; overflow: visible; }
+      .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--neutral-200); padding: 8px 0; height: auto; overflow: visible; white-space: normal; }
+      .nav-group { display: block; margin: 0; border-bottom: 1px solid var(--neutral-100); }
+      .nav-group:last-child { border-bottom: none; }
+      .nav-group-title {
+        display: block;
+        padding: 10px 16px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--neutral-600);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .nav-group-title::after {
+        content: '▼';
+        font-size: 0.65rem;
+        color: var(--neutral-400);
+        transition: transform 0.2s;
+      }
+      .nav-group.open .nav-group-title::after {
+        transform: rotate(180deg);
+      }
+      .nav-group .nav-items {
+        display: none;
+        padding: 0 12px 8px;
+      }
+      .nav-group.open .nav-items {
+        display: block;
+      }
+      .nav-item {
+        display: flex;
+        padding: 8px 12px;
+        border-left: 3px solid transparent;
+        border-radius: 0;
+        white-space: nowrap;
+        font-size: 0.85rem;
+      }
+      .nav-item.active {
+        border-left-color: var(--brand-accent);
+        background: var(--brand-light);
+      }
+      .content { padding: 16px; height: auto; overflow: visible; }
+      /* 配置输入左右分栏 → 上下堆叠 */
+      .config-layout { flex-direction: column; }
+      .config-left { width: 100%; }
+      .config-left .card { padding: 12px; }
+      /* Step1 产品类型改为2列紧凑网格 */
+      .config-left .product-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .config-left .product-chip {
+        padding: 10px;
+        margin-bottom: 0;
+        text-align: left;
+      }
+      .product-chip .chip-desktop { display: none; }
+      .product-chip .chip-mobile { display: block; }
+      /* 手机端选中产品显示内联配置 */
+      .product-chip.selected .mobile-options { display: block; }
+      /* 手机端隐藏右侧独立的 Step2 折叠面板 */
+      #sub-options-card { display: none !important; }
+      /* 手机端：左侧显示一键录入，右侧隐藏 */
+      .mobile-example-btn { display: block !important; }
+      .config-right > .btn-secondary { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 品牌横幅 -->
+  <div class="brand-banner">
+    <div class="brand-content">
+      <div class="brand-logo"><img src="logo.png?v=2" alt="未来园"></div>
+      <div class="brand-text">
+        <h1>未来园 <span class="en">FUTURE PARK</span></h1>
+        <div class="tagline">让产业空间 链接未来</div>
+      </div>
+      <!-- 配置摘要（生成后显示） -->
+      <div class="config-summary" id="config-summary" style="display:none;" onclick="toggleConfigSummary(event)">
+        <div class="config-summary-header">⚙️ 当前配置</div>
+        <div class="config-summary-hint">👆 点击展开</div>
+        <div class="config-summary-body" id="config-summary-body"></div>
+        <div class="config-summary-footer">
+          <button class="fold-btn" onclick="toggleConfigSummary(event)">👆 点击折叠</button>
+          <button class="reconfig-btn" onclick="backToInput(event)">↩ 重新配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <!-- 左侧导航 -->
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-group open">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">导航</div>
+        <div class="nav-items">
+          <a href="index.html" class="nav-item" style="text-decoration:none;color:inherit;">
+            <span class="icon">←</span> 返回基础参数录入
+          </a>
+        </div>
+      </div>
+      <div class="nav-group open">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">配置向导</div>
+        <div class="nav-items">
+          <div class="nav-item active" data-view="input" onclick="switchView('input')">
+            <span class="icon">⚙️</span> 配置输入
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">产品配置</div>
+        <div class="nav-items">
+          <div class="nav-item" data-view="config-overview" onclick="switchView('config-overview')">
+            <span class="icon">📋</span> 产品配置一览
+          </div>
+          <div class="nav-item" data-view="config-detail" onclick="switchView('config-detail')">
+            <span class="icon">⬇️</span> 产品配置详表下载
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">产品分析</div>
+        <div class="nav-items">
+          <div class="nav-item" data-view="chart-type" onclick="switchView('chart-type')">
+            <span class="icon">🥧</span> 产品业态分布
+          </div>
+          <div class="nav-item" data-view="chart-count" onclick="switchView('chart-count')">
+            <span class="icon">📊</span> 产品配置数量
+          </div>
+          <div class="nav-item" data-view="chart-area" onclick="switchView('chart-area')">
+            <span class="icon">📐</span> 产品面积段分布
+          </div>
+          <div class="nav-item" data-view="chart-load" onclick="switchView('chart-load')">
+            <span class="icon">🏋️</span> 产品荷载分布
+          </div>
+          <div class="nav-item" data-view="chart-height" onclick="switchView('chart-height')">
+            <span class="icon">🏢</span> 层高与层数分布
+          </div>
+          <div class="nav-item" data-view="chart-elevator" onclick="switchView('chart-elevator')">
+            <span class="icon">🛗</span> 产品电梯配置
+          </div>
+          <div class="nav-item" data-view="chart-layout" onclick="switchView('chart-layout')">
+            <span class="icon">🏠</span> 产品户型建议
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">综合指标</div>
+        <div class="nav-items">
+          <div class="nav-item" data-view="indicator-overview" onclick="switchView('indicator-overview')">
+            <span class="icon">📋</span> 综合指标一览
+          </div>
+          <div class="nav-item" onclick="downloadIndicatorDetail()">
+            <span class="icon">⬇️</span> 总体经济技术指标表下载
+          </div>
+          <div class="nav-item" onclick="downloadIndicatorImage()">
+            <span class="icon">🖼️</span> 总体经济技术指标图下载
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">财务测算</div>
+        <div class="nav-items">
+          <div class="nav-item" onclick="alert('投资估算功能开发中...')">
+            <span class="icon">💰</span> 投资估算
+          </div>
+          <div class="nav-item" onclick="alert('静态投资分析功能开发中...')">
+            <span class="icon">📊</span> 静态投资分析
+          </div>
+          <div class="nav-item" onclick="alert('动态投资分析功能开发中...')">
+            <span class="icon">📈</span> 动态投资分析
+          </div>
+          <div class="nav-item" onclick="alert('财务测算详表下载功能开发中...')">
+            <span class="icon">⬇️</span> 财务测算详表下载
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 右侧内容 -->
+    <main class="content" id="main-content">
+      <!-- 输入视图 -->
+      <div class="view active" id="view-input">
+        <div class="content-header">🏗️ 产品配置</div>
+
+        <div class="config-layout">
+          <!-- 左侧：Step 1 产品类型 -->
+          <div class="config-left">
+            <div class="card">
+              <div class="card-title">Step 1 · 产品类型</div>
+              <div id="product-grid"></div>
+              <div id="product-validation-msg" style="color:var(--danger);font-size:0.75rem;margin-top:10px;display:none;"></div>
+
+            </div>
+          </div>
+
+          <!-- 右侧：Step 2 + 租金 + 按钮 -->
+          <div class="config-right">
+            <div class="card" id="sub-options-card" style="display:none;">
+              <div class="card-title">Step 2 · 配置产品参数</div>
+              <div id="sub-options-container"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">💰 租金与售价（可选）</div>
+              <div class="price-row">
+                <div>
+                  <div class="price-input">
+                    <label>分栋租金</label>
+                    <input type="number" id="rent-split" placeholder="0.00" min="0" step="0.01" />
+                    <div class="unit-hint">元/天/m² · 轻钢厂房默认同此租金</div>
+                  </div>
+                  <div class="price-input">
+                    <label>分栋售价</label>
+                    <input type="number" id="price-split" placeholder="0" min="0" step="1" />
+                    <div class="unit-hint">元 · 低于1000将提示不可用</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="price-input">
+                    <label>分层租金</label>
+                    <input type="number" id="rent-layer" placeholder="0.00" min="0" step="0.01" />
+                    <div class="unit-hint">元/天/m² · 产业大厦默认同此租金</div>
+                  </div>
+                  <div class="price-input">
+                    <label>分层售价</label>
+                    <input type="number" id="price-layer" placeholder="0" min="0" step="1" />
+                    <div class="unit-hint">元 · 产业大厦默认同此售价</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <label style="font-size:0.85rem;font-weight:500;margin-bottom:6px;display:block;">示例参数选择</label>
+            <div class="example-config-wrapper" style="display:flex;gap:8px;margin-bottom:10px;align-items:stretch;">
+              <select class="example-config-select" onchange="fillExampleConfig(this)" style="flex:1;padding:10px;border-radius:6px;border:1px solid var(--neutral-200);font-size:0.85rem;background:#fff;">
+                <option value="" selected disabled>请选择示例</option>
+                <option value="0">示例0（默认：分栋+分层+产业大厦+配套）</option>
+                <option value="1">示例1（轻钢Only）</option>
+                <option value="2">示例2（轻钢+分栋+配套楼+配套宿舍）</option>
+                <option value="3">示例3（分栋+分层）</option>
+                <option value="4">示例4（分栋+分层+产业大厦+配套楼+配套宿舍）</option>
+                <option value="5">示例5（分层+产业大厦+配套楼+配套宿舍）</option>
+                <option value="6">示例6（分栋+分层）</option>
+                <option value="7">示例7（分栋+分层+配套楼）</option>
+                <option value="8">示例8（分栋+分层+配套宿舍）</option>
+                <option value="9">示例9（分栋+分层+配套宿舍）</option>
+              </select>
+              <button class="btn btn-secondary" style="font-size:0.85rem;padding:10px 14px;white-space:nowrap;" onclick="fillExampleConfig(this)">
+                ⚡ 录入
+              </button>
+            </div>
+            <button class="btn btn-primary" style="width:100%;padding:14px;font-size:1rem;" onclick="generateConfig()">
+              🚀 生成产品配置
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 默认状态 / 数字卡片 -->
+      <div class="view" id="view-dashboard">
+        <div class="content-header">📊 配置概览</div>
+        <div class="stat-grid" id="stat-cards"></div>
+        <div id="dashboard-content"></div>
+      </div>
+
+      <!-- 其他视图占位 -->
+      <div class="view" id="view-config-overview"><div class="content-header">📋 产品配置一览</div><div id="config-overview-content"></div></div>
+      <div class="view" id="view-chart-type"><div class="content-header">🥧 产品业态分布</div><div id="chart-type-content"></div></div>
+      <div class="view" id="view-chart-count"><div class="content-header">📊 产品配置数量</div><div id="chart-count-content"></div></div>
+      <div class="view" id="view-chart-area"><div class="content-header">📐 产品面积段分布</div><div id="chart-area-content"></div></div>
+      <div class="view" id="view-chart-load"><div class="content-header">🏋️ 产品荷载分布</div><div id="chart-load-content"></div></div>
+      <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
+      <div class="view" id="view-chart-elevator"><div class="content-header">🛗 产品电梯配置</div><div id="chart-elevator-content"></div></div>
+      <div class="view" id="view-chart-layout"><div class="content-header">🏠 产品户型建议</div><div id="chart-layout-content"></div></div>
+      <div class="view" id="view-config-detail"><div class="content-header">📋 产品配置详表</div><div id="config-detail-content"></div></div>
+      <div class="view" id="view-indicator-overview"><div class="content-header">📋 综合指标一览</div><div id="indicator-overview-content"></div></div>
+    </main>
+  </div>
+
+  <footer>
+    <div class="brand"><img src="logo.png?v=2" alt=""> 未来园 FUTURE PARK</div>
+    <div>让产业空间 链接未来</div>
+  </footer>
+
+  <!-- 图片下载专用隐藏容器 -->
+  <div id="image-export-container" style="position:fixed;left:-9999px;top:0;width:800px;background:#fff;padding:24px;z-index:-1;"></div>
+
+  <script src="product-config-algorithm-v2.js?v=20260710-2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    // ==================== 全局状态 ====================
+    let projectData = null;
+    let selectedProducts = new Set();
+    let productOptions = {};
+    let lastExpandedProduct = null;
+
+    const ALL_PRODUCTS = [
+      { id: 'light-steel', name: '轻钢厂房', icon: '🏭', hint: '1层+火车头' },
+      { id: 'split', name: '分栋厂房', icon: '🏠', hint: '2~4层' },
+      { id: 'layer', name: '分层厂房', icon: '🏢', hint: '6~10层' },
+      { id: 'tower', name: '产业大厦', icon: '🌆', hint: '高层研发' },
+      { id: 'dorm', name: '配套宿舍', icon: '🏘️', hint: '配套用房' },
+      { id: 'support', name: '配套楼', icon: '🏪', hint: '配套服务' },
+    ];
+
+    // ==================== 初始化 ====================
+    (function init() {
+      const raw = sessionStorage.getItem('projectCalculatorData');
+      if (!raw) {
+        document.getElementById('main-content').innerHTML = `
+          <div class="card" style="text-align:center;padding:60px 40px;">
+            <div style="font-size:3rem;margin-bottom:16px;">📦</div>
+            <h3 style="margin-bottom:8px;">未找到项目数据</h3>
+            <p style="color:var(--neutral-400);margin-bottom:20px;">请先从指标估算页面生成数据</p>
+            <a href="index.html" class="btn btn-primary">← 返回指标估算</a>
+          </div>`;
+        return;
+      }
+      projectData = JSON.parse(raw);
+      renderProductGrid();
+    })();
+
+    // ---------- 一键录入示例配置 ----------
+    const EXAMPLE_CONFIGS = [
+      {
+        name: '示例0',
+        label: '默认：分栋+分层+产业大厦+配套',
+        products: ['split', 'layer', 'tower', 'dorm', 'support'],
+        options: {
+          'split': { floors: [4], areas: [800, 1000] },
+          'layer': { floors: [8], areas: [1000, 1200] },
+          'tower': { areas: [2000] },
+          'support': { areas: [1800] }
+        }
+      },
+      {
+        name: '示例1',
+        label: '轻钢Only',
+        products: ['light-steel'],
+        options: { 'light-steel': { areas: [2000, 3000] } }
+      },
+      {
+        name: '示例2',
+        label: '轻钢+分栋+配套楼+配套宿舍',
+        products: ['light-steel', 'split', 'support', 'dorm'],
+        options: {
+          'light-steel': { areas: [1000, 3000] },
+          'split': { floors: [2, 3.5], areas: [400, 670] },
+          'support': { areas: [1800] }
+        }
+      },
+      {
+        name: '示例3',
+        label: '分栋+分层',
+        products: ['split', 'layer'],
+        options: {
+          'split': { floors: [3.5, 4], areas: [670, 800] },
+          'layer': { floors: [6, 8], areas: [800, 1000, 1200] }
+        }
+      },
+      {
+        name: '示例4',
+        label: '分栋+分层+产业大厦+配套楼+配套宿舍',
+        products: ['split', 'layer', 'tower', 'support', 'dorm'],
+        options: {
+          'split': { floors: [4], areas: [800, 1000] },
+          'layer': { floors: [8, 10], areas: [800, 1200] },
+          'tower': { areas: [1800] },
+          'support': { areas: [1500] }
+        }
+      },
+      {
+        name: '示例5',
+        label: '分层+产业大厦+配套楼+配套宿舍',
+        products: ['layer', 'tower', 'support', 'dorm'],
+        options: {
+          'layer': { floors: [10, 12], areas: [1000, 1200] },
+          'tower': { areas: [2000] },
+          'support': { areas: [2400] }
+        }
+      },
+      {
+        name: '示例6',
+        label: '分栋+分层',
+        products: ['split', 'layer'],
+        options: {
+          'split': { floors: [2, 3], areas: [400, 540, 670] },
+          'layer': { floors: [5], areas: [600, 800] }
+        }
+      },
+      {
+        name: '示例7',
+        label: '分栋+分层+配套楼',
+        products: ['split', 'layer', 'support'],
+        options: {
+          'split': { floors: [4], areas: [670, 800] },
+          'layer': { floors: [6, 10], areas: [600, 800, 1000] },
+          'support': { areas: [1800] }
+        }
+      },
+      {
+        name: '示例8',
+        label: '分栋+分层+配套宿舍',
+        products: ['split', 'layer', 'dorm'],
+        options: {
+          'split': { floors: [3.5], areas: [670, 800] },
+          'layer': { floors: [8], areas: [1000, 1200] }
+        }
+      },
+      {
+        name: '示例9',
+        label: '分栋+分层+配套宿舍',
+        products: ['split', 'layer', 'dorm'],
+        options: {
+          'split': { floors: [4], areas: [670, 800] },
+          'layer': { floors: [8], areas: [1000, 1200] }
+        }
+      }
+    ];
+
+    function fillExampleConfig(source) {
+      const select = source.tagName === 'SELECT'
+        ? source
+        : source.closest('.example-config-wrapper').querySelector('.example-config-select');
+      const idx = select.value;
+      if (idx === '') {
+        showToast('请先选择示例');
+        return;
+      }
+      const cfg = EXAMPLE_CONFIGS[parseInt(idx)];
+
+      // 清空当前选择
+      selectedProducts.clear();
+      productOptions = {};
+
+      for (const id of cfg.products) {
+        selectedProducts.add(id);
+        productOptions[id] = cfg.options[id] || {};
+      }
+
+      lastExpandedProduct = cfg.products[cfg.products.length - 1];
+
+      renderProductGrid();
+      renderSubOptions();
+      showToast(cfg.name + ' 已录入');
+    }
+
+    // ==================== 产品类型网格 ====================
+
+    function getAvailableProducts(far) {
+      if (far < 1.5) return ['light-steel', 'split', 'dorm', 'support'];
+      if (far < 2.0) return ['split', 'layer', 'dorm', 'support'];
+      return ['split', 'layer', 'tower', 'dorm', 'support'];
+    }
+
+    function renderProductGrid() {
+      const far = projectData.far;
+      const available = getAvailableProducts(far);
+      const grid = document.getElementById('product-grid');
+
+      grid.innerHTML = ALL_PRODUCTS.map(p => {
+        const isAvailable = available.includes(p.id);
+        const isSelected = selectedProducts.has(p.id);
+        const mobileOpts = isSelected ? renderMobileOptions(p.id) : '';
+        return `
+          <div class="product-chip ${isSelected ? 'selected' : ''} ${!isAvailable ? 'disabled' : ''}"
+               data-id="${p.id}" onclick="${isAvailable ? `toggleProduct('${p.id}')` : ''}">
+            <!-- 桌面端：居中显示 -->
+            <div class="chip-desktop">
+              <div class="chip-icon">${p.icon}</div>
+              <div class="chip-name">${p.name}</div>
+              <div class="chip-hint">${isAvailable ? p.hint : '当前容积率不可用'}</div>
+              ${isSelected ? '<div style="color:var(--success);font-size:0.8rem;margin-top:4px;">✓ 已选择</div>' : ''}
+            </div>
+            <!-- 手机端：横向显示 -->
+            <div class="chip-mobile">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:1.3rem;">${p.icon}</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:0.85rem;">${p.name}</div>
+                  <div style="font-size:0.7rem;color:var(--neutral-400);">${isAvailable ? p.hint : '不可用'}</div>
+                </div>
+                ${isSelected ? '<span style="color:var(--success);font-size:1rem;">✓</span>' : ''}
+              </div>
+            </div>
+            ${mobileOpts}
+          </div>`;
+      }).join('');
+    }
+
+    function renderMobileOptions(productId) {
+      const opts = productOptions[productId];
+      if (!opts) return '';
+      let html = '<div class="mobile-options">';
+
+      if (productId === 'light-steel') {
+        html += renderMobilePills(productId, '面积段', [1000, 2000, 3000, 4000], 'areas', false);
+      } else if (productId === 'split') {
+        html += renderMobilePills(productId, '层数', [2, 3, 3.5, 4], 'floors', false);
+        html += renderMobilePills(productId, '面积段', [400, 540, 670, 800, 1000], 'areas', false);
+      } else if (productId === 'layer') {
+        html += renderMobilePills(productId, '层数(选1-2项)', [6, 7, 8, 9, 10], 'floors', true);
+        html += renderMobilePills(productId, '面积段', [600, 800, 1000, 1200], 'areas', false);
+      } else if (productId === 'tower') {
+        html += renderMobilePills(productId, '面积段(单选)', [1500, 1800, 2000, 2400], 'areas', true);
+      } else if (productId === 'support') {
+        html += renderMobilePills(productId, '建筑面积(单选)', [1200, 1500, 1800, 2100, 2400], 'areas', true);
+      } else if (productId === 'dorm') {
+        html += '<div style="color:var(--neutral-400);font-size:0.75rem;">层数和面积由系统自动反推</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderMobilePills(productId, label, options, key, single) {
+      const selected = productOptions[productId][key] || [];
+      const limit2 = key === 'floors' && productId === 'layer';
+      const limit = limit2 && selected.length >= 2;
+      const modeAttr = limit2 ? 'data-limit2="true"' : (single ? 'data-single="true"' : '');
+      return `
+        <div class="option-group" ${modeAttr}>
+          <label>${label}</label>
+          <div class="option-pills">
+            ${options.map(v => {
+              const isSel = selected.includes(v);
+              const disabled = limit && !isSel;
+              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}" data-value="${v}"
+                onclick="event.stopPropagation();${disabled ? '' : `togglePill(this, '${productId}', '${key}', ${v}, ${single || false})`}">${v}${key === 'areas' ? 'm²' : (key === 'floors' ? '层' : '')}</span>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    function toggleProduct(id) {
+      if (selectedProducts.has(id)) {
+        selectedProducts.delete(id);
+        delete productOptions[id];
+        if (lastExpandedProduct === id) lastExpandedProduct = null;
+      } else {
+        selectedProducts.add(id);
+        initProductOptions(id);
+        lastExpandedProduct = id;
+      }
+      renderProductGrid();
+      renderSubOptions();
+    }
+
+    // ==================== 子选项配置 ====================
+    function initProductOptions(id) {
+      const defaults = {
+        'light-steel': { floors: [1], areas: [] },
+        'split': { floors: [], areas: [] },
+        'layer': { floors: [], areas: [] },
+        'tower': { areas: [] },
+        'dorm': {},
+        'support': { areas: [] },
+      };
+      productOptions[id] = JSON.parse(JSON.stringify(defaults[id]));
+    }
+
+    function renderSubOptions() {
+      const container = document.getElementById('sub-options-container');
+      const card = document.getElementById('sub-options-card');
+      if (selectedProducts.size === 0) { card.style.display = 'none'; return; }
+      card.style.display = 'block';
+
+      let html = '';
+      selectedProducts.forEach(id => {
+        const opts = productOptions[id];
+        let bodyHtml = '';
+        const isOpen = id === lastExpandedProduct;
+
+        if (id === 'light-steel') {
+          bodyHtml += renderAreaPills(id, '面积段（可多选）', [1000, 2000, 3000, 4000], 'areas');
+        } else if (id === 'split') {
+          bodyHtml += renderFloorPills(id, '层数（可多选）', [2, 3, 3.5, 4], 'floors');
+          bodyHtml += renderAreaPills(id, '面积段（可多选）', [400, 540, 670, 800, 1000], 'areas');
+        } else if (id === 'layer') {
+          bodyHtml += renderFloorPills(id, '层数（选1-2项）', [6, 7, 8, 9, 10], 'floors', true);
+          bodyHtml += renderAreaPills(id, '面积段（可多选）', [600, 800, 1000, 1200], 'areas');
+        } else if (id === 'tower') {
+          bodyHtml += renderAreaPills(id, '面积段（单选）', [1500, 1800, 2000, 2400], 'areas', true);
+        } else if (id === 'support') {
+          bodyHtml += renderAreaPills(id, '建筑面积（单选）', [1200, 1500, 1800, 2100, 2400], 'areas', true);
+        } else if (id === 'dorm') {
+          bodyHtml += '<div style="color:var(--neutral-400);font-size:0.8rem;padding:8px 0;">层数和面积由系统根据配套占比自动反推，无需配置</div>';
+        }
+
+        html += `
+          <div class="accordion-item ${isOpen ? 'open' : ''}" data-product="${id}">
+            <div class="accordion-header" onclick="toggleAccordion('${id}')">
+              <span>${getProductName(id)} ${getProductIcon(id)}</span>
+              <span class="toggle">▼</span>
+            </div>
+            <div class="accordion-body">${bodyHtml}</div>
+          </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function getProductIcon(id) {
+      const p = ALL_PRODUCTS.find(x => x.id === id);
+      return p ? p.icon : '';
+    }
+
+    function toggleAccordion(id) {
+      document.querySelectorAll('.accordion-item').forEach(item => {
+        if (item.dataset.product === id) {
+          item.classList.toggle('open');
+        }
+      });
+    }
+
+    function getProductName(id) {
+      const p = ALL_PRODUCTS.find(x => x.id === id);
+      return p ? p.name : id;
+    }
+
+    function renderFloorPills(productId, label, options, key, limit2) {
+      const selected = productOptions[productId][key] || [];
+      const limit = limit2 && selected.length >= 2;
+      return `
+        <div class="option-group" data-limit2="${limit2 || false}">
+          <label>${label} ${limit2 ? '<span class="hint">最多选2项</span>' : '<span class="hint">可多选</span>'}</label>
+          <div class="option-pills">
+            ${options.map(v => {
+              const isSel = selected.includes(v);
+              const disabled = limit && !isSel;
+              return `<span class="pill ${isSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}" data-value="${v}"
+                onclick="${disabled ? '' : `togglePill(this, '${productId}', '${key}', ${v}, ${limit2 || false})`}">${v}层</span>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    function renderAreaPills(productId, label, options, key, single) {
+      const selected = productOptions[productId][key] || [];
+      return `
+        <div class="option-group" data-single="${single || false}">
+          <label>${label} ${single ? '<span class="hint">单选</span>' : '<span class="hint">可多选</span>'}</label>
+          <div class="option-pills">
+            ${options.map(v => {
+              const isSel = selected.includes(v);
+              return `<span class="pill ${isSel ? 'selected' : ''}" data-value="${v}"
+                onclick="togglePill(this, '${productId}', '${key}', ${v}, ${single || false})">${v}m²</span>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    function togglePill(el, productId, key, value, isLimitOrSingle) {
+      if (el.classList.contains('disabled')) return;
+
+      const opts = productOptions[productId];
+      if (!opts[key]) opts[key] = [];
+      const arr = opts[key];
+
+      const group = el.closest('.option-group');
+      const isSingle = group.dataset.single === 'true';
+      const isLimit2 = group.dataset.limit2 === 'true';
+
+      if (isSingle) {
+        // 单选：清空其他，只选当前
+        opts[key] = [value];
+        group.querySelectorAll('.pill').forEach(pill => pill.classList.remove('selected'));
+        el.classList.add('selected');
+      } else {
+        const idx = arr.indexOf(value);
+        if (idx >= 0) {
+          arr.splice(idx, 1);
+          el.classList.remove('selected');
+        } else {
+          arr.push(value);
+          el.classList.add('selected');
+        }
+      }
+
+      // limit2 动态禁用
+      if (isLimit2) {
+        const selectedCount = arr.length;
+        group.querySelectorAll('.pill').forEach(pill => {
+          const val = parseFloat(pill.dataset.value);
+          const isSelected = arr.includes(val);
+          if (selectedCount >= 2 && !isSelected) {
+            pill.classList.add('disabled');
+          } else {
+            pill.classList.remove('disabled');
+          }
+        });
+      }
+
+      // 同步更新手机端
+      renderProductGrid();
+    }
+
+    // 保留旧的 toggleOption 用于手机端内联选项
+    function toggleOption(productId, key, value, single) {
+      const opts = productOptions[productId];
+      if (!opts[key]) opts[key] = [];
+      const arr = opts[key];
+      const idx = arr.indexOf(value);
+
+      if (single) {
+        opts[key] = idx >= 0 ? [] : [value];
+      } else {
+        if (idx >= 0) arr.splice(idx, 1);
+        else arr.push(value);
+      }
+      renderProductGrid();
+    }
+
+    // ==================== 生成配置 ====================
+    function generateConfig() {
+      // 校验
+      const msg = document.getElementById('product-validation-msg');
+      const ancillaryRatio = projectData.ancillaryRatio;
+      const hasDormOrSupport = selectedProducts.has('dorm') || selectedProducts.has('support');
+
+      if (ancillaryRatio > 0 && !hasDormOrSupport) {
+        msg.textContent = '⚠️ 配套用房占比大于0，必须选择配套宿舍或配套楼（或两者）';
+        msg.style.display = 'block'; return;
+      }
+
+      const isShanghaiC65 = projectData.region === '上海' && projectData.landUseType === 'C65';
+      const rdRatio = projectData.rdRatio;
+      if (isShanghaiC65 && rdRatio > 0 && projectData.far <= 2.0) {
+        // 提示但不阻止
+      }
+      if (isShanghaiC65 && rdRatio > 0 && projectData.far > 2.0 && !selectedProducts.has('tower')) {
+        msg.textContent = '⚠️ 研发办公用房未选择：产业大厦为必选项';
+        msg.style.display = 'block'; return;
+      }
+
+      // 校验每个产品是否选了必要参数
+      for (const id of selectedProducts) {
+        const opts = productOptions[id];
+        if ((id === 'light-steel' || id === 'split' || id === 'layer' || id === 'tower' || id === 'support') &&
+            (!opts.areas || opts.areas.length === 0)) {
+          msg.textContent = `⚠️ 请为「${getProductName(id)}」选择面积段`;
+          msg.style.display = 'block'; return;
+        }
+        if ((id === 'split' || id === 'layer') && (!opts.floors || opts.floors.length === 0)) {
+          msg.textContent = `⚠️ 请为「${getProductName(id)}」选择层数`;
+          msg.style.display = 'block'; return;
+        }
+        // UI调整1：分栋厂房层数限制（最多2种）
+        if (id === 'split' && opts.floors && opts.floors.length > 2) {
+          msg.textContent = '⚠️ 分栋厂房最多只能选择2种层数';
+          msg.style.display = 'block'; return;
+        }
+      }
+
+      // UI调整2：分层+轻钢必须选分栋
+      const factoryValidation = validateFactorySelection(selectedProducts);
+      if (!factoryValidation.valid) {
+        msg.textContent = '⚠️ ' + factoryValidation.msg;
+        msg.style.display = 'block'; return;
+      }
+
+      msg.style.display = 'none';
+
+      // 执行配置计算
+      const result = calculateProductConfig(projectData, selectedProducts, productOptions);
+
+      // 厂房产品转换为独栋/双拼/三拼（轻钢/分栋/分层）
+      result.products = transformToDuplexTriplex(result.products);
+      // 重新统计总栋数、占地、建筑面积、计容面积（轻钢建筑面积与计容不同，需重算）
+      result.totalCount = result.products.reduce((sum, p) => sum + p.count, 0);
+      result.totalBase = result.products.reduce((sum, p) => sum + p.totalBase, 0);
+      result.totalArea = result.products.reduce((sum, p) => sum + p.totalArea, 0);
+      result.totalCap = result.products.reduce((sum, p) => sum + p.totalCap, 0);
+
+      // 读取租金售价
+      const prices = {
+        rentSplit: parseFloat(document.getElementById('rent-split').value) || 0,
+        priceSplit: parseFloat(document.getElementById('price-split').value) || 0,
+        rentLayer: parseFloat(document.getElementById('rent-layer').value) || 0,
+        priceLayer: parseFloat(document.getElementById('price-layer').value) || 0
+      };
+      result.prices = prices;
+      result.hasPrices = prices.rentSplit > 0 || prices.priceSplit > 0 || prices.rentLayer > 0 || prices.priceLayer > 0;
+
+      // 计算单单元面积、占比等完整字段
+      const totalAreaAll = result.totalArea;
+      const totalCapAll = result.totalCap;
+      result.products.forEach(p => {
+        // 单单元面积
+        if (p.id === 'tower') {
+          p.unitAreaSingle = '按户分配';
+        } else if (p.id === 'dorm') {
+          p.unitAreaSingle = '按户分配';
+        } else if (p.id === 'support') {
+          p.unitAreaSingle = '-';
+        } else if (p.id === 'split') {
+          // 分栋厂房：单单元为独栋整栋面积 = 面积段 × 层数
+          const segBase = p.form === '双拼' ? p.components[0].base : p.base;
+          p.unitAreaSingle = segBase * p.floors;
+        } else if (p.id === 'light-steel') {
+          // 轻钢厂房：单单元为独栋整栋建筑面积 = 面积段 + 400
+          const segBase = p.form === '双拼' ? p.components[0].base : p.base;
+          p.unitAreaSingle = segBase + 400;
+        } else if (p.id === 'layer') {
+          // 分层厂房：单单元为面积段；双拼/三拼显示各面积段（去重后）
+          if (p.form === '双拼' || p.form === '三拼') {
+            const segments = p.components ? p.components.map(c => c.base) : [p.base];
+            const unique = [...new Set(segments)].sort((a, b) => a - b);
+            p.unitAreaSingle = unique.join('/');
+          } else {
+            p.unitAreaSingle = p.base;
+          }
+        }
+        // 占比
+        p.areaRatio = p.totalArea / totalAreaAll;
+        p.capRatio = p.totalCap / totalCapAll;
+        // 租金售价
+        if (p.type === '轻钢厂房') {
+          p.rent = prices.rentSplit;
+          p.price = prices.priceSplit;
+        } else if (p.type === '分栋厂房') {
+          p.rent = prices.rentSplit;
+          p.price = prices.priceSplit;
+        } else if (p.type === '分层厂房') {
+          p.rent = prices.rentLayer;
+          p.price = prices.priceLayer;
+        } else if (p.type === '产业大厦') {
+          p.rent = prices.rentLayer;
+          p.price = prices.priceLayer;
+        }
+      });
+
+      window.configResult = result;
+
+      // 切换视图
+      document.getElementById('view-input').classList.remove('active');
+      document.getElementById('view-dashboard').classList.add('active');
+      updateSidebarActive('dashboard');
+
+      // 渲染数字卡片
+      renderStatCards(result);
+      // 渲染各视图内容
+      renderConfigOverview(result);
+      document.getElementById('config-detail-content').innerHTML = renderConfigDetail();
+      initTableScrollListeners();
+      renderCharts(result);
+      renderIndicatorOverview(result);
+
+      // 显示配置摘要卡片
+      renderConfigSummary();
+      document.getElementById('config-summary').style.display = 'block';
+    }
+
+    // ==================== 核心配置算法（已移至 product-config-algorithm-v2.js）====================
+    // calculateProductConfig 函数现在定义在 product-config-algorithm-v2.js 中
+    
+    // ==================== UI调整：分栋厂房层数限制 ====================
+    function validateSplitFloors(selectedFloors) {
+      if (selectedFloors.length > 2) {
+        return { valid: false, msg: '分栋厂房最多只能选择2种层数' };
+      }
+      return { valid: true };
+    }
+    
+    // ==================== UI调整：分层+轻钢必须选分栋 ====================
+    function validateFactorySelection(selectedProducts) {
+      const hasLayer = selectedProducts.has('layer');
+      const hasLightSteel = selectedProducts.has('light-steel');
+      const hasSplit = selectedProducts.has('split');
+      
+      if (hasLayer && hasLightSteel && !hasSplit) {
+        return { valid: false, msg: '未选择分栋厂房：选择分层厂房和轻钢厂房时，必须同时选择分栋厂房' };
+      }
+      return { valid: true };
+    }
+    // calculateProductConfig 已迁移至 product-config-algorithm-v2.js
+    
+    // ==================== 数字卡片 ====================    // ==================== 数字卡片 ====================    // ==================== 数字卡片 ====================
+    function renderStatCards(result) {
+      const types = new Set(result.products.map(p => p.type)).size;
+      const acre = projectData.landArea / 666.7;
+      document.getElementById('stat-cards').innerHTML = `
+        <div class="stat-card"><div class="label">厂房类型</div><div class="value">${types}</div><div class="unit">种</div></div>
+        <div class="stat-card"><div class="label">总建筑面积</div><div class="value">${fmtInt(result.totalArea)}</div><div class="unit">m²</div></div>
+        <div class="stat-card"><div class="label">总计容面积</div><div class="value">${fmtInt(result.totalCap)}</div><div class="unit">m²</div></div>
+        <div class="stat-card"><div class="label">总栋数</div><div class="value">${result.totalCount}</div><div class="unit">栋</div></div>
+        <div class="stat-card"><div class="label">用地面积</div><div class="value">${fmtNum(projectData.landArea / 666.7, 1)}</div><div class="unit">亩</div></div>
+      `;
+    }
+
+    // ==================== 厂房产品转换为独栋/双拼/三拼 ====================
+    function transformToDuplexTriplex(products) {
+      const FIXED_TYPES = ['tower', 'dorm', 'support'];
+      const result = [];
+
+      // 固定产品不参与转换，只修正形式
+      const fixedProducts = products.filter(p => FIXED_TYPES.includes(p.id));
+      fixedProducts.forEach(p => {
+        if (p.id === 'tower') p.form = '分层分户';
+        else if (p.id === 'dorm') p.form = '分户';
+        else if (p.id === 'support') p.form = '-';
+        result.push(p);
+      });
+
+      // 厂房产品按 id + floors 分组
+      const groups = {};
+      products.filter(p => !FIXED_TYPES.includes(p.id)).forEach(p => {
+        const key = p.id + '|' + p.floors;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(p);
+      });
+
+      function cloneSingle(p) {
+        return { ...p, count: 1 };
+      }
+
+      function buildComposite(components, count, form) {
+        const id = components[0].id;
+        const floors = components[0].floors;
+        const displayFloors = id === 'light-steel' ? 1 : floors;
+        const totalBase = components.reduce((s, c) => s + c.base, 0);
+        const totalUnitArea = components.reduce((s, c) => s + c.unitArea, 0);
+        const totalUnitCap = components.reduce((s, c) => s + c.unitCap, 0);
+        const baseStr = components.map(c => c.base).join('+');
+
+        let elevator;
+        if (id === 'light-steel') {
+          elevator = '无';
+        } else if (id === 'split') {
+          elevator = totalBase < 1500 ? '1货' : (totalBase < 4000 ? '1客1货' : '1客2货');
+        } else if (id === 'layer') {
+          const cargoLift = Math.ceil(totalUnitArea / 4000);
+          const paxLift = totalUnitArea <= 4000 ? 1 : 2;
+          elevator = paxLift + '客' + cargoLift + '货';
+        } else {
+          elevator = components[0].elevator;
+        }
+
+        const suffix = form === '双拼' ? 'S' : 'T';
+        return {
+          ...components[0],
+          base: totalBase,
+          unitArea: totalUnitArea,
+          unitCap: totalUnitCap,
+          count,
+          totalBase: totalBase * count,
+          totalArea: totalUnitArea * count,
+          totalCap: totalUnitCap * count,
+          form,
+          elevator,
+          productType: displayFloors + 'F-' + suffix + '(' + baseStr + ')',
+          components
+        };
+      }
+
+      Object.keys(groups).forEach(key => {
+        const group = groups[key];
+        const id = group[0].id;
+
+        if (id === 'layer') {
+          const small = group.filter(p => p.base <= 800).sort((a, b) => a.base - b.base);
+          const large = group.filter(p => p.base > 800).sort((a, b) => a.base - b.base);
+
+          const smallDuplexes = [];
+          let smallLeftovers = [];
+
+          // 同面积段强制双拼
+          small.forEach(p => {
+            if (p.count <= 0) return;
+            const duplexCount = Math.floor(p.count / 2);
+            if (duplexCount > 0) {
+              smallDuplexes.push(buildComposite([cloneSingle(p), cloneSingle(p)], duplexCount, '双拼'));
+            }
+            if (p.count % 2 === 1) {
+              smallLeftovers.push(cloneSingle(p));
+            }
+          });
+
+          // 不同小面积段余数交叉配对
+          smallLeftovers.sort((a, b) => a.base - b.base);
+          while (smallLeftovers.length >= 2) {
+            const a = smallLeftovers.shift();
+            const b = smallLeftovers.pop();
+            smallDuplexes.push(buildComposite([a, b], 1, '双拼'));
+          }
+
+          // 若仍有小面积段余数，尝试与大面积段余数配对
+          if (smallLeftovers.length === 1) {
+            const smallLeft = smallLeftovers[0];
+            let paired = false;
+            for (let i = 0; i < large.length; i++) {
+              if (large[i].count % 2 === 1) {
+                const largeSingle = cloneSingle(large[i]);
+                smallDuplexes.push(buildComposite([smallLeft, largeSingle], 1, '双拼'));
+                large[i] = { ...large[i], count: large[i].count - 1 };
+                paired = true;
+                break;
+              }
+            }
+
+            // 仍无法配对：拆最小面积段的双拼组成三拼
+            if (!paired) {
+              if (smallDuplexes.length > 0) {
+                smallDuplexes.sort((a, b) => a.base - b.base);
+                const smallestDuplex = smallDuplexes[0];
+                if (smallestDuplex.count > 1) {
+                  smallestDuplex.count--;
+                  smallestDuplex.totalBase = smallestDuplex.base * smallestDuplex.count;
+                  smallestDuplex.totalArea = smallestDuplex.unitArea * smallestDuplex.count;
+                  smallestDuplex.totalCap = smallestDuplex.unitCap * smallestDuplex.count;
+                } else {
+                  smallDuplexes.shift();
+                }
+                const triplex = buildComposite([...smallestDuplex.components, smallLeft], 1, '三拼');
+                result.push(triplex);
+              } else {
+                // 极端fallback：无法配对也无法组三拼，保留独栋
+                result.push({ ...smallLeft, form: '独栋', productType: smallLeft.floors + 'F-D(' + smallLeft.base + ')', totalBase: smallLeft.base, totalArea: smallLeft.unitArea, totalCap: smallLeft.unitCap });
+              }
+            }
+          }
+
+          // 输出小面积段双拼
+          smallDuplexes.forEach(d => result.push(d));
+
+          // 大面积段按奇偶分
+          large.forEach(p => {
+            if (p.count <= 0) return;
+            const duplexCount = Math.floor(p.count / 2);
+            if (duplexCount > 0) {
+              result.push(buildComposite([cloneSingle(p), cloneSingle(p)], duplexCount, '双拼'));
+            }
+            if (p.count % 2 === 1) {
+              result.push({ ...p, count: 1, form: '独栋', productType: p.floors + 'F-D(' + p.base + ')', totalBase: p.base, totalArea: p.unitArea, totalCap: p.unitCap });
+            }
+          });
+        } else {
+          // split / light-steel 按奇偶分
+          group.forEach(p => {
+            if (p.count <= 0) return;
+            const duplexCount = Math.floor(p.count / 2);
+            if (duplexCount > 0) {
+              result.push(buildComposite([cloneSingle(p), cloneSingle(p)], duplexCount, '双拼'));
+            }
+            if (p.count % 2 === 1) {
+              const displayFloors = id === 'light-steel' ? 1 : p.floors;
+              result.push({ ...p, count: 1, form: '独栋', productType: displayFloors + 'F-D(' + p.base + ')', totalBase: p.base, totalArea: p.unitArea, totalCap: p.unitCap });
+            }
+          });
+        }
+      });
+
+      return result;
+    }
+
+    // ==================== 产品配置一览（简化8字段） ====================
+    function renderConfigOverview(result) {
+      const tbody = result.products.map(p => `
+        <tr>
+          <td>${p.type}</td>
+          <td>${p.productType}</td>
+          <td>${p.form}</td>
+          <td class="num">${fmtNum(p.totalHeight, 1)}m</td>
+          <td class="num">${fmtInt(p.unitArea)}</td>
+          <td class="num">${p.count}</td>
+          <td class="num">${fmtInt(p.totalBase)}</td>
+          <td class="num">${fmtInt(p.totalArea)}</td>
+          <td class="num">${fmtInt(p.totalCap)}</td>
+        </tr>
+      `).join('');
+
+      // 总计行
+      const totalRow = `
+        <tr style="background:var(--brand-light);font-weight:600;">
+          <td colspan="5">合计</td>
+          <td class="num">${fmtInt(result.totalCount)}</td>
+          <td class="num">${fmtInt(result.totalBase)}</td>
+          <td class="num">${fmtInt(result.totalArea)}</td>
+          <td class="num">${fmtInt(result.totalCap)}</td>
+        </tr>
+      `;
+
+      document.getElementById('config-overview-content').innerHTML = `
+        <div class="card">
+          <div class="indicator-table-wrap">
+            <table class="data-table indicator-table">
+              <thead><tr>
+                <th>厂房类型</th><th>产品类型</th><th>形式</th><th>总层高</th>
+                <th>单栋面积</th><th>栋数</th><th>户型总占地面积</th><th>户型总面积</th><th>户型总计容面积</th>
+              </tr></thead>
+              <tbody>${tbody}${totalRow}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    // ==================== 配置摘要卡片 ====================
+    function renderConfigSummary() {
+      const items = [];
+      // 产品按固定顺序排列
+      const order = ['light-steel', 'split', 'layer', 'tower', 'dorm', 'support'];
+      const sortedIds = Array.from(selectedProducts).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      
+      sortedIds.forEach(id => {
+        const opts = productOptions[id];
+        const name = getProductName(id);
+        let detail = '';
+        if (opts.floors && opts.floors.length) {
+          const sortedFloors = [...opts.floors].sort((a, b) => a - b);
+          detail += sortedFloors.join('/') + '层 ';
+        }
+        if (opts.areas && opts.areas.length) {
+          const sortedAreas = [...opts.areas].sort((a, b) => a - b);
+          detail += sortedAreas.join('/') + 'm²';
+        }
+        if (id === 'dorm') detail = '自动反推';
+        items.push(`<div class="summary-item"><span>${name}</span><span>${detail || '已选'}</span></div>`);
+      });
+      document.getElementById('config-summary-body').innerHTML = items.join('');
+    }
+
+    function toggleConfigSummary(e) {
+      if (e) e.stopPropagation();
+      // 如果刚发生了拖动，不触发折叠/展开
+      if (window._justDragged) {
+        window._justDragged = false;
+        return;
+      }
+      const card = document.getElementById('config-summary');
+      card.classList.toggle('open');
+    }
+
+    function backToInput(e) {
+      if (e) e.stopPropagation();
+      if (window._justDragged) {
+        window._justDragged = false;
+        return;
+      }
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-input').classList.add('active');
+      document.getElementById('config-summary').classList.remove('open');
+      updateSidebarActive('input');
+    }
+
+    // ==================== 图表渲染 ====================
+    function renderCharts(result) {
+      // 业态分布（简化的饼图用色块表示）
+      const typeMap = {};
+      result.products.forEach(p => {
+        if (!typeMap[p.type]) typeMap[p.type] = 0;
+        typeMap[p.type] += p.totalCap;
+      });
+      const colors = ['#0B2B5C', '#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE'];
+      const totalCap = result.totalCap;
+      let pieHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">';
+      let i = 0;
+      for (const [type, cap] of Object.entries(typeMap)) {
+        const pct = (cap / totalCap * 100).toFixed(1);
+        pieHtml += `<div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;">
+          <span style="width:12px;height:12px;border-radius:3px;background:${colors[i % colors.length]};"></span>
+          ${type} ${pct}%
+        </div>`;
+        i++;
+      }
+      pieHtml += '</div>';
+      pieHtml += '<div style="display:flex;height:32px;border-radius:8px;overflow:hidden;">';
+      i = 0;
+      for (const [type, cap] of Object.entries(typeMap)) {
+        const pct = (cap / totalCap * 100);
+        pieHtml += `<div style="width:${pct}%;background:${colors[i % colors.length]};" title="${type} ${pct.toFixed(1)}%"></div>`;
+        i++;
+      }
+      pieHtml += '</div>';
+      document.getElementById('chart-type-content').innerHTML = `<div class="card">${pieHtml}</div>`;
+
+      // 配置数量（柱状图用div模拟）
+      const countMap = {};
+      result.products.forEach(p => {
+        if (!countMap[p.type]) countMap[p.type] = 0;
+        countMap[p.type] += p.count;
+      });
+      const maxCount = Math.max(...Object.values(countMap));
+      let barHtml = '<div class="card">';
+      for (const [type, count] of Object.entries(countMap)) {
+        const pct = (count / maxCount * 100);
+        barHtml += `
+          <div style="display:flex;align-items:center;margin-bottom:10px;gap:10px;">
+            <div style="width:80px;font-size:0.8rem;text-align:right;flex-shrink:0;">${type}</div>
+            <div style="flex:1;background:var(--neutral-100);border-radius:4px;height:28px;overflow:hidden;">
+              <div style="width:${pct}%;background:var(--brand-gradient);height:100%;border-radius:4px;display:flex;align-items:center;padding-left:10px;">
+                <span style="color:#fff;font-size:0.75rem;font-weight:600;">${count}栋</span>
+              </div>
+            </div>
+          </div>`;
+      }
+      barHtml += '</div>';
+      document.getElementById('chart-count-content').innerHTML = barHtml;
+
+      // 其他图表占位
+      ['chart-area', 'chart-load', 'chart-height', 'chart-elevator', 'chart-layout'].forEach(id => {
+        document.getElementById(id + '-content').innerHTML = `
+          <div class="card"><div class="chart-placeholder">
+            <div class="icon">📊</div>
+            <div>图表数据计算中...</div>
+          </div></div>`;
+      });
+    }
+
+    // ==================== 综合指标一览（基于产品配置重新计算） ====================
+    function renderIndicatorOverview(result) {
+      const acre = projectData.landArea / 666.7;
+      const landArea = projectData.landArea;
+      const greenRate = projectData.greenRate;
+      const region = projectData.region;
+      const isHangzhou = region === '杭州' || region === '长三角';
+
+      // 根据产品配置重新计算各指标
+      const actualAboveGround = result.totalArea;      // 地上建筑面积（产品配置实际值）
+      const actualCap = result.totalCap;               // 总计容面积
+      const actualDensity = result.totalBase / landArea; // 实际建筑密度
+      const actualFar = actualCap / landArea;            // 实际容积率
+
+      // 厂房面积和配套面积（用于车位计算）
+      let factoryArea = 0, ancillaryArea = 0, rdArea = 0;
+      result.products.forEach(p => {
+        if (p.type === '产业大厦') {
+          // C65下产业大厦是研发办公用房
+          if (projectData.region === '上海' && projectData.landUseType === 'C65') {
+            rdArea += p.totalArea;
+          } else {
+            factoryArea += p.totalArea;
+          }
+        } else if (p.type === '配套宿舍' || p.type === '配套楼') {
+          ancillaryArea += p.totalArea;
+        } else {
+          factoryArea += p.totalArea;
+        }
+      });
+
+      // 车位计算（同第一页逻辑，但基于实际配置面积）
+      const factoryRate = projectData.factoryRate || 0.5;
+      const ancillaryRate = projectData.ancillaryRate || 1.0;
+      const totalVehicle = Math.ceil(factoryArea * factoryRate / 100) + Math.ceil(ancillaryArea * ancillaryRate / 100);
+      const totalNonVehicle = Math.ceil(actualAboveGround * 1.0 / 100);
+
+      // 道路、绿地、基底面积
+      const roadArea = landArea * 0.30;
+      const greenArea = landArea * greenRate;
+      const buildingBaseArea = result.totalBase; // 实际基底
+
+      // 非机动车分配
+      let groundNonVehicle = totalNonVehicle;
+      let undergroundNonVehicle = 0;
+      const groundNonVehicleArea = groundNonVehicle * 1.5;
+      const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicleArea;
+      let groundVehicle = Math.floor(availableParkingArea / 35);
+      if (groundVehicle < 10) groundVehicle = 0;
+
+      let undergroundVehicle = 0;
+      let undergroundArea = 0;
+      let undergroundRemark = '含地下车库与设备用房';
+
+      if (groundVehicle >= totalVehicle) {
+        groundVehicle = totalVehicle;
+        undergroundVehicle = 0;
+        undergroundArea = 500;
+        undergroundRemark = '设备用房';
+      } else {
+        if (totalNonVehicle > 500) {
+          groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+          undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+        }
+        undergroundVehicle = totalVehicle - groundVehicle;
+        undergroundArea = isHangzhou
+          ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
+          : undergroundVehicle * 35 + undergroundNonVehicle * 1.5;
+      }
+
+      const totalBuildingArea = actualAboveGround + undergroundArea;
+
+      document.getElementById('indicator-overview-content').innerHTML = `
+        <div class="card">
+          <div class="indicator-table-wrap">
+            <table class="data-table indicator-table">
+              <tbody>
+                <tr><td>规划用地面积</td><td class="num">${fmtNum(landArea, 1)}</td><td class="unit">m²</td><td>约${fmtNum(acre, 1)}亩</td></tr>
+                <tr><td>总建筑面积</td><td class="num">${fmtNum(totalBuildingArea, 1)}</td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地上建筑面积</td><td class="num">${fmtNum(actualAboveGround, 1)}</td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下建筑面积</td><td class="num">${fmtNum(undergroundArea, 1)}</td><td class="unit">m²</td><td>${undergroundRemark}</td></tr>
+                <tr><td><strong>计容总建筑面积</strong></td><td class="num"><strong>${fmtNum(actualCap, 1)}</strong></td><td class="unit">m²</td><td>—</td></tr>
+                <tr><td>容积率</td><td class="num">${fmtNum(actualFar, 2)}</td><td class="unit">—</td><td>目标${fmtNum(projectData.far, 2)}</td></tr>
+                <tr><td>绿地率</td><td class="num">${(greenRate * 100).toFixed(2)}%</td><td class="unit">—</td><td>—</td></tr>
+                <tr><td>建筑密度</td><td class="num">${(actualDensity * 100).toFixed(0)}%</td><td class="unit">—</td><td>目标${(projectData.far < 1.5 ? 45 : (projectData.far < 2.0 ? 42 : 40))}%</td></tr>
+                <tr style="background:var(--neutral-100);"><td>机动车停车位数量</td><td class="num">${fmtInt(totalVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地面机动车停车位</td><td class="num">${fmtInt(groundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下机动车停车位</td><td class="num">${fmtInt(undergroundVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr style="background:var(--neutral-100);"><td>非机动车停车位数量</td><td class="num">${fmtInt(totalNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地面非机动车停车位</td><td class="num">${fmtInt(groundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+                <tr><td style="padding-left:32px;">地下非机动车停车位</td><td class="num">${fmtInt(undergroundNonVehicle)}</td><td class="unit">辆</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    // ==================== 产品配置详表（21字段完整表） ====================
+    function renderConfigDetail() {
+      if (!window.configResult) return '';
+      const result = window.configResult;
+      const rows = result.products.map(p => {
+        const rentPrice = [];
+        if (p.rent > 0) rentPrice.push(`租:${p.rent}元/天/m²`);
+        if (p.price > 0) {
+          if (p.price < 1000) rentPrice.push(`售价不可用`);
+          else rentPrice.push(`售:${fmtInt(p.price)}元`);
+        }
+        const rentPriceStr = rentPrice.join(' / ') || '—';
+        const fl2 = p.fl.second + (p.flSuffix.second || '') + 'm';
+        const flStd = p.fl.standard + (p.flSuffix.standard || '') + 'm';
+        const flTop = p.fl.top + (p.flSuffix.top || '') + 'm';
+        const totalFl = fmtNum(p.totalHeight - 1.2, 1) + 'm';
+        return `
+          <tr>
+            <td>${p.type}</td><td>${p.productType}</td><td>${p.form}</td><td>${p.load}</td>
+            <td class="num">${p.floors}</td><td>${p.elevator}</td>
+            <td class="num">${p.fl.first}m</td><td class="num">${fl2}</td>
+            <td class="num">${flStd}</td><td class="num">${flTop}</td>
+            <td class="num">${totalFl}</td>
+            <td class="num">${fmtInt(p.base)}</td><td class="num">${fmtInt(p.unitArea)}</td>
+            <td class="num">${fmtUnitAreaSingle(p.unitAreaSingle)}</td>
+            <td class="num">${p.count}</td>
+            <td class="num">${fmtInt(p.totalBase)}</td><td class="num">${fmtInt(p.totalArea)}</td>
+            <td class="num">${(p.areaRatio * 100).toFixed(1)}%</td>
+            <td class="num">${fmtInt(p.totalCap)}</td>
+            <td class="num">${(p.capRatio * 100).toFixed(1)}%</td>
+            ${result.hasPrices ? `<td>${rentPriceStr}</td>` : ''}
+          </tr>`;
+      }).join('');
+      const headers = [
+        '厂房类型','产品类型','形式','荷载','层数','电梯配置',
+        '首层层高','二层层高','标准层层高','顶层层高','总层高(不含女儿墙)',
+        '单栋基底面积','单栋面积','单单元面积','栋数',
+        '户型总占地面积','户型总面积','建筑面积占比','户型总计容面积','计容面积占比'
+      ];
+      if (result.hasPrices) headers.push('租金与售价');
+      const thead = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+      const totalRow = `
+        <tr style="background:var(--brand-light);font-weight:600;">
+          <td colspan="11">合计</td>
+          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          <td class="num">${fmtInt(result.totalCount)}</td>
+          <td class="num">${fmtInt(result.totalBase)}</td>
+          <td class="num">${fmtInt(result.totalArea)}</td>
+          <td class="num">100%</td>
+          <td class="num">${fmtInt(result.totalCap)}</td>
+          <td class="num">100%</td>
+          ${result.hasPrices ? '<td>—</td>' : ''}
+        </tr>`;
+      return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div class="card-title" style="margin-bottom:0;">📋 产品配置详表（${result.hasPrices ? 21 : 20}字段）</div>
+            <button class="btn btn-primary" style="padding:8px 16px;font-size:0.8rem;" onclick="downloadConfigDetail()">⬇️ 下载表格</button>
+          </div>
+          <div class="table-scroll-wrapper">
+            <div class="table-scroll">
+              <table class="data-table" style="min-width:${result.hasPrices ? 1600 : 1500}px;">
+                <thead>${thead}</thead>
+                <tbody>${rows}${totalRow}</tbody>
+              </table>
+            </div>
+          </div>
+          <div class="table-scroll-hint">👈 左右滑动查看完整表格</div>
+        </div>`;
+    }
+
+    // ==================== 视图切换 ====================
+    function switchView(viewId) {
+      if (viewId === 'input') {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById('view-input').classList.add('active');
+        // 返回输入时隐藏配置摘要
+        document.getElementById('config-summary').style.display = 'none';
+      } else if (!window.configResult) {
+        alert('请先生成产品配置'); return;
+      } else {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById('view-' + viewId).classList.add('active');
+        // 切换到结果视图时显示配置摘要
+        document.getElementById('config-summary').style.display = 'block';
+      }
+      updateSidebarActive(viewId);
+    }
+
+    function updateSidebarActive(viewId) {
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      const el = document.querySelector(`.nav-item[data-view="${viewId}"]`);
+      if (el) el.classList.add('active');
+    }
+
+    // 手机端导航栏手风琴切换
+    function toggleNavGroup(titleEl) {
+      const group = titleEl.closest('.nav-group');
+      group.classList.toggle('open');
+    }
+
+    // ==================== 下载功能 ====================
+    function checkEfficiencyWarning() {
+      const check = window.configResult && window.configResult._check;
+      if (!check) return '';
+      const farDiff = check.farDiff || 0;
+      const densityDiff = check.densityDiff || 0;
+      if (farDiff > 0.005 || densityDiff > 0.05) {
+        return '产品效率不足，建议调整容积率/密度';
+      }
+      return '';
+    }
+
+    function downloadConfigDetail() {
+      if (!window.configResult) { alert('请先生成产品配置'); return; }
+      const result = window.configResult;
+      const warning = checkEfficiencyWarning();
+      if (warning) alert(warning);
+      const projectName = projectData.projectName || '项目';
+      const rows = result.products.map(p => {
+        const rentPrice = [];
+        if (p.rent > 0) rentPrice.push(`租:${p.rent}元/天/m²`);
+        if (p.price > 0) {
+          if (p.price < 1000) rentPrice.push(`售价不可用`);
+          else rentPrice.push(`售:${fmtInt(p.price)}元`);
+        }
+        const rentPriceStr = rentPrice.join(' / ') || '—';
+        const fl2 = p.fl.second + (p.flSuffix.second || '');
+        const flStd = p.fl.standard + (p.flSuffix.standard || '');
+        const flTop = p.fl.top + (p.flSuffix.top || '');
+        return `
+          <tr>
+            <td>${p.type}</td><td>${p.productType}</td><td>${p.form}</td><td>${p.load}</td>
+            <td>${p.floors}</td><td>${p.elevator}</td>
+            <td>${p.fl.first}m</td><td>${fl2}m</td><td>${flStd}m</td><td>${flTop}m</td>
+            <td>${fmtNum(p.totalHeight - 1.2, 1)}m</td>
+            <td>${fmtInt(p.base)}</td><td>${fmtInt(p.unitArea)}</td><td>${fmtUnitAreaSingle(p.unitAreaSingle)}</td>
+            <td>${p.count}</td><td>${fmtInt(p.totalBase)}</td><td>${fmtInt(p.totalArea)}</td>
+            <td>${(p.areaRatio * 100).toFixed(1)}%</td>
+            <td>${fmtInt(p.totalCap)}</td><td>${(p.capRatio * 100).toFixed(1)}%</td>
+            ${result.hasPrices ? `<td>${rentPriceStr}</td>` : ''}
+          </tr>`;
+      }).join('');
+      const headers = [
+        '厂房类型','产品类型','形式','荷载','层数','电梯配置',
+        '首层层高','二层层高','标准层层高','顶层层高','总层高(不含女儿墙)',
+        '单栋基底面积','单栋面积','单单元面积','栋数',
+        '户型总占地面积','户型总面积','建筑面积占比','户型总计容面积','计容面积占比'
+      ];
+      if (result.hasPrices) headers.push('租金与售价');
+      const thead = headers.map(h => `<th>${h}</th>`).join('');
+      const totalRow = `
+        <tr style="background:#f1f5f9;font-weight:600;">
+          <td colspan="11">合计</td>
+          <td>—</td><td>—</td><td>—</td>
+          <td>${fmtInt(result.totalCount)}</td>
+          <td>${fmtInt(result.totalBase)}</td>
+          <td>${fmtInt(result.totalArea)}</td>
+          <td>100%</td>
+          <td>${fmtInt(result.totalCap)}</td>
+          <td>100%</td>
+          ${result.hasPrices ? '<td>—</td>' : ''}
+        </tr>`;
+      const warningHtml = warning ? `<div style="background:#fff3cd;color:#856404;padding:12px 16px;border-radius:6px;margin-bottom:16px;border:1px solid #ffeaa7;font-size:0.9rem;">⚠️ ${warning}</div>` : '';
+      const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8">
+<title>${projectName} - 产品配置详表</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;padding:40px;background:#f8fafc;color:#0f172a;}
+h1{font-size:1.3rem;color:#0B2B5C;margin-bottom:8px;}
+.meta{color:#64748b;font-size:0.85rem;margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;font-size:0.8rem;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+th,td{padding:10px 12px;border:1px solid #e2e8f0;text-align:left;vertical-align:top;}
+th{background:#0B2B5C;color:#fff;font-weight:600;font-size:0.75rem;white-space:nowrap;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;}
+tr:nth-child(even) td{background:#fafafa;}
+</style>
+</head>
+<body>
+<h1>📋 ${projectName} - 产品配置详表</h1>
+<div class="meta">生成时间：${new Date().toLocaleString('zh-CN')}</div>
+${warningHtml}
+<table>
+<thead><tr>${thead}</tr></thead>
+<tbody>${rows}${totalRow}</tbody>
+</table>
+</body>
+</html>`;
+      downloadHtml(html, `${projectName}_产品配置详表.html`);
+    }
+
+    function buildIndicatorExportData() {
+      if (!window.configResult) return null;
+      const result = window.configResult;
+      const warning = checkEfficiencyWarning();
+
+      const projectName = projectData.projectName || '项目';
+      const title = projectName + ' 综合指标估算';
+      const landArea = projectData.landArea;
+      const greenRate = projectData.greenRate || 0;
+      const region = projectData.region;
+      const landUse = projectData.landUseType || '';
+      const isHangzhou = region === '杭州';
+      const far = projectData.far;
+      const heightLimit = projectData.heightLimit || 0;
+      const rdRatio = projectData.rdRatio || 0;
+      const ancillaryRatio = projectData.ancillaryRatio || 0;
+      const factoryIndex = projectData.factoryIndex || projectData.factoryRate || 0.5;
+      const supportIndex = projectData.supportIndex || projectData.ancillaryRate || 1.0;
+
+      const actualAboveGround = result.totalArea;
+      const actualCap = result.totalCap;
+      const actualDensity = result.totalBase / landArea;
+      const actualFar = actualCap / landArea;
+
+      let factoryArea = 0, ancillaryArea = 0;
+      result.products.forEach(p => {
+        if (p.type === '配套宿舍' || p.type === '配套楼') ancillaryArea += p.totalArea;
+        else if (p.type === '产业大厦' && region === '上海' && landUse === 'C65') {
+          // 研发办公，用车位配套指标
+        } else {
+          factoryArea += p.totalArea;
+        }
+      });
+
+      const totalVehicle = Math.ceil(factoryArea * factoryIndex / 100) + Math.ceil(ancillaryArea * supportIndex / 100);
+      const totalNonVehicle = Math.ceil(actualAboveGround * 1.0 / 100);
+      const roadArea = landArea * 0.30;
+      const buildingBaseArea = result.totalBase;
+      let groundNonVehicle = totalNonVehicle;
+      let undergroundNonVehicle = 0;
+      const groundNonVehicleArea = groundNonVehicle * 1.5;
+      const availableParkingArea = landArea - roadArea - (landArea * greenRate) - buildingBaseArea - groundNonVehicleArea;
+      let groundVehicle = Math.floor(availableParkingArea / 35);
+      if (groundVehicle < 10) groundVehicle = 0;
+      let undergroundVehicle = 0;
+      let undergroundArea = 0;
+      let undergroundRemark = '含地下车库与设备用房';
+      if (groundVehicle >= totalVehicle) {
+        groundVehicle = totalVehicle;
+        undergroundArea = 500;
+        undergroundRemark = '设备用房';
+      } else {
+        if (totalNonVehicle > 500) {
+          groundNonVehicle = Math.ceil(totalNonVehicle / 2);
+          undergroundNonVehicle = Math.floor(totalNonVehicle / 2);
+        }
+        undergroundVehicle = totalVehicle - groundVehicle;
+        undergroundArea = isHangzhou
+          ? undergroundVehicle * 42 + undergroundNonVehicle * 1.5
+          : undergroundVehicle * 35 + undergroundNonVehicle * 1.5;
+      }
+      const totalBuildingArea = actualAboveGround + undergroundArea;
+      const acre = landArea / 666.7;
+
+      function escHtml(str) {
+        if (str === undefined || str === null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      const items = [];
+      items.push({ type: 'highlight', name: '规划用地面积', val: fmtNum(landArea, 1), unit: 'm²', remark: `约 ${fmtNum(acre, 1)} 亩` });
+
+      if (landUse) {
+        const landUseText = landUse === 'M' ? 'M（工业用地）' : 'C65（科研设计用地）';
+        items.push({ type: 'normal', name: '用地性质', val: landUseText, unit: '—', remark: '—' });
+      }
+
+      items.push({ type: 'parent', name: '总建筑面积', val: fmtNum(totalBuildingArea, 1), unit: 'm²', remark: '地上 + 地下' });
+      items.push({ type: 'sub', label: '其中', name: '地上建筑面积', val: fmtNum(actualAboveGround, 1), unit: 'm²', remark: '—' });
+      items.push({ type: 'sub', label: '', name: '地下建筑面积', val: fmtNum(undergroundArea, 1), unit: 'm²', remark: undergroundRemark });
+
+      items.push({ type: 'highlight', name: '容积率', val: fmtNum(actualFar, 2), unit: '—', remark: '—' });
+      items.push({ type: 'normal', name: '限高', val: fmtNum(heightLimit, 0), unit: 'm', remark: '—' });
+      items.push({ type: 'normal', name: '绿地率', val: fmtPercent(greenRate, 2), unit: '—', remark: '—' });
+      items.push({ type: 'normal', name: '建筑密度', val: fmtPercent(actualDensity, 0), unit: '—', remark: '—' });
+
+      if (rdRatio > 0) {
+        items.push({ type: 'normal', name: '研发办公用房占比', val: fmtPercent(rdRatio, 2), unit: '—', remark: '—' });
+      }
+      items.push({ type: 'normal', name: '配套用房占比', val: fmtPercent(ancillaryRatio, 2), unit: '—', remark: '—' });
+
+      items.push({ type: 'parent', name: '机动车停车位数量', val: fmtInt(totalVehicle), unit: '辆', remark: `厂房 ${Number(factoryIndex).toFixed(2)} 辆/100m²，配套 ${Number(supportIndex).toFixed(2)} 辆/100m²` });
+      items.push({ type: 'sub', label: '其中', name: '地面机动车停车位', val: fmtInt(groundVehicle), unit: '辆', remark: '—' });
+      items.push({ type: 'sub', label: '', name: '地下机动车停车位', val: fmtInt(undergroundVehicle), unit: '辆', remark: '—' });
+
+      items.push({ type: 'parent', name: '非机动车停车位数量', val: fmtInt(totalNonVehicle), unit: '辆', remark: '1.0 辆/100m²' });
+      items.push({ type: 'sub', label: '其中', name: '地面非机动车停车位', val: fmtInt(groundNonVehicle), unit: '辆', remark: '—' });
+      items.push({ type: 'sub', label: '', name: '地下非机动车停车位', val: fmtInt(undergroundNonVehicle), unit: '辆', remark: '—' });
+
+      let tableRows = '';
+      items.forEach(item => {
+        if (item.type === 'normal') {
+          tableRows += `
+            <tr>
+              <td colspan="2" style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;">${escHtml(item.name)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:right;">${escHtml(item.val)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:center;">${escHtml(item.unit)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;">${escHtml(item.remark)}</td>
+            </tr>`;
+        } else if (item.type === 'highlight' || item.type === 'parent') {
+          tableRows += `
+            <tr style="background:#f1f5f9;">
+              <td colspan="2" style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;background:#f1f5f9;">${escHtml(item.name)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:right;background:#f1f5f9;">${escHtml(item.val)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:center;background:#f1f5f9;">${escHtml(item.unit)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;background:#f1f5f9;">${escHtml(item.remark)}</td>
+            </tr>`;
+        } else if (item.type === 'sub') {
+          const hasLabel = item.label !== '';
+          const rowSpanAttr = hasLabel ? ' rowspan="2"' : '';
+          const labelCell = hasLabel
+            ? `<td${rowSpanAttr} style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;vertical-align:middle;text-align:center;">${escHtml(item.label)}</td>`
+            : '';
+          tableRows += `
+            <tr>
+              ${labelCell}
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;">${escHtml(item.name)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:right;">${escHtml(item.val)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;text-align:center;">${escHtml(item.unit)}</td>
+              <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:4px 6px;">${escHtml(item.remark)}</td>
+            </tr>`;
+        }
+      });
+
+      const warningRow = warning
+        ? `<tr><td colspan="5" style="font-family:'微软雅黑',sans-serif;font-size:11pt;border:1px solid #000;padding:6px;background:#fff3cd;color:#856404;text-align:center;">⚠️ ${escHtml(warning)}</td></tr>`
+        : '';
+
+      const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<meta name=ProgId content=Excel.Sheet>
+<meta name=Generator content="Microsoft Excel 15">
+<style>
+  table { border-collapse: collapse; }
+  td { mso-number-format:"@"; }
+</style>
+</head>
+<body>
+<table>
+  <tr>
+    <td colspan="5" style="font-family:'微软雅黑',sans-serif;font-size:14pt;font-weight:bold;border:1px solid #000;padding:6px;text-align:center;">${escHtml(title)}</td>
+  </tr>
+  ${warningRow}
+  <tr style="background:#f1f5f9;">
+    <td colspan="2" style="font-family:'微软雅黑',sans-serif;font-size:11pt;font-weight:bold;border:1px solid #000;padding:4px 6px;text-align:center;background:#f1f5f9;">指标名称</td>
+    <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;font-weight:bold;border:1px solid #000;padding:4px 6px;text-align:center;background:#f1f5f9;">数值</td>
+    <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;font-weight:bold;border:1px solid #000;padding:4px 6px;text-align:center;background:#f1f5f9;">单位</td>
+    <td style="font-family:'微软雅黑',sans-serif;font-size:11pt;font-weight:bold;border:1px solid #000;padding:4px 6px;text-align:center;background:#f1f5f9;">备注</td>
+  </tr>${tableRows}
+</table>
+</body>
+</html>`;
+
+      const today = new Date();
+      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      const fileName = title + '_' + dateStr;
+      return { html, title, fileName, warning };
+    }
+
+    function downloadIndicatorDetail() {
+      if (!window.configResult) { alert('请先生成产品配置'); return; }
+      const warning = checkEfficiencyWarning();
+      if (warning) alert(warning);
+      const data = buildIndicatorExportData();
+      if (!data) return;
+      const blob = new Blob([data.html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = data.fileName + '.xls';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }
+
+    function downloadIndicatorImage() {
+      if (!window.configResult) { alert('请先生成产品配置'); return; }
+      if (typeof html2canvas === 'undefined') {
+        alert('图片导出库加载中，请稍后再试');
+        return;
+      }
+      const data = buildIndicatorExportData();
+      if (!data) return;
+
+      const container = document.getElementById('image-export-container');
+      container.innerHTML = data.html;
+      const table = container.querySelector('table');
+      if (!table) { alert('表格生成失败'); return; }
+
+      html2canvas(table, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false
+      }).then(canvas => {
+        container.innerHTML = '';
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = data.fileName + '.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }).catch(err => {
+        container.innerHTML = '';
+        console.error(err);
+        alert('图片生成失败：' + err.message);
+      });
+    }
+
+    function downloadHtml(html, filename) {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ==================== 格式化工具 ====================
+    function fmtNum(n, d) { return Number(n).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+    function fmtInt(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+    function fmtUnitAreaSingle(v) { return typeof v === 'string' ? v : fmtInt(v); }
+    function fmtPercent(n, decimals) { return (Number(n) * 100).toFixed(decimals || 2) + '%'; }
+
+    // 检测表格滚动位置，到达最右时隐藏遮罩
+    function checkScroll(el) {
+      const wrapper = el.closest('.table-scroll-wrapper');
+      if (!wrapper) return;
+      const isAtRight = el.scrollLeft + el.clientWidth >= el.scrollWidth - 5;
+      if (isAtRight) {
+        wrapper.classList.add('scrolled-right');
+      } else {
+        wrapper.classList.remove('scrolled-right');
+      }
+    }
+
+    function initTableScrollListeners() {
+      document.querySelectorAll('.table-scroll').forEach(scrollEl => {
+        checkScroll(scrollEl);
+        scrollEl.removeEventListener('scroll', onTableScroll);
+        scrollEl.addEventListener('scroll', onTableScroll);
+      });
+    }
+
+    function onTableScroll(e) {
+      checkScroll(e.target);
+    }
+
+    // ==================== 配置摘要卡片拖动 ====================
+    (function initDraggable() {
+      const card = document.getElementById('config-summary');
+      if (!card) return;
+      let isDown = false, isDrag = false, startX, startY, origLeft, origTop;
+      const THRESHOLD = 5; // 像素阈值，超过则判定为拖动
+
+      function startDrag(clientX, clientY) {
+        const rect = card.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        card.style.position = 'fixed';
+        card.style.left = origLeft + 'px';
+        card.style.top = origTop + 'px';
+        card.style.margin = '0';
+        card.style.zIndex = '1000';
+        card.style.cursor = 'grabbing';
+      }
+
+      function moveDrag(clientX, clientY) {
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+        card.style.left = (origLeft + dx) + 'px';
+        card.style.top = (origTop + dy) + 'px';
+      }
+
+      function endDrag() {
+        if (isDrag) {
+          window._justDragged = true;
+          setTimeout(() => { window._justDragged = false; }, 100);
+        }
+        isDown = false;
+        isDrag = false;
+        card.style.cursor = 'default';
+      }
+
+      card.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.fold-btn') || e.target.closest('.reconfig-btn')) return;
+        isDown = true;
+        isDrag = false;
+        startX = e.clientX;
+        startY = e.clientY;
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (!isDown) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (!isDrag && (Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD)) {
+          isDrag = true;
+          startDrag(startX, startY);
+        }
+        if (isDrag) {
+          moveDrag(e.clientX, e.clientY);
+          e.preventDefault();
+        }
+      });
+
+      document.addEventListener('mouseup', function() {
+        endDrag();
+      });
+
+      // 触摸支持
+      card.addEventListener('touchstart', function(e) {
+        if (e.target.closest('.fold-btn') || e.target.closest('.reconfig-btn')) return;
+        isDown = true;
+        isDrag = false;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+      }, { passive: true });
+
+      document.addEventListener('touchmove', function(e) {
+        if (!isDown) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        if (!isDrag && (Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD)) {
+          isDrag = true;
+          startDrag(startX, startY);
+        }
+        if (isDrag) {
+          moveDrag(touch.clientX, touch.clientY);
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      document.addEventListener('touchend', function() {
+        endDrag();
+      });
+    })();
+
+    // Toast 提示
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(11,43,92,0.95);color:#fff;padding:12px 28px;border-radius:10px;font-size:0.875rem;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2000);
+      setTimeout(() => t.remove(), 2300);
+    }
+  </script>
+</body>
+</html>

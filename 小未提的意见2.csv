@@ -1,0 +1,4 @@
+﻿#,问题,位置,说明
+**10**,**`fineTune` 与 `step5` 循环叠加**,步骤五,`step5` 10 轮 × `fineTune` 10 轮 = 最多 100 轮。通常很快收敛，但极端场景可能慢。建议 `fineTune` 改为 `MAX_FINE_TUNE = 5`。
+**11**,**`adjustFixedConfigs` 兜底策略激进**,步骤三,"移除所有 FL 固定配置后仍为负就报错。但实际可能需要减少产业大厦面积（如果它是固定产品中最大的）。不过需求文档中已列为""剩余待确认问题""。"
+**12**,**`typeSideMap` 在 `step4` 中重建**,步骤四,`step4` 中 `typeSideMap = {}` 重新创建，但 `step3` 传入的 `typeSideMap` 可能已更新。如果 `step3` 的 `typeSideMap` 有自定义映射（如用户手动调整），`step4` 会覆盖。建议 `step4` 接收并更新传入的 `typeSideMap` 而不是重建。
