@@ -2391,16 +2391,17 @@
           <div id="load-chart" class="load-chart-container"></div>
         </div>`;
 
-      const xNames = ['首层', '二层', '标准层', '顶层'];
+      const xNames = ['首层', '二层', '标准层及以上'];
       const yNames = rows.map(r => r.name);
       const chartHeight = Math.max(320, rows.length * 80);
       document.getElementById('load-chart').style.height = chartHeight + 'px';
 
       const data = [];
       rows.forEach((r, y) => {
-        [r.first, r.second, r.standard, r.top].forEach((v, x) => {
-          if (v > 0) data.push([x, y, v]);
-        });
+        if (r.first > 0) data.push([0, y, r.first]);
+        if (r.second > 0) data.push([1, y, r.second]);
+        const upperLoad = r.standard || r.top;
+        if (upperLoad > 0) data.push([2, y, upperLoad]);
       });
 
       if (analysisLoadChart) analysisLoadChart.dispose();
