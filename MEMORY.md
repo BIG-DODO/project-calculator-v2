@@ -1938,3 +1938,9 @@ git config --global --unset https.proxy
   - 自定义 renderItem 绘制矩形+标签，按像素精确控制位置，避免多 stack 导致的错开/错位。
   - tooltip 按 group 展示主体/火车头/普通产品信息。
 - 荷载图：borderWidth 数组不被 heatmap 支持，改为 yAxis.splitLine（#e2e8f0, 8px）实现类型间分隔；itemStyle.borderWidth 设为 0，同类型荷载单元格左右贴靠。
+
+- 2026-07-13 20:05 用户要求先 memory，然后进行测试。当前待验证内容：
+  - 层高图 custom series 实现效果（轻钢主体/火车头贴靠、普通产品类别间距、无错开）。
+  - 产品荷载分布图 splitLine 分隔效果（类型间有缝、类型内单元格贴靠）。
+  - 全部分析视图产品排序：产业大厦→分层厂房→分栋厂房→轻钢厂房→配套宿舍→配套楼。
+  - 产品户型建议页竖向单列+点击放大。
