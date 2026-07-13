@@ -1916,3 +1916,9 @@ git config --global --unset https.proxy
   - 图片添加 cursor: zoom-in，点击调用 openLayoutImage(src) 全屏放大查看。
   - 新增 .layout-overlay 遮罩，支持点击遮罩/关闭按钮/ESC 键退出。
   - 三表联动及后续任务按用户要求暂停，等待后续交待。
+
+- 2026-07-13 19:10 层高图重构：
+  - 轻钢改为单类别内双堆叠柱（stack: ls-main / ls-train），主体与火车头并排贴靠。
+  - 普通产品仍使用 stack: normal，类别之间保留默认间距。
+  - barGap 设为 0%，仅影响同一类别内的多个 stack；barCategoryGap 恢复默认，避免类别贴邻。
+  - tooltip 按 stack 分组展示主体/火车头各自的层高与总高。
