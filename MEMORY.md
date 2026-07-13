@@ -1922,3 +1922,12 @@ git config --global --unset https.proxy
   - 普通产品仍使用 stack: normal，类别之间保留默认间距。
   - barGap 设为 0%，仅影响同一类别内的多个 stack；barCategoryGap 恢复默认，避免类别贴邻。
   - tooltip 按 stack 分组展示主体/火车头各自的层高与总高。
+
+- 2026-07-13 19:35 产品排序与荷载图优化：
+  - 新增全局 PRODUCT_ORDER：产业大厦 → 分层厂房 → 分栋厂房 → 轻钢厂房 → 配套宿舍 → 配套楼。
+  - result.products 在生成后统一排序，产品配置一览/详表、四大分析视图均按此顺序展示。
+  - 产品荷载分布图（heatmap）：
+    - y 轴按产品类型排序。
+    - itemStyle.borderWidth 改为 [6, 0, 6, 0]，仅保留上下间距（类型之间分隔），左右单元格贴靠。
+    - borderColor 改为 #f1f5f9，形成可见行间距。
+    - 移除 x/y 轴 splitArea，避免与分析卡片背景冲突。

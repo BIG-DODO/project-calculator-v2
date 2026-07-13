@@ -1616,6 +1616,9 @@
         }
       });
 
+      // 统一产品排序（产业大厦→分层→分栋→轻钢→配套宿舍→配套楼）
+      result.products.sort((a, b) => sortByProductType(a.type, b.type));
+
       window.configResult = result;
 
       // 切换视图
@@ -1960,6 +1963,12 @@
     let analysisHeightChart = null;
     let analysisLoadChart = null;
 
+    // 全部分析视图统一产品排序
+    const PRODUCT_ORDER = ['产业大厦', '分层厂房', '分栋厂房', '轻钢厂房', '配套宿舍', '配套楼'];
+    function sortByProductType(a, b) {
+      return PRODUCT_ORDER.indexOf(a) - PRODUCT_ORDER.indexOf(b);
+    }
+
     function switchAnalysisMode(mode) {
       analysisMode = mode;
       document.querySelectorAll('#analysis-area-toggle .toggle-btn').forEach(btn => {
@@ -1983,7 +1992,7 @@
         typeData[p.type].count += p.count;
       });
 
-      const types = Object.keys(typeData);
+      const types = Object.keys(typeData).sort(sortByProductType);
       const colors = ['#0B2B5C', '#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE'];
       const colorsLight = ['#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE', '#E0F2FE'];
       const areaLabel = analysisMode === 'cap' ? '计容面积' : '建筑面积';
@@ -2022,7 +2031,7 @@
         });
       });
       const segTypesAll = Object.keys(segmentTypeData);
-      const typeOrder = ['产业大厦', '分栋厂房', '分层厂房', '轻钢厂房'];
+      const typeOrder = PRODUCT_ORDER;
       const segTypes = typeOrder.filter(t => segTypesAll.includes(t));
       const segBases = [...new Set(segTypes.reduce((arr, t) => arr.concat(Object.keys(segmentTypeData[t].segments).map(Number)), []))].sort((a, b) => a - b);
       const baseColorMap = {};
@@ -2257,7 +2266,9 @@
       });
 
       const rows = [];
-      Object.values(groups).forEach(g => {
+      Object.values(groups)
+        .sort((a, b) => sortByProductType(a.type, b.type) || a.floors - b.floors)
+        .forEach(g => {
         const p = g.product;
         const floors = g.floors;
         const baseName = floors + 'F' + p.type;
@@ -2448,16 +2459,18 @@
           if (!groups[key]) groups[key] = { type: p.type, floors: displayFloors, product: p };
         });
 
-      const rows = Object.values(groups).map(g => {
-        const parsed = parseLoad(g.product.load);
-        return {
-          name: g.floors + 'F' + g.type,
-          first: parsed.first,
-          second: parsed.second,
-          standard: parsed.standard,
-          top: parsed.standard || 0
-        };
-      });
+      const rows = Object.values(groups)
+        .sort((a, b) => sortByProductType(a.type, b.type) || a.floors - b.floors)
+        .map(g => {
+          const parsed = parseLoad(g.product.load);
+          return {
+            name: g.floors + 'F' + g.type,
+            first: parsed.first,
+            second: parsed.second,
+            standard: parsed.standard,
+            top: parsed.standard || 0
+          };
+        });
 
       if (rows.length === 0) {
         container.innerHTML = `
@@ -2506,8 +2519,8 @@
           }
         },
         grid: { left: '3%', right: '8%', bottom: '15%', top: '10%', containLabel: true },
-        xAxis: { type: 'category', data: xNames, axisLabel: { fontSize: 12 }, splitArea: { show: true } },
-        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, splitArea: { show: true }, inverse: true },
+        xAxis: { type: 'category', data: xNames, axisLabel: { fontSize: 12 } },
+        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, inverse: true },
         visualMap: {
           min: 0,
           max: 2000,
@@ -2531,8 +2544,8 @@
           type: 'heatmap',
           data: data,
           itemStyle: {
-            borderColor: '#fff',
-            borderWidth: 2,
+            borderColor: '#f1f5f9',
+            borderWidth: [6, 0, 6, 0],
             borderRadius: 4
           },
           label: {
@@ -2562,7 +2575,7 @@
         '配套楼': 'images/layouts/配套楼.png'
       };
 
-      const selectedTypes = [...new Set(result.products.map(p => p.type))];
+      const selectedTypes = [...new Set(result.products.map(p => p.type))].sort(sortByProductType);
       const items = selectedTypes
         .filter(type => layoutMap[type])
         .map(type => `
