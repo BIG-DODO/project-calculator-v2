@@ -2203,6 +2203,16 @@
         document.getElementById('view-' + viewId).classList.add('active');
         // 切换到结果视图时显示配置摘要
         document.getElementById('config-summary').style.display = 'block';
+
+        // 产品配置分析图表在 display:none 中初始化时尺寸为 0，视图可见后延迟重绘
+        if (viewId === 'chart-analysis') {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              if (analysisPieChart) analysisPieChart.resize();
+              if (analysisBarChart) analysisBarChart.resize();
+            }, 80);
+          });
+        }
       }
       updateSidebarActive(viewId);
     }
