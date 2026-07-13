@@ -796,13 +796,53 @@
   }
 
   /* 产品户型建议画廊 */
-  .layout-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .layout-card { background: #fff; border-radius: var(--radius-sm); border: 1px solid var(--neutral-200); overflow: hidden; box-shadow: 0 2px 8px rgba(11,43,92,0.04); }
+  .layout-gallery { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .layout-card { width: 100%; max-width: 900px; background: #fff; border-radius: var(--radius-sm); border: 1px solid var(--neutral-200); overflow: hidden; box-shadow: 0 2px 8px rgba(11,43,92,0.04); }
   .layout-title { padding: 12px 16px; font-size: 0.85rem; font-weight: 600; color: var(--neutral-800); background: var(--neutral-50); border-bottom: 1px solid var(--neutral-200); }
-  .layout-img { width: 100%; height: auto; display: block; }
+  .layout-img { width: 100%; height: auto; display: block; cursor: zoom-in; }
   .layout-error { padding: 40px 16px; text-align: center; color: var(--neutral-400); font-size: 0.8rem; }
+
+  /* 户型图片放大遮罩 */
+  .layout-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    cursor: zoom-out;
+    padding: 20px;
+    animation: fadeIn 0.2s ease;
+  }
+  .layout-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    height: auto;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    cursor: default;
+  }
+  .layout-overlay-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .layout-overlay-close:hover { background: rgba(255,255,255,0.3); }
   @media (max-width: 768px) {
-    .layout-gallery { grid-template-columns: 1fr; }
+    .layout-card { max-width: 100%; }
   }
 
   .analysis-card-name { font-size: 0.85rem; font-weight: 600; color: var(--neutral-800); margin-bottom: 6px; }
@@ -2490,7 +2530,7 @@
         .map(type => `
           <div class="layout-card">
             <div class="layout-title">${type}</div>
-            <img src="${layoutMap[type]}" alt="${type}平面意向" class="layout-img" onerror="this.parentElement.innerHTML='<div class=\\'layout-title\\'>${type}</div><div class=\\'layout-error\\'>图片加载失败</div>'" />
+            <img src="${layoutMap[type]}" alt="${type}平面意向" class="layout-img" onclick="openLayoutImage(this.src)" onerror="this.parentElement.innerHTML='<div class=\\'layout-title\\'>${type}</div><div class=\\'layout-error\\'>图片加载失败</div>'" />
           </div>
         `).join('');
 
@@ -2501,6 +2541,25 @@
             ${items || '<div class="chart-placeholder"><div class="icon">🏠</div><div>当前配置无对应户型意向图</div></div>'}
           </div>
         </div>`;
+    }
+
+    function openLayoutImage(src) {
+      if (!src) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'layout-overlay';
+      overlay.innerHTML = '<div class="layout-overlay-close">&times;</div><img src="' + src + '" alt="放大查看" />';
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay || e.target.classList.contains('layout-overlay-close')) {
+          overlay.remove();
+        }
+      });
+      document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+          overlay.remove();
+          document.removeEventListener('keydown', escHandler);
+        }
+      });
+      document.body.appendChild(overlay);
     }
 
     // ==================== 综合指标一览（基于产品配置重新计算） ====================

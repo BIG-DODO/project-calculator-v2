@@ -1908,3 +1908,11 @@ git config --global --unset https.proxy
 ### 技术备注
 - GitHub Pages v2 remote 推送代理：`HTTPS_PROXY=socks5://127.0.0.1:3568`。
 - 当前最新提交前状态：`ab794a1 fix: 轻钢双柱贴合并隐藏重复标签`。
+
+- 2026-07-13 18:35 修复：层高图 `barCategoryGap: '0%'` 导致所有产品类别柱子贴邻，已删除该属性，保留 `barWidth: '100%'`，仅让轻钢同一类别内的主体+火车头贴靠，类别之间恢复默认间距。
+
+- 2026-07-13 18:50 户型建议页优化：
+  - 布局改为竖向单列（flex-direction: column），卡片宽度 100% / max-width 900px，自适应图片大小。
+  - 图片添加 cursor: zoom-in，点击调用 openLayoutImage(src) 全屏放大查看。
+  - 新增 .layout-overlay 遮罩，支持点击遮罩/关闭按钮/ESC 键退出。
+  - 三表联动及后续任务按用户要求暂停，等待后续交待。
