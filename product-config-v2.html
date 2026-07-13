@@ -758,9 +758,25 @@
   .analysis-chart { width: 100%; height: 280px; }
 
   .analysis-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-  .analysis-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 4px 12px rgba(11,43,92,0.06); transition: transform 0.2s, box-shadow 0.2s; }
-  .analysis-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(11,43,92,0.1); }
+  .analysis-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 4px 12px rgba(11,43,92,0.06); transition: transform 0.3s, box-shadow 0.3s; transform-style: preserve-3d; }
+  .analysis-card:hover { transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) translateZ(8px); box-shadow: 0 12px 28px rgba(11,43,92,0.14); }
   .analysis-card-icon { width: 36px; height: 36px; border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-bottom: 10px; }
+
+  /* 立体卡片效果 */
+  .analysis-3d-card {
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(30,78,140,0.08);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(11,43,92,0.10), 0 2px 6px rgba(11,43,92,0.04);
+    transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.35s;
+    transform-style: preserve-3d;
+  }
+  .analysis-3d-card:hover {
+    transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) translateZ(12px);
+    box-shadow: 0 18px 40px rgba(11,43,92,0.16), 0 6px 12px rgba(11,43,92,0.06);
+  }
+  .analysis-area-chart { grid-column: 1 / -1; }
+  @media (max-width: 900px) { .analysis-area-chart { grid-column: auto; } }
   .analysis-card-name { font-size: 0.85rem; font-weight: 600; color: var(--neutral-800); margin-bottom: 6px; }
   .analysis-card-pct { font-size: 1.4rem; font-weight: 700; color: var(--brand-primary); margin-bottom: 4px; }
   .analysis-card-label { font-size: 0.7rem; color: var(--neutral-500); margin-bottom: 2px; }
@@ -1875,6 +1891,7 @@
     let analysisMode = 'cap'; // 'cap' 计容面积，'area' 建筑面积
     let analysisPieChart = null;
     let analysisBarChart = null;
+    let analysisAreaChart = null;
 
     function switchAnalysisMode(mode) {
       analysisMode = mode;
@@ -1901,6 +1918,7 @@
 
       const types = Object.keys(typeData);
       const colors = ['#0B2B5C', '#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE'];
+      const colorsLight = ['#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE', '#E0F2FE'];
       const areaLabel = analysisMode === 'cap' ? '计容面积' : '建筑面积';
 
       // 环形图数据
@@ -1913,22 +1931,55 @@
       // 柱状图数据
       const barData = types.map((type, idx) => ({
         name: type,
-        value: typeData[type].count,
-        itemStyle: { color: colors[idx % colors.length] }
+        value: typeData[type].count
       }));
+
+      // 面积段分布数据：仅厂房类 + 产业大厦
+      const SEGMENT_TYPES = ['light-steel', 'split', 'layer', 'tower'];
+      const segmentTypeData = {};
+      result.products.forEach(p => {
+        if (!SEGMENT_TYPES.includes(p.id)) return;
+        if (!segmentTypeData[p.type]) {
+          segmentTypeData[p.type] = { type: p.type, total: 0, segments: {} };
+        }
+        const units = p.components || [p];
+        units.forEach(u => {
+          const b = u.base;
+          const unitVal = analysisMode === 'cap' ? u.unitCap : u.unitArea;
+          const segTotal = unitVal * p.count;
+          const seg = segmentTypeData[p.type].segments[b] || (segmentTypeData[p.type].segments[b] = { base: b, count: 0, total: 0 });
+          seg.count += p.count;
+          seg.total += segTotal;
+          segmentTypeData[p.type].total += segTotal;
+        });
+      });
+      const segTypesAll = Object.keys(segmentTypeData);
+      const typeOrder = ['产业大厦', '分栋厂房', '分层厂房', '轻钢厂房'];
+      const segTypes = typeOrder.filter(t => segTypesAll.includes(t));
+      const segBases = [...new Set(segTypes.reduce((arr, t) => arr.concat(Object.keys(segmentTypeData[t].segments).map(Number)), []))].sort((a, b) => a - b);
+      const baseColorMap = {};
+      segBases.forEach((b, i) => {
+        baseColorMap[b] = colors[i % colors.length];
+      });
 
       // 渲染产品配置分析容器
       const container = document.getElementById('chart-analysis-content');
+      const hasAreaSegment = segTypes.length > 0;
       container.innerHTML = `
         <div class="analysis-grid">
-          <div class="analysis-chart-card">
+          <div class="analysis-chart-card analysis-3d-card">
             <div class="analysis-chart-title">🥧 产品业态分布（按${areaLabel}）</div>
             <div id="analysis-pie-chart" class="analysis-chart"></div>
           </div>
-          <div class="analysis-chart-card">
+          <div class="analysis-chart-card analysis-3d-card">
             <div class="analysis-chart-title">📊 产品配置数量（按栋数）</div>
             <div id="analysis-bar-chart" class="analysis-chart"></div>
           </div>
+          ${hasAreaSegment ? `
+          <div class="analysis-chart-card analysis-3d-card analysis-area-chart">
+            <div class="analysis-chart-title">📐 面积段分布（按${areaLabel}）</div>
+            <div id="analysis-area-chart" class="analysis-chart"></div>
+          </div>` : ''}
         </div>
         <div class="analysis-cards" id="analysis-cards"></div>
       `;
@@ -1950,6 +2001,11 @@
           avoidLabelOverlap: true,
           label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
           labelLine: { show: true },
+          itemStyle: {
+            shadowBlur: 12,
+            shadowColor: 'rgba(0,0,0,0.18)',
+            shadowOffsetY: 6
+          },
           data: pieData
         }]
       });
@@ -1968,11 +2024,87 @@
         series: [{
           name: '栋数',
           type: 'bar',
-          barWidth: '50%',
+          barWidth: '45%',
           data: barData,
+          itemStyle: {
+            color: params => new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: colorsLight[params.dataIndex % colorsLight.length] },
+              { offset: 1, color: colors[params.dataIndex % colors.length] }
+            ]),
+            borderRadius: [4, 4, 0, 0],
+            shadowBlur: 8,
+            shadowColor: 'rgba(0,0,0,0.2)',
+            shadowOffsetY: 4
+          },
           label: { show: true, position: 'top', formatter: '{c}栋', fontSize: 11 }
         }]
       });
+
+      // 初始化或更新面积段分布图
+      if (hasAreaSegment) {
+        const areaDom = document.getElementById('analysis-area-chart');
+        if (analysisAreaChart) {
+          analysisAreaChart.dispose();
+        }
+        analysisAreaChart = echarts.init(areaDom);
+        const areaSeries = segBases.map((base, idx) => {
+          const c = baseColorMap[base];
+          const cLight = colorsLight[idx % colorsLight.length];
+          return {
+            name: base + '㎡',
+            type: 'bar',
+            stack: 'total',
+            emphasis: { focus: 'series' },
+            barWidth: '55%',
+            itemStyle: {
+              borderRadius: [0, 4, 4, 0],
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: cLight },
+                { offset: 1, color: c }
+              ]),
+              shadowBlur: 6,
+              shadowColor: 'rgba(0,0,0,0.18)',
+              shadowOffsetY: 3
+            },
+            label: {
+              show: true,
+              position: 'insideRight',
+              color: '#fff',
+              fontSize: 10,
+              formatter: p => p.data.count > 0 ? p.data.count + '栋' : ''
+            },
+            data: segTypes.map(type => {
+              const seg = segmentTypeData[type].segments[base];
+              return seg ? { value: seg.total, count: seg.count, base: base } : { value: 0, count: 0, base: base };
+            })
+          };
+        });
+        analysisAreaChart.setOption({
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: function(params) {
+              const type = params[0].axisValue;
+              const t = segmentTypeData[type];
+              let html = '<div style="font-weight:600;margin-bottom:4px;">' + type + '</div>';
+              params.forEach(p => {
+                if (p.value <= 0) return;
+                const b = parseInt(p.seriesName, 10);
+                const seg = t.segments[b];
+                const share = t.total > 0 ? (p.value / t.total * 100).toFixed(1) : '0.0';
+                html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + b + '㎡：' + seg.count + '栋 / ' + fmtInt(p.value) + '㎡（' + share + '%）</span></div>';
+              });
+              html += '<div style="margin-top:6px;font-weight:600;">小计：' + fmtInt(t.total) + '㎡</div>';
+              return html;
+            }
+          },
+          legend: { top: 0, left: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
+          grid: { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true },
+          xAxis: { type: 'value', name: areaLabel + '(㎡)', axisLabel: { fontSize: 11 } },
+          yAxis: { type: 'category', data: segTypes, axisLabel: { fontSize: 12 }, inverse: true },
+          series: areaSeries
+        });
+      }
 
       // 渲染指标卡片
       const icons = {
@@ -2006,6 +2138,7 @@
       const resizeCharts = () => {
         if (analysisPieChart) analysisPieChart.resize();
         if (analysisBarChart) analysisBarChart.resize();
+        if (analysisAreaChart) analysisAreaChart.resize();
       };
       window.removeEventListener('resize', resizeCharts);
       window.addEventListener('resize', resizeCharts);
@@ -2210,6 +2343,7 @@
             setTimeout(() => {
               if (analysisPieChart) analysisPieChart.resize();
               if (analysisBarChart) analysisBarChart.resize();
+              if (analysisAreaChart) analysisAreaChart.resize();
             }, 80);
           });
         }
