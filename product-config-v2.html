@@ -744,6 +744,27 @@
       .mobile-example-btn { display: block !important; }
       .config-right > .btn-secondary { display: none !important; }
     }
+
+  /* ---------- 产品配置分析 ---------- */
+  .toggle-group { display: inline-flex; background: var(--neutral-100); border-radius: var(--radius-sm); padding: 4px; gap: 4px; }
+  .toggle-btn { border: none; background: transparent; color: var(--neutral-600); padding: 6px 14px; border-radius: var(--radius-xs); font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+  .toggle-btn.active { background: #fff; color: var(--brand-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-weight: 600; }
+  .toggle-btn:hover:not(.active) { color: var(--neutral-900); }
+
+  .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .analysis-grid { grid-template-columns: 1fr; } }
+  .analysis-chart-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 2px 8px rgba(11,43,92,0.04); }
+  .analysis-chart-title { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); margin-bottom: 12px; }
+  .analysis-chart { width: 100%; height: 280px; }
+
+  .analysis-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .analysis-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 4px 12px rgba(11,43,92,0.06); transition: transform 0.2s, box-shadow 0.2s; }
+  .analysis-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(11,43,92,0.1); }
+  .analysis-card-icon { width: 36px; height: 36px; border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-bottom: 10px; }
+  .analysis-card-name { font-size: 0.85rem; font-weight: 600; color: var(--neutral-800); margin-bottom: 6px; }
+  .analysis-card-pct { font-size: 1.4rem; font-weight: 700; color: var(--brand-primary); margin-bottom: 4px; }
+  .analysis-card-label { font-size: 0.7rem; color: var(--neutral-500); margin-bottom: 2px; }
+  .analysis-card-value { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); }
   </style>
 </head>
 <body>
@@ -801,11 +822,8 @@
       <div class="nav-group">
         <div class="nav-group-title" onclick="toggleNavGroup(this)">产品分析</div>
         <div class="nav-items">
-          <div class="nav-item" data-view="chart-type" onclick="switchView('chart-type')">
-            <span class="icon">🥧</span> 产品业态分布
-          </div>
-          <div class="nav-item" data-view="chart-count" onclick="switchView('chart-count')">
-            <span class="icon">📊</span> 产品配置数量
+          <div class="nav-item" data-view="chart-analysis" onclick="switchView('chart-analysis')">
+            <span class="icon">📊</span> 产品配置分析
           </div>
           <div class="nav-item" data-view="chart-area" onclick="switchView('chart-area')">
             <span class="icon">📐</span> 产品面积段分布
@@ -946,8 +964,16 @@
 
       <!-- 其他视图占位 -->
       <div class="view" id="view-config-overview"><div class="content-header">📋 产品配置一览</div><div id="config-overview-content"></div></div>
-      <div class="view" id="view-chart-type"><div class="content-header">🥧 产品业态分布</div><div id="chart-type-content"></div></div>
-      <div class="view" id="view-chart-count"><div class="content-header">📊 产品配置数量</div><div id="chart-count-content"></div></div>
+      <div class="view" id="view-chart-analysis">
+        <div class="content-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <span>📊 产品配置分析</span>
+          <div class="toggle-group" id="analysis-area-toggle">
+            <button class="toggle-btn active" data-mode="cap" onclick="switchAnalysisMode('cap')">计容面积</button>
+            <button class="toggle-btn" data-mode="area" onclick="switchAnalysisMode('area')">建筑面积</button>
+          </div>
+        </div>
+        <div id="chart-analysis-content"></div>
+      </div>
       <div class="view" id="view-chart-area"><div class="content-header">📐 产品面积段分布</div><div id="chart-area-content"></div></div>
       <div class="view" id="view-chart-load"><div class="content-header">🏋️ 产品荷载分布</div><div id="chart-load-content"></div></div>
       <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
@@ -968,6 +994,7 @@
 
   <script src="product-config-algorithm-v2.js?v=20260710-2"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <script>
     // ==================== 全局状态 ====================
     let projectData = null;
@@ -1845,59 +1872,143 @@
       updateSidebarActive('input');
     }
 
+    let analysisMode = 'cap'; // 'cap' 计容面积，'area' 建筑面积
+    let analysisPieChart = null;
+    let analysisBarChart = null;
+
+    function switchAnalysisMode(mode) {
+      analysisMode = mode;
+      document.querySelectorAll('#analysis-area-toggle .toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+      if (window.configResult) {
+        renderCharts(window.configResult);
+      }
+    }
+
     // ==================== 图表渲染 ====================
     function renderCharts(result) {
-      // 业态分布（简化的饼图用色块表示）
-      const typeMap = {};
+      // 按产品类型聚合数据
+      const typeData = {};
       result.products.forEach(p => {
-        if (!typeMap[p.type]) typeMap[p.type] = 0;
-        typeMap[p.type] += p.totalCap;
+        if (!typeData[p.type]) {
+          typeData[p.type] = { type: p.type, cap: 0, area: 0, count: 0 };
+        }
+        typeData[p.type].cap += p.totalCap;
+        typeData[p.type].area += p.totalArea;
+        typeData[p.type].count += p.count;
       });
-      const colors = ['#0B2B5C', '#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE'];
-      const totalCap = result.totalCap;
-      let pieHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">';
-      let i = 0;
-      for (const [type, cap] of Object.entries(typeMap)) {
-        const pct = (cap / totalCap * 100).toFixed(1);
-        pieHtml += `<div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;">
-          <span style="width:12px;height:12px;border-radius:3px;background:${colors[i % colors.length]};"></span>
-          ${type} ${pct}%
-        </div>`;
-        i++;
-      }
-      pieHtml += '</div>';
-      pieHtml += '<div style="display:flex;height:32px;border-radius:8px;overflow:hidden;">';
-      i = 0;
-      for (const [type, cap] of Object.entries(typeMap)) {
-        const pct = (cap / totalCap * 100);
-        pieHtml += `<div style="width:${pct}%;background:${colors[i % colors.length]};" title="${type} ${pct.toFixed(1)}%"></div>`;
-        i++;
-      }
-      pieHtml += '</div>';
-      document.getElementById('chart-type-content').innerHTML = `<div class="card">${pieHtml}</div>`;
 
-      // 配置数量（柱状图用div模拟）
-      const countMap = {};
-      result.products.forEach(p => {
-        if (!countMap[p.type]) countMap[p.type] = 0;
-        countMap[p.type] += p.count;
-      });
-      const maxCount = Math.max(...Object.values(countMap));
-      let barHtml = '<div class="card">';
-      for (const [type, count] of Object.entries(countMap)) {
-        const pct = (count / maxCount * 100);
-        barHtml += `
-          <div style="display:flex;align-items:center;margin-bottom:10px;gap:10px;">
-            <div style="width:80px;font-size:0.8rem;text-align:right;flex-shrink:0;">${type}</div>
-            <div style="flex:1;background:var(--neutral-100);border-radius:4px;height:28px;overflow:hidden;">
-              <div style="width:${pct}%;background:var(--brand-gradient);height:100%;border-radius:4px;display:flex;align-items:center;padding-left:10px;">
-                <span style="color:#fff;font-size:0.75rem;font-weight:600;">${count}栋</span>
-              </div>
-            </div>
-          </div>`;
+      const types = Object.keys(typeData);
+      const colors = ['#0B2B5C', '#1E4E8C', '#3B8DD8', '#60A5FA', '#93C5FD', '#BFDBFE'];
+      const areaLabel = analysisMode === 'cap' ? '计容面积' : '建筑面积';
+
+      // 环形图数据
+      const pieData = types.map((type, idx) => ({
+        name: type,
+        value: analysisMode === 'cap' ? typeData[type].cap : typeData[type].area,
+        itemStyle: { color: colors[idx % colors.length] }
+      }));
+
+      // 柱状图数据
+      const barData = types.map((type, idx) => ({
+        name: type,
+        value: typeData[type].count,
+        itemStyle: { color: colors[idx % colors.length] }
+      }));
+
+      // 渲染产品配置分析容器
+      const container = document.getElementById('chart-analysis-content');
+      container.innerHTML = `
+        <div class="analysis-grid">
+          <div class="analysis-chart-card">
+            <div class="analysis-chart-title">🥧 产品业态分布（按${areaLabel}）</div>
+            <div id="analysis-pie-chart" class="analysis-chart"></div>
+          </div>
+          <div class="analysis-chart-card">
+            <div class="analysis-chart-title">📊 产品配置数量（按栋数）</div>
+            <div id="analysis-bar-chart" class="analysis-chart"></div>
+          </div>
+        </div>
+        <div class="analysis-cards" id="analysis-cards"></div>
+      `;
+
+      // 初始化或更新环形图
+      const pieDom = document.getElementById('analysis-pie-chart');
+      if (analysisPieChart) {
+        analysisPieChart.dispose();
       }
-      barHtml += '</div>';
-      document.getElementById('chart-count-content').innerHTML = barHtml;
+      analysisPieChart = echarts.init(pieDom);
+      analysisPieChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c}㎡ ({d}%)' },
+        legend: { bottom: 0, left: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
+        series: [{
+          name: areaLabel,
+          type: 'pie',
+          radius: ['40%', '70%'],
+          center: ['50%', '45%'],
+          avoidLabelOverlap: true,
+          label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
+          labelLine: { show: true },
+          data: pieData
+        }]
+      });
+
+      // 初始化或更新柱状图
+      const barDom = document.getElementById('analysis-bar-chart');
+      if (analysisBarChart) {
+        analysisBarChart.dispose();
+      }
+      analysisBarChart = echarts.init(barDom);
+      analysisBarChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c}栋' },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+        xAxis: { type: 'category', data: types, axisLabel: { fontSize: 11, interval: 0, rotate: types.length > 5 ? 30 : 0 } },
+        yAxis: { type: 'value', name: '栋数', axisLabel: { fontSize: 11 } },
+        series: [{
+          name: '栋数',
+          type: 'bar',
+          barWidth: '50%',
+          data: barData,
+          label: { show: true, position: 'top', formatter: '{c}栋', fontSize: 11 }
+        }]
+      });
+
+      // 渲染指标卡片
+      const icons = {
+        '产业大厦': '🏢',
+        '配套宿舍': '🏠',
+        '配套楼': '🏣',
+        '轻钢厂房': '🏭',
+        '分栋厂房': '🏘️',
+        '分层厂房': '🏬'
+      };
+      const totalValue = analysisMode === 'cap' ? result.totalCap : result.totalArea;
+      const cardsHtml = types.map((type, idx) => {
+        const d = typeData[type];
+        const displayArea = analysisMode === 'cap' ? d.cap : d.area;
+        const displayPct = totalValue > 0 ? (displayArea / totalValue * 100).toFixed(1) : '0.0';
+        return `
+          <div class="analysis-card">
+            <div class="analysis-card-icon" style="background:${colors[idx % colors.length]}15;color:${colors[idx % colors.length]};">${icons[type] || '📦'}</div>
+            <div class="analysis-card-name">${type}</div>
+            <div class="analysis-card-pct">${displayPct}%</div>
+            <div class="analysis-card-label">${areaLabel}</div>
+            <div class="analysis-card-value">${fmtInt(displayArea)}㎡</div>
+            <div class="analysis-card-label" style="margin-top:8px;">配置数量</div>
+            <div class="analysis-card-value">${d.count}栋</div>
+          </div>
+        `;
+      }).join('');
+      document.getElementById('analysis-cards').innerHTML = cardsHtml;
+
+      // 响应式
+      const resizeCharts = () => {
+        if (analysisPieChart) analysisPieChart.resize();
+        if (analysisBarChart) analysisBarChart.resize();
+      };
+      window.removeEventListener('resize', resizeCharts);
+      window.addEventListener('resize', resizeCharts);
 
       // 其他图表占位
       ['chart-area', 'chart-load', 'chart-height', 'chart-elevator', 'chart-layout'].forEach(id => {
