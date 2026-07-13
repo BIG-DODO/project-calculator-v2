@@ -1931,3 +1931,10 @@ git config --global --unset https.proxy
     - itemStyle.borderWidth 改为 [6, 0, 6, 0]，仅保留上下间距（类型之间分隔），左右单元格贴靠。
     - borderColor 改为 #f1f5f9，形成可见行间距。
     - 移除 x/y 轴 splitArea，避免与分析卡片背景冲突。
+
+- 2026-07-13 19:55 层高图改用 ECharts custom series：
+  - 普通产品：单柱 width 0.7，居中。
+  - 轻钢：同一类别内主体（xOffset -0.2, width 0.4）与火车头（xOffset +0.2, width 0.4）紧贴。
+  - 自定义 renderItem 绘制矩形+标签，按像素精确控制位置，避免多 stack 导致的错开/错位。
+  - tooltip 按 group 展示主体/火车头/普通产品信息。
+- 荷载图：borderWidth 数组不被 heatmap 支持，改为 yAxis.splitLine（#e2e8f0, 8px）实现类型间分隔；itemStyle.borderWidth 设为 0，同类型荷载单元格左右贴靠。

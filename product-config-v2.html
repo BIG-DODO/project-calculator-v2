@@ -2274,7 +2274,6 @@
         const baseName = floors + 'F' + p.type;
 
         if (p.id === 'light-steel') {
-          // 轻钢：一个类别内并排两个堆叠柱（主体 + 火车头）
           rows.push({
             name: baseName,
             isLightSteel: true,
@@ -2291,10 +2290,10 @@
           let upperCount = 0;
           if (actualFloors >= 3 && p.fl.second != null && Math.abs(p.fl.second - upperH) > 0.01) {
             second = p.fl.second;
-            upperCount = actualFloors - 2; // 标准层 + 顶层
+            upperCount = actualFloors - 2;
           } else {
             second = 0;
-            upperCount = actualFloors - 1; // 所有上层同高
+            upperCount = actualFloors - 1;
           }
           rows.push({
             name: baseName,
@@ -2311,64 +2310,102 @@
       if (analysisHeightChart) analysisHeightChart.dispose();
       analysisHeightChart = echarts.init(document.getElementById('height-chart'));
 
-      function makeSeries(name, stack, colorTop, colorBottom, dataFn) {
-        return {
-          name,
-          type: 'bar',
-          stack,
-          barWidth: '100%',
-          barGap: '0%',
-          data: rows.map((r, idx) => {
-            const d = dataFn(r);
-            if (!d || d.value <= 0) return { value: 0, stack, idx };
-            return { value: d.value, count: d.count, perFloor: d.perFloor, stack, idx };
-          }),
-          itemStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: colorTop },
-              { offset: 1, color: colorBottom }
-            ]),
-            shadowBlur: 4,
-            shadowColor: 'rgba(0,0,0,0.15)',
-            shadowOffsetY: 2
-          },
-          label: {
-            show: true,
-            position: 'inside',
-            color: '#fff',
-            fontSize: 10,
-            formatter: p => {
-              if (p.value <= 1.2) return '';
-              const d = p.data;
-              return d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
-            }
+      // 定义所有柱段：同一产品内贴靠，产品之间由类别间距隔开
+      const segmentDefs = {
+        '主体': { color: ['#1E4E8C', '#0B2B5C'], group: 'light-steel-main' },
+        '火车头首层': { color: ['#3B8DD8', '#1E4E8C'], group: 'light-steel-train' },
+        '火车头夹层': { color: ['#93C5FD', '#3B8DD8'], group: 'light-steel-train' },
+        '首层': { color: ['#3B8DD8', '#1E4E8C'], group: 'normal' },
+        '二层': { color: ['#60A5FA', '#3B8DD8'], group: 'normal' },
+        '标准层及以上': { color: ['#BFDBFE', '#60A5FA'], group: 'normal' }
+      };
+
+      const segmentRows = {
+        '主体': [], '火车头首层': [], '火车头夹层': [],
+        '首层': [], '二层': [], '标准层及以上': []
+      };
+
+      rows.forEach((r, idx) => {
+        if (r.isLightSteel) {
+          segmentRows['主体'].push({ idx, value: r.mainHeight, base: 0, xOffset: -0.2, width: 0.4, count: 1, perFloor: r.mainHeight });
+          segmentRows['火车头首层'].push({ idx, value: r.trainFirst, base: 0, xOffset: 0.2, width: 0.4, count: 1, perFloor: r.trainFirst });
+          segmentRows['火车头夹层'].push({ idx, value: r.trainUpper * r.trainUpperCount, base: r.trainFirst, xOffset: 0.2, width: 0.4, count: r.trainUpperCount, perFloor: r.trainUpper });
+        } else {
+          segmentRows['首层'].push({ idx, value: r.first, base: 0, xOffset: 0, width: 0.7, count: 1, perFloor: r.first });
+          if (r.second > 0) {
+            segmentRows['二层'].push({ idx, value: r.second, base: r.first, xOffset: 0, width: 0.7, count: 1, perFloor: r.second });
           }
-        };
+          segmentRows['标准层及以上'].push({ idx, value: r.upperHeight * r.upperCount, base: r.first + r.second, xOffset: 0, width: 0.7, count: r.upperCount, perFloor: r.upperHeight });
+        }
+      });
+
+      function getCatWidth(api, rowIdx) {
+        const center = api.coord([rowIdx, 0])[0];
+        if (rowIdx < names.length - 1) {
+          return api.coord([rowIdx + 1, 0])[0] - center;
+        }
+        return center - api.coord([rowIdx - 1, 0])[0];
       }
 
-      const series = [
-        // 轻钢主体
-        makeSeries('主体', 'ls-main', '#1E4E8C', '#0B2B5C', r =>
-          r.isLightSteel ? { value: r.mainHeight, count: 1, perFloor: r.mainHeight } : null
-        ),
-        // 轻钢火车头
-        makeSeries('火车头首层', 'ls-train', '#3B8DD8', '#1E4E8C', r =>
-          r.isLightSteel ? { value: r.trainFirst, count: 1, perFloor: r.trainFirst } : null
-        ),
-        makeSeries('火车头夹层', 'ls-train', '#93C5FD', '#3B8DD8', r =>
-          r.isLightSteel ? { value: r.trainUpper * r.trainUpperCount, count: r.trainUpperCount, perFloor: r.trainUpper } : null
-        ),
-        // 普通产品
-        makeSeries('首层', 'normal', '#3B8DD8', '#1E4E8C', r =>
-          !r.isLightSteel ? { value: r.first, count: 1, perFloor: r.first } : null
-        ),
-        makeSeries('二层', 'normal', '#60A5FA', '#3B8DD8', r =>
-          !r.isLightSteel && r.second > 0 ? { value: r.second, count: 1, perFloor: r.second } : null
-        ),
-        makeSeries('标准层及以上', 'normal', '#BFDBFE', '#60A5FA', r =>
-          !r.isLightSteel ? { value: r.upperHeight * r.upperCount, count: r.upperCount, perFloor: r.upperHeight } : null
-        )
-      ];
+      const series = Object.keys(segmentRows).map(name => {
+        const cfg = segmentDefs[name];
+        return {
+          name,
+          type: 'custom',
+          renderItem: function(params, api) {
+            const rowIdx = api.value(0);
+            const base = api.value(1);
+            const value = api.value(2);
+            if (value <= 0) return;
+            const xOffset = api.value(3);
+            const width = api.value(4);
+            const count = api.value(5);
+            const perFloor = api.value(6);
+
+            const catWidth = getCatWidth(api, rowIdx);
+            const xCenter = api.coord([rowIdx, 0])[0] + xOffset * catWidth;
+            const barW = width * catWidth;
+            const yTop = api.coord([rowIdx, base + value])[1];
+            const yBottom = api.coord([rowIdx, base])[1];
+            const h = yBottom - yTop;
+
+            const label = count > 1 ? perFloor + 'm×' + count : perFloor + 'm';
+            const showLabel = value > 1.2 && h > 14;
+
+            return {
+              type: 'group',
+              children: [
+                {
+                  type: 'rect',
+                  shape: { x: xCenter - barW / 2, y: yTop, width: barW, height: h },
+                  style: {
+                    fill: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                      { offset: 0, color: cfg.color[0] },
+                      { offset: 1, color: cfg.color[1] }
+                    ]),
+                    shadowBlur: 4,
+                    shadowColor: 'rgba(0,0,0,0.15)',
+                    shadowOffsetY: 2
+                  }
+                },
+                showLabel ? {
+                  type: 'text',
+                  style: {
+                    text: label,
+                    x: xCenter,
+                    y: yTop + h / 2,
+                    textAlign: 'center',
+                    textVerticalAlign: 'middle',
+                    fill: '#fff',
+                    fontSize: 10
+                  }
+                } : null
+              ].filter(Boolean)
+            };
+          },
+          data: segmentRows[name].map(r => [r.idx, r.base, r.value, r.xOffset, r.width, r.count, r.perFloor])
+        };
+      });
 
       analysisHeightChart.setOption({
         tooltip: {
@@ -2377,45 +2414,47 @@
           confine: true,
           extraCssText: 'max-width:90vw;white-space:normal;word-break:break-all;',
           formatter: function(params) {
-            const idx = params[0].data.idx;
+            if (!params.length) return '';
+            const idx = params[0].data[0];
             const r = rows[idx];
             let html = '<div style="font-weight:600;margin-bottom:4px;">' + r.name + '</div>';
 
-            // 按 stack 分组
-            const stacks = {};
+            const groups = {};
             params.forEach(p => {
-              if (p.value <= 0) return;
-              const stack = p.data.stack;
-              if (!stacks[stack]) stacks[stack] = [];
-              stacks[stack].push(p);
+              const value = p.data[2];
+              if (value <= 0) return;
+              const g = segmentDefs[p.seriesName].group;
+              if (!groups[g]) groups[g] = [];
+              groups[g].push(p);
             });
 
             if (r.isLightSteel) {
-              if (stacks['ls-main']) {
-                const total = stacks['ls-main'].reduce((s, p) => s + p.value, 0);
+              if (groups['light-steel-main']) {
+                const total = groups['light-steel-main'].reduce((s, p) => s + p.data[2], 0);
                 html += '<div style="font-weight:600;margin-top:4px;">主体</div>';
-                stacks['ls-main'].forEach(p => {
-                  const d = p.data;
+                groups['light-steel-main'].forEach(p => {
+                  const d = { count: p.data[5], perFloor: p.data[6] };
                   const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
                   html += '<div style="display:flex;align-items:center;gap:6px;padding-left:8px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
                 });
                 html += '<div style="padding-left:8px;font-size:12px;color:#666;">总高：' + fmtNum(total, 1) + 'm</div>';
               }
-              if (stacks['ls-train']) {
-                const total = stacks['ls-train'].reduce((s, p) => s + p.value, 0);
+              if (groups['light-steel-train']) {
+                const total = groups['light-steel-train'].reduce((s, p) => s + p.data[2], 0);
                 html += '<div style="font-weight:600;margin-top:4px;">火车头</div>';
-                stacks['ls-train'].forEach(p => {
-                  const d = p.data;
+                groups['light-steel-train'].forEach(p => {
+                  const d = { count: p.data[5], perFloor: p.data[6] };
                   const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
                   html += '<div style="display:flex;align-items:center;gap:6px;padding-left:8px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
                 });
                 html += '<div style="padding-left:8px;font-size:12px;color:#666;">总高：' + fmtNum(total, 1) + 'm</div>';
               }
             } else {
-              const total = (stacks['normal'] || []).reduce((s, p) => s + p.value, 0);
+              const total = (groups['normal'] || []).reduce((s, p) => s + p.data[2], 0);
               params.forEach(p => {
-                if (p.value <= 0) return;
-                const d = p.data;
+                const value = p.data[2];
+                if (value <= 0) return;
+                const d = { count: p.data[5], perFloor: p.data[6] };
                 const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
                 html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
               });
@@ -2519,8 +2558,8 @@
           }
         },
         grid: { left: '3%', right: '8%', bottom: '15%', top: '10%', containLabel: true },
-        xAxis: { type: 'category', data: xNames, axisLabel: { fontSize: 12 } },
-        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, inverse: true },
+        xAxis: { type: 'category', data: xNames, axisLabel: { fontSize: 12 }, splitLine: { show: false } },
+        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, inverse: true, splitLine: { show: true, lineStyle: { color: '#e2e8f0', width: 8 } } },
         visualMap: {
           min: 0,
           max: 2000,
@@ -2544,8 +2583,7 @@
           type: 'heatmap',
           data: data,
           itemStyle: {
-            borderColor: '#f1f5f9',
-            borderWidth: [6, 0, 6, 0],
+            borderWidth: 0,
             borderRadius: 4
           },
           label: {
