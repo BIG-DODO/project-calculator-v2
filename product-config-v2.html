@@ -1572,6 +1572,22 @@
       const FIXED_TYPES = ['tower', 'dorm', 'support'];
       const result = [];
 
+      // 根据单元整栋面积计算单个单元的电梯配置
+      function computeElevator(id, unitArea) {
+        if (id === 'light-steel') return '无';
+        if (id === 'split') {
+          if (unitArea < 1500) return '1货';
+          if (unitArea < 4000) return '1客1货';
+          return '1客2货';
+        }
+        if (id === 'layer') {
+          if (unitArea <= 4000) return '1客1货';
+          if (unitArea <= 6000) return '1客2货';
+          return '2客2货';
+        }
+        return '';
+      }
+
       // 固定产品不参与转换，只修正形式
       const fixedProducts = products.filter(p => FIXED_TYPES.includes(p.id));
       fixedProducts.forEach(p => {
@@ -1606,11 +1622,19 @@
         if (id === 'light-steel') {
           elevator = '无';
         } else if (id === 'split') {
-          elevator = totalBase < 1500 ? '1货' : (totalBase < 4000 ? '1客1货' : '1客2货');
+          // 分栋双拼按组合中最大单元整栋面积判断
+          const maxUnitArea = Math.max(...components.map(c => c.unitArea));
+          elevator = '分单元' + computeElevator('split', maxUnitArea);
         } else if (id === 'layer') {
-          const cargoLift = Math.ceil(totalUnitArea / 4000);
-          const paxLift = totalUnitArea <= 4000 ? 1 : 2;
-          elevator = paxLift + '客' + cargoLift + '货';
+          // 分层双拼/三拼：按各单元面积分别计算；配置相同显示"分单元..."，不同则按面积段排序用"/"连接
+          const sortedComponents = [...components].sort((a, b) => a.base - b.base);
+          const unitElevators = sortedComponents.map(c => computeElevator('layer', c.unitArea));
+          const uniqueElevators = [...new Set(unitElevators)];
+          if (uniqueElevators.length === 1) {
+            elevator = '分单元' + uniqueElevators[0];
+          } else {
+            elevator = unitElevators.join('/');
+          }
         } else {
           elevator = components[0].elevator;
         }

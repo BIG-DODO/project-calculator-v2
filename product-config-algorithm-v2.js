@@ -2393,13 +2393,20 @@ function calculateProductConfig(inputProjectData, inputSelectedProducts, inputPr
       elevator = '无';
     } else if (id === 'split') {
       load = '首层2000kg，二层800kg，二层及以上500kg';
-      elevator = base < 1500 ? '1货' : (base < 4000 ? '1客1货' : '1客2货');
+      // 分栋厂房按单元整栋面积（base × floors）判断电梯配置
+      const splitUnitCap = unitCap;
+      elevator = splitUnitCap < 1500 ? '1货' : (splitUnitCap < 4000 ? '1客1货' : '1客2货');
     } else if (id === 'layer') {
       form = '分层分户';
       load = '首层2000kg，二层800kg，二层及以上500kg';
-      const cargoLift = Math.ceil(unitArea / 4000);
-      const paxLift = unitArea <= 4000 ? 1 : 2;
-      elevator = paxLift + '客' + cargoLift + '货';
+      // 分层厂房按单元整栋面积判断电梯配置
+      if (unitArea <= 4000) {
+        elevator = '1客1货';
+      } else if (unitArea <= 6000) {
+        elevator = '1客2货';
+      } else {
+        elevator = '2客2货';
+      }
     }
 
     let suffix = '';
