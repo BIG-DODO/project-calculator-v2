@@ -2284,25 +2284,38 @@
           });
         } else {
           const first = p.fl.first || 0;
-          const upperH = p.fl.standard != null ? p.fl.standard : p.fl.top;
+          const secondH = p.fl.second != null ? p.fl.second : (p.fl.standard != null ? p.fl.standard : p.fl.top);
+          const standardH = p.fl.standard != null ? p.fl.standard : p.fl.top;
+          const topH = p.fl.top != null ? p.fl.top : standardH;
           const actualFloors = Math.ceil(floors);
-          let second = 0;
-          let upperCount = 0;
-          if (actualFloors >= 3 && p.fl.second != null && Math.abs(p.fl.second - upperH) > 0.01) {
-            second = p.fl.second;
-            upperCount = actualFloors - 2;
-          } else {
-            second = 0;
-            upperCount = actualFloors - 1;
+
+          // 生成原始段序列
+          const rawSegments = [];
+          rawSegments.push({ name: '首层', height: first, count: 1 });
+          if (actualFloors >= 3) {
+            rawSegments.push({ name: '二层', height: secondH, count: 1 });
           }
-          rows.push({
-            name: baseName,
-            isLightSteel: false,
-            first,
-            second,
-            upperHeight: upperH,
-            upperCount
+          if (actualFloors > 3) {
+            rawSegments.push({ name: '标准层', height: standardH, count: actualFloors - 3 });
+          }
+          if (actualFloors >= 2) {
+            rawSegments.push({ name: '顶层', height: topH, count: 1 });
+          }
+
+          // 合并相邻同高段（顶层→标准层，二层→标准层）
+          const segments = [];
+          rawSegments.forEach(seg => {
+            const last = segments[segments.length - 1];
+            if (last && Math.abs(last.height - seg.height) < 0.01) {
+              const priority = { '标准层': 3, '二层': 2, '顶层': 1, '首层': 0 };
+              if (priority[seg.name] > priority[last.name]) last.name = seg.name;
+              last.count += seg.count;
+            } else {
+              segments.push({ name: seg.name, height: seg.height, count: seg.count });
+            }
           });
+
+          rows.push({ name: baseName, isLightSteel: false, segments });
         }
       });
       const names = rows.map(r => r.name);
@@ -2312,30 +2325,35 @@
 
       // 定义所有柱段：同一产品内贴靠，产品之间由类别间距隔开
       const segmentDefs = {
-        '主体': { color: ['#1E4E8C', '#0B2B5C'], group: 'light-steel-main' },
-        '火车头首层': { color: ['#3B8DD8', '#1E4E8C'], group: 'light-steel-train' },
-        '火车头夹层': { color: ['#93C5FD', '#3B8DD8'], group: 'light-steel-train' },
-        '首层': { color: ['#3B8DD8', '#1E4E8C'], group: 'normal' },
-        '二层': { color: ['#60A5FA', '#3B8DD8'], group: 'normal' },
-        '标准层及以上': { color: ['#BFDBFE', '#60A5FA'], group: 'normal' }
+        '首层': { color: ['#1E4E8C', '#0B2B5C'] },
+        '二层': { color: ['#3B8DD8', '#1E4E8C'] },
+        '标准层': { color: ['#60A5FA', '#3B8DD8'] },
+        '顶层': { color: ['#BFDBFE', '#60A5FA'] }
       };
 
-      const segmentRows = {
-        '主体': [], '火车头首层': [], '火车头夹层': [],
-        '首层': [], '二层': [], '标准层及以上': []
-      };
+      const segmentRows = { '首层': [], '二层': [], '标准层': [], '顶层': [] };
 
       rows.forEach((r, idx) => {
         if (r.isLightSteel) {
-          segmentRows['主体'].push({ idx, value: r.mainHeight, base: 0, xOffset: -0.2, width: 0.4, count: 1, perFloor: r.mainHeight });
-          segmentRows['火车头首层'].push({ idx, value: r.trainFirst, base: 0, xOffset: 0.2, width: 0.4, count: 1, perFloor: r.trainFirst });
-          segmentRows['火车头夹层'].push({ idx, value: r.trainUpper * r.trainUpperCount, base: r.trainFirst, xOffset: 0.2, width: 0.4, count: r.trainUpperCount, perFloor: r.trainUpper });
+          // 主体 → 首层色；火车头首层 → 二层色；火车头夹层 → 标准层色
+          segmentRows['首层'].push({ idx, value: r.mainHeight, base: 0, xOffset: -0.15, width: 0.3, count: 1, perFloor: r.mainHeight });
+          segmentRows['二层'].push({ idx, value: r.trainFirst, base: 0, xOffset: 0.15, width: 0.3, count: 1, perFloor: r.trainFirst });
+          segmentRows['标准层'].push({ idx, value: r.trainUpper * r.trainUpperCount, base: r.trainFirst, xOffset: 0.15, width: 0.3, count: r.trainUpperCount, perFloor: r.trainUpper });
         } else {
-          segmentRows['首层'].push({ idx, value: r.first, base: 0, xOffset: 0, width: 0.7, count: 1, perFloor: r.first });
-          if (r.second > 0) {
-            segmentRows['二层'].push({ idx, value: r.second, base: r.first, xOffset: 0, width: 0.7, count: 1, perFloor: r.second });
-          }
-          segmentRows['标准层及以上'].push({ idx, value: r.upperHeight * r.upperCount, base: r.first + r.second, xOffset: 0, width: 0.7, count: r.upperCount, perFloor: r.upperHeight });
+          // 普通产品：柱宽 0.55，居中
+          let base = 0;
+          r.segments.forEach(seg => {
+            segmentRows[seg.name].push({
+              idx,
+              value: seg.height * seg.count,
+              base,
+              xOffset: 0,
+              width: 0.55,
+              count: seg.count,
+              perFloor: seg.height
+            });
+            base += seg.height * seg.count;
+          });
         }
       });
 
@@ -2418,48 +2436,16 @@
             const idx = params[0].data[0];
             const r = rows[idx];
             let html = '<div style="font-weight:600;margin-bottom:4px;">' + r.name + '</div>';
-
-            const groups = {};
+            let total = 0;
             params.forEach(p => {
               const value = p.data[2];
               if (value <= 0) return;
-              const g = segmentDefs[p.seriesName].group;
-              if (!groups[g]) groups[g] = [];
-              groups[g].push(p);
+              total += value;
+              const d = { count: p.data[5], perFloor: p.data[6] };
+              const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
+              html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
             });
-
-            if (r.isLightSteel) {
-              if (groups['light-steel-main']) {
-                const total = groups['light-steel-main'].reduce((s, p) => s + p.data[2], 0);
-                html += '<div style="font-weight:600;margin-top:4px;">主体</div>';
-                groups['light-steel-main'].forEach(p => {
-                  const d = { count: p.data[5], perFloor: p.data[6] };
-                  const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
-                  html += '<div style="display:flex;align-items:center;gap:6px;padding-left:8px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
-                });
-                html += '<div style="padding-left:8px;font-size:12px;color:#666;">总高：' + fmtNum(total, 1) + 'm</div>';
-              }
-              if (groups['light-steel-train']) {
-                const total = groups['light-steel-train'].reduce((s, p) => s + p.data[2], 0);
-                html += '<div style="font-weight:600;margin-top:4px;">火车头</div>';
-                groups['light-steel-train'].forEach(p => {
-                  const d = { count: p.data[5], perFloor: p.data[6] };
-                  const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
-                  html += '<div style="display:flex;align-items:center;gap:6px;padding-left:8px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
-                });
-                html += '<div style="padding-left:8px;font-size:12px;color:#666;">总高：' + fmtNum(total, 1) + 'm</div>';
-              }
-            } else {
-              const total = (groups['normal'] || []).reduce((s, p) => s + p.data[2], 0);
-              params.forEach(p => {
-                const value = p.data[2];
-                if (value <= 0) return;
-                const d = { count: p.data[5], perFloor: p.data[6] };
-                const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
-                html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
-              });
-              html += '<div style="margin-top:6px;font-weight:600;">总层高：' + fmtNum(total, 1) + 'm</div>';
-            }
+            html += '<div style="margin-top:6px;font-weight:600;">总层高：' + fmtNum(total, 1) + 'm</div>';
             return html;
           }
         },
@@ -2559,7 +2545,7 @@
         },
         grid: { left: '3%', right: '8%', bottom: '15%', top: '10%', containLabel: true },
         xAxis: { type: 'category', data: xNames, axisLabel: { fontSize: 12 }, splitLine: { show: false } },
-        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, inverse: true, splitLine: { show: true, lineStyle: { color: '#e2e8f0', width: 8 } } },
+        yAxis: { type: 'category', data: yNames, axisLabel: { fontSize: 12 }, inverse: true, splitLine: { show: true, lineStyle: { color: '#fff', width: 26 } } },
         visualMap: {
           min: 0,
           max: 2000,
@@ -2584,7 +2570,7 @@
           data: data,
           itemStyle: {
             borderWidth: 0,
-            borderRadius: 4
+            borderRadius: 0
           },
           label: {
             show: true,
