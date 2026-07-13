@@ -2018,9 +2018,10 @@
           else rentPrice.push(`售:${fmtInt(p.price)}元`);
         }
         const rentPriceStr = rentPrice.join(' / ') || '—';
-        const fl2 = p.fl.second + (p.flSuffix.second || '') + 'm';
-        const flStd = p.fl.standard + (p.flSuffix.standard || '') + 'm';
-        const flTop = p.fl.top + (p.flSuffix.top || '') + 'm';
+        const fmtFl = (val, suffix) => (val === null || val === undefined) ? '-' : (val + (suffix || '') + 'm');
+        const fl2 = fmtFl(p.fl.second, p.flSuffix.second);
+        const flStd = fmtFl(p.fl.standard, p.flSuffix.standard);
+        const flTop = fmtFl(p.fl.top, p.flSuffix.top);
         const totalFl = fmtNum(p.totalHeight - 1.2, 1) + 'm';
         return `
           <tr>
@@ -2133,14 +2134,15 @@
           else rentPrice.push(`售:${fmtInt(p.price)}元`);
         }
         const rentPriceStr = rentPrice.join(' / ') || '—';
-        const fl2 = p.fl.second + (p.flSuffix.second || '');
-        const flStd = p.fl.standard + (p.flSuffix.standard || '');
-        const flTop = p.fl.top + (p.flSuffix.top || '');
+        const fmtFl = (val, suffix) => (val === null || val === undefined) ? '-' : (val + (suffix || '') + 'm');
+        const fl2 = fmtFl(p.fl.second, p.flSuffix.second);
+        const flStd = fmtFl(p.fl.standard, p.flSuffix.standard);
+        const flTop = fmtFl(p.fl.top, p.flSuffix.top);
         return `
           <tr>
             <td>${p.type}</td><td>${p.productType}</td><td>${p.form}</td><td>${p.load}</td>
             <td>${p.floors}</td><td>${p.elevator}</td>
-            <td>${p.fl.first}m</td><td>${fl2}m</td><td>${flStd}m</td><td>${flTop}m</td>
+            <td>${p.fl.first}m</td><td>${fl2}</td><td>${flStd}</td><td>${flTop}</td>
             <td>${fmtNum(p.totalHeight - 1.2, 1)}m</td>
             <td>${fmtInt(p.base)}</td><td>${fmtInt(p.unitArea)}</td><td>${fmtUnitAreaSingle(p.unitAreaSingle)}</td>
             <td>${p.count}</td><td>${fmtInt(p.totalBase)}</td><td>${fmtInt(p.totalArea)}</td>

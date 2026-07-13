@@ -65,6 +65,10 @@ function computeTotalHeight(type, floor, standardHeight = 4.5) {
     // split / layer / support 单层情况
     return 7.2 + 1.2;
   }
+  // 配套楼 2 层：二层层高按 4.5m 计算
+  if (type === 'support' && floor === 2) {
+    return 7.2 + 4.5 + 1.2;
+  }
   // split / layer / support（N >= 2 时）
   return 7.2 + 5.1 + 4.5 * (floor - 2) + 1.2;
 }
@@ -2375,9 +2379,17 @@ function calculateProductConfig(inputProjectData, inputSelectedProducts, inputPr
     } else if (id === 'support') {
       load = '首层2000kg，二层800kg，二层及以上500kg';
       if (floors === 2) {
-        fl.second = 4.5;
+        // 2层：显示 7.2 / - / - / 4.5
+        fl.second = null;
+        fl.standard = null;
+        fl.top = 4.5;
+      } else if (floors === 3) {
+        // 3层：显示 7.2 / 5.1 / - / 4.5
+        fl.second = 5.1;
+        fl.standard = null;
       } else {
         fl.second = 5.1;
+        fl.standard = 4.5;
       }
       if (base < 1500) {
         elevator = '1客';
@@ -2396,6 +2408,16 @@ function calculateProductConfig(inputProjectData, inputSelectedProducts, inputPr
       // 分栋厂房按单元整栋面积（base × floors）判断电梯配置
       const splitUnitCap = unitCap;
       elevator = splitUnitCap < 1500 ? '1货' : (splitUnitCap < 4000 ? '1客1货' : '1客2货');
+      if (floors === 2) {
+        // 2层：显示 7.2 / - / - / 5.1
+        fl.second = null;
+        fl.standard = null;
+        fl.top = 5.1;
+      } else if (floors === 3) {
+        // 3层：显示 7.2 / 5.1 / - / 4.5
+        fl.second = 5.1;
+        fl.standard = null;
+      }
     } else if (id === 'layer') {
       form = '分层分户';
       load = '首层2000kg，二层800kg，二层及以上500kg';
