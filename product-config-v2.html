@@ -2303,7 +2303,10 @@
             fontSize: 11,
             interval: 0,
             rotate: names.length > 6 ? 35 : 0,
-            formatter: value => String(value).replace(/-主体|-火车头/g, '')
+            formatter: (value, idx) => {
+              if (String(value).includes('-火车头')) return '';
+              return String(value).replace(/-主体/g, '');
+            }
           }
         },
         yAxis: { type: 'value', name: '高度(m)', min: 0, axisLabel: { fontSize: 11 } },
@@ -2316,7 +2319,7 @@
           type: 'bar',
           stack: 'height',
           barWidth: '55%',
-          barCategoryGap: '15%',
+          barCategoryGap: '0%',
           data: rows.map(r => {
             if (layer.key === 'first') return { value: r.first, count: 1, perFloor: r.first };
             if (layer.key === 'second') return { value: r.second, count: 1, perFloor: r.second };
