@@ -777,6 +777,16 @@
   }
   .analysis-area-chart { grid-column: 1 / -1; }
   @media (max-width: 900px) { .analysis-area-chart { grid-column: auto; } }
+
+  /* ECharts tooltip 移动端适配 */
+  .echarts-tooltip {
+    max-width: 92vw !important;
+    white-space: normal !important;
+    word-break: break-all !important;
+  }
+  @media (max-width: 768px) {
+    .echarts-tooltip { font-size: 11px !important; padding: 8px 10px !important; }
+  }
   .analysis-card-name { font-size: 0.85rem; font-weight: 600; color: var(--neutral-800); margin-bottom: 6px; }
   .analysis-card-pct { font-size: 1.4rem; font-weight: 700; color: var(--brand-primary); margin-bottom: 4px; }
   .analysis-card-label { font-size: 0.7rem; color: var(--neutral-500); margin-bottom: 2px; }
@@ -840,9 +850,6 @@
         <div class="nav-items">
           <div class="nav-item" data-view="chart-analysis" onclick="switchView('chart-analysis')">
             <span class="icon">📊</span> 产品配置分析
-          </div>
-          <div class="nav-item" data-view="chart-area" onclick="switchView('chart-area')">
-            <span class="icon">📐</span> 产品面积段分布
           </div>
           <div class="nav-item" data-view="chart-load" onclick="switchView('chart-load')">
             <span class="icon">🏋️</span> 产品荷载分布
@@ -990,7 +997,6 @@
         </div>
         <div id="chart-analysis-content"></div>
       </div>
-      <div class="view" id="view-chart-area"><div class="content-header">📐 产品面积段分布</div><div id="chart-area-content"></div></div>
       <div class="view" id="view-chart-load"><div class="content-header">🏋️ 产品荷载分布</div><div id="chart-load-content"></div></div>
       <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
       <div class="view" id="view-chart-elevator"><div class="content-header">🛗 产品电梯配置</div><div id="chart-elevator-content"></div></div>
@@ -2054,7 +2060,7 @@
             name: base + '㎡',
             type: 'bar',
             stack: 'total',
-            emphasis: { focus: 'series' },
+            emphasis: { focus: 'self' },
             barWidth: '55%',
             itemStyle: {
               borderRadius: [0, 4, 4, 0],
@@ -2071,7 +2077,7 @@
               position: 'insideRight',
               color: '#fff',
               fontSize: 10,
-              formatter: p => p.data.count > 0 ? p.data.count + '栋' : ''
+              formatter: p => p.data.count > 0 ? p.data.count + '单元' : ''
             },
             data: segTypes.map(type => {
               const seg = segmentTypeData[type].segments[base];
@@ -2083,6 +2089,8 @@
           tooltip: {
             trigger: 'axis',
             axisPointer: { type: 'shadow' },
+            confine: true,
+            extraCssText: 'max-width:90vw;white-space:normal;word-break:break-all;',
             formatter: function(params) {
               const type = params[0].axisValue;
               const t = segmentTypeData[type];
@@ -2092,7 +2100,7 @@
                 const b = parseInt(p.seriesName, 10);
                 const seg = t.segments[b];
                 const share = t.total > 0 ? (p.value / t.total * 100).toFixed(1) : '0.0';
-                html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + b + '㎡：' + seg.count + '栋 / ' + fmtInt(p.value) + '㎡（' + share + '%）</span></div>';
+                html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + b + '㎡：' + seg.count + '单元 / ' + fmtInt(p.value) + '㎡（' + share + '%）</span></div>';
               });
               html += '<div style="margin-top:6px;font-weight:600;">小计：' + fmtInt(t.total) + '㎡</div>';
               return html;
@@ -2144,7 +2152,7 @@
       window.addEventListener('resize', resizeCharts);
 
       // 其他图表占位
-      ['chart-area', 'chart-load', 'chart-height', 'chart-elevator', 'chart-layout'].forEach(id => {
+      ['chart-load', 'chart-height', 'chart-elevator', 'chart-layout'].forEach(id => {
         document.getElementById(id + '-content').innerHTML = `
           <div class="card"><div class="chart-placeholder">
             <div class="icon">📊</div>
