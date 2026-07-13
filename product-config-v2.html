@@ -2242,14 +2242,15 @@
         } else {
           const first = p.fl.first || 0;
           const upperH = p.fl.standard != null ? p.fl.standard : p.fl.top;
+          const actualFloors = Math.ceil(floors);
           let second = 0;
           let upperCount = 0;
-          if (floors >= 3 && p.fl.second != null && Math.abs(p.fl.second - upperH) > 0.01) {
+          if (actualFloors >= 3 && p.fl.second != null && Math.abs(p.fl.second - upperH) > 0.01) {
             second = p.fl.second;
-            upperCount = floors - 2; // 标准层 + 顶层
+            upperCount = actualFloors - 2; // 标准层 + 顶层
           } else {
             second = 0;
-            upperCount = floors - 1; // 所有上层同高
+            upperCount = actualFloors - 1; // 所有上层同高
           }
           rows.push({
             name: baseName,
@@ -2298,7 +2299,12 @@
         xAxis: {
           type: 'category',
           data: names,
-          axisLabel: { fontSize: 11, interval: 0, rotate: names.length > 6 ? 35 : 0 }
+          axisLabel: {
+            fontSize: 11,
+            interval: 0,
+            rotate: names.length > 6 ? 35 : 0,
+            formatter: value => String(value).replace(/-主体|-火车头/g, '')
+          }
         },
         yAxis: { type: 'value', name: '高度(m)', min: 0, axisLabel: { fontSize: 11 } },
         dataZoom: names.length > 10 ? [
@@ -2310,6 +2316,7 @@
           type: 'bar',
           stack: 'height',
           barWidth: '55%',
+          barCategoryGap: '15%',
           data: rows.map(r => {
             if (layer.key === 'first') return { value: r.first, count: 1, perFloor: r.first };
             if (layer.key === 'second') return { value: r.second, count: 1, perFloor: r.second };
@@ -2435,6 +2442,11 @@
           name: '荷载',
           type: 'heatmap',
           data: data,
+          itemStyle: {
+            borderColor: '#fff',
+            borderWidth: 2,
+            borderRadius: 4
+          },
           label: {
             show: true,
             fontSize: 11,
