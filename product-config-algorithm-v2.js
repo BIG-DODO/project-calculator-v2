@@ -379,7 +379,9 @@ function buildSupport(supportCap) {
 }
 
 function calc_dorm(dormCap, referenceHeight) {
-  let estFloors = Math.max(2, Math.floor((referenceHeight - 4.8 - 1.2) / 3.6) + 1);
+  // 宿舍层高 3.6m，根据参考高度反推最大层数
+  const maxFloors = Math.max(2, Math.floor((referenceHeight - 4.8 - 1.2) / 3.6) + 1);
+  let estFloors = maxFloors;
   let singleArea = dormCap / estFloors;
 
   let base;
@@ -391,16 +393,8 @@ function calc_dorm(dormCap, referenceHeight) {
     base = Math.round(singleArea / 100) * 100;
   }
 
-  let floors = Math.max(2, Math.ceil(dormCap / base));
+  let floors = Math.max(2, Math.min(maxFloors, Math.ceil(dormCap / base)));
   let totalH = computeTotalHeight('dorm', floors);
-
-  if (totalH > referenceHeight) {
-    totalH = 4.8 + 3.3 * (floors - 1) + 1.2;
-    if (totalH > referenceHeight) {
-      floors = Math.max(2, Math.floor((referenceHeight - 4.8 - 1.2) / 3.3) + 1);
-      totalH = computeTotalHeight('dorm', floors);
-    }
-  }
 
   let exactBase = dormCap / floors;
   let finalBase = Math.floor(exactBase / 20) * 20;
@@ -409,16 +403,8 @@ function calc_dorm(dormCap, referenceHeight) {
   finalBase = clamp(finalBase, 600, 1200);
 
   // 根据钳制后的 base 重新估算层数，尽量接近 dormCap，同时不超过参考高度
-  floors = Math.max(2, Math.ceil(dormCap / finalBase));
+  floors = Math.max(2, Math.min(maxFloors, Math.ceil(dormCap / finalBase)));
   totalH = computeTotalHeight('dorm', floors);
-
-  if (totalH > referenceHeight) {
-    totalH = 4.8 + 3.3 * (floors - 1) + 1.2;
-    if (totalH > referenceHeight) {
-      floors = Math.max(2, Math.floor((referenceHeight - 4.8 - 1.2) / 3.3) + 1);
-      totalH = computeTotalHeight('dorm', floors);
-    }
-  }
 
   const unitArea = finalBase * floors;
 
