@@ -824,6 +824,7 @@
     margin: 0 auto;
     box-sizing: border-box;
     position: relative;
+    overflow: auto;
   }
   .layout-overlay img {
     max-width: 100%;
@@ -2191,7 +2192,7 @@
             emphasis: { focus: 'self' },
             barWidth: '55%',
             itemStyle: {
-              borderRadius: [0, 4, 4, 0],
+              borderRadius: [0, 0, 0, 0],
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
                 { offset: 0, color: cLight },
                 { offset: 1, color: c }
