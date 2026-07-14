@@ -833,6 +833,9 @@
     cursor: default;
     display: block;
     background: #fff;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-drag: none;
   }
   .layout-watermark {
     position: absolute;
@@ -2645,6 +2648,7 @@
         img.style.cursor = 'default';
         inner.style.cursor = 'default';
         inner.style.alignItems = 'center';
+        inner.style.justifyContent = 'center';
       }
 
       function toggleZoom() {
@@ -2655,6 +2659,7 @@
           img.style.cursor = 'grab';
           inner.style.cursor = 'grab';
           inner.style.alignItems = 'flex-start';
+          inner.style.justifyContent = 'flex-start';
         } else {
           resetZoom();
         }
@@ -2675,6 +2680,7 @@
       // 左键拖动
       inner.addEventListener('mousedown', function(e) {
         if (!isZoomed || e.button !== 0) return;
+        e.preventDefault();
         isDragging = false;
         dragStart = {
           x: e.clientX,
