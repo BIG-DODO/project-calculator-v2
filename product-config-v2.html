@@ -873,6 +873,24 @@
     transition: background 0.15s;
   }
   .layout-overlay-close:hover { background: rgba(255,255,255,0.3); }
+  .layout-context-menu {
+    position: fixed;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    padding: 6px 0;
+    z-index: 10001;
+    min-width: 140px;
+    font-size: 0.85rem;
+    overflow: hidden;
+  }
+  .layout-context-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    color: var(--neutral-700);
+    transition: background 0.15s;
+  }
+  .layout-context-item:hover { background: var(--neutral-100); }
   .layout-overlay-nav {
     position: fixed;
     top: 50%;
@@ -2731,37 +2749,61 @@
       });
 
       // 右键下载带水印的 JPG
+      let contextMenu = null;
       img.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
-        canvas.width = w;
-        canvas.height = h;
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
+        if (contextMenu) contextMenu.remove();
+        const menu = document.createElement('div');
+        contextMenu = menu;
+        menu.className = 'layout-context-menu';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top = e.clientY + 'px';
+        menu.innerHTML = '<div class="layout-context-item" data-action="download">下载带水印 JPG</div><div class="layout-context-item" data-action="cancel">取消</div>';
+        overlay.appendChild(menu);
 
-        // 斜45度水印
-        const fontSize = Math.min(w, h) * 0.15;
-        ctx.save();
-        ctx.translate(w / 2, h / 2);
-        ctx.rotate(-45 * Math.PI / 180);
-        ctx.font = '700 ' + fontSize + 'px sans-serif';
-        ctx.fillStyle = 'rgba(0,0,0,0.12)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('未来园', 0, 0);
-        ctx.restore();
+        menu.addEventListener('click', function(ev) {
+          const action = ev.target.dataset.action;
+          if (action === 'download') {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            canvas.width = w;
+            canvas.height = h;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = '未来园_户型图.jpg';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+            // 斜45度水印
+            const fontSize = Math.min(w, h) * 0.15;
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+            ctx.rotate(-45 * Math.PI / 180);
+            ctx.font = '700 ' + fontSize + 'px sans-serif';
+            ctx.fillStyle = 'rgba(0,0,0,0.12)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('未来园', 0, 0);
+            ctx.restore();
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = '未来园_户型图.jpg';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+          }
+          menu.remove();
+          contextMenu = null;
+        });
+      });
+
+      overlay.addEventListener('click', function(e) {
+        if (contextMenu && !e.target.classList.contains('layout-context-item')) {
+          contextMenu.remove();
+          contextMenu = null;
+        }
       });
 
       // 点击背景/inner空白/关闭按钮退出
