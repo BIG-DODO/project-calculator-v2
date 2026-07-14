@@ -2644,24 +2644,41 @@
       function resetZoom() {
         isZoomed = false;
         img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
         img.style.width = 'auto';
+        img.style.height = 'auto';
         img.style.cursor = 'default';
         inner.style.cursor = 'default';
         inner.style.alignItems = 'center';
         inner.style.justifyContent = 'center';
+        inner.style.width = '100%';
+        inner.style.height = 'auto';
+        inner.style.maxWidth = '90vw';
+        inner.style.maxHeight = 'none';
         inner.style.minHeight = 'calc(100vh - 40px)';
+        inner.style.overflow = 'auto';
       }
 
       function toggleZoom() {
         isZoomed = !isZoomed;
         if (isZoomed) {
+          const scale = 2;
+          const w = img.naturalWidth * scale;
+          const h = img.naturalHeight * scale;
           img.style.maxWidth = 'none';
-          img.style.width = '200%';
+          img.style.maxHeight = 'none';
+          img.style.width = w + 'px';
+          img.style.height = h + 'px';
           img.style.cursor = 'grab';
           inner.style.cursor = 'grab';
           inner.style.alignItems = 'flex-start';
           inner.style.justifyContent = 'flex-start';
+          inner.style.width = '90vw';
+          inner.style.height = '80vh';
+          inner.style.maxWidth = '90vw';
+          inner.style.maxHeight = '80vh';
           inner.style.minHeight = 'auto';
+          inner.style.overflow = 'auto';
         } else {
           resetZoom();
         }
