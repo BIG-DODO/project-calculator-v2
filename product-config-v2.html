@@ -807,25 +807,21 @@
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.85);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: auto;
     z-index: 9999;
     cursor: zoom-out;
     padding: 20px;
     animation: fadeIn 0.2s ease;
   }
-  .layout-overlay {
-    overflow: auto;
-  }
   .layout-overlay-inner {
-    width: 90vw;
+    width: 100%;
     max-width: 90vw;
-    min-height: 100vh;
+    min-height: calc(100vh - 40px);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 40px 0;
+    padding: 60px 0;
+    margin: 0 auto;
     box-sizing: border-box;
     position: relative;
   }
@@ -845,7 +841,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255,255,255,0.25);
+    color: rgba(0,0,0,0.12);
     font-size: 48px;
     font-weight: 700;
     letter-spacing: 12px;
