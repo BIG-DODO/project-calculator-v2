@@ -816,20 +816,18 @@
     animation: fadeIn 0.2s ease;
   }
   .layout-overlay-inner {
-    max-width: 90vw;
-    max-height: 90vh;
+    width: 90vw;
+    height: 90vh;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
   }
   .layout-overlay img {
     max-width: 100%;
     max-height: 100%;
-    width: auto;
-    height: auto;
     object-fit: contain;
     border-radius: var(--radius-sm);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
     cursor: default;
     display: block;
   }
