@@ -827,6 +827,7 @@
     justify-content: center;
     padding: 40px 0;
     box-sizing: border-box;
+    position: relative;
   }
   .layout-overlay img {
     max-width: 100%;
@@ -834,6 +835,26 @@
     border-radius: var(--radius-sm);
     cursor: default;
     display: block;
+  }
+  .layout-watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.25);
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+  @media (max-width: 768px) {
+    .layout-watermark { font-size: 32px; letter-spacing: 8px; }
   }
   .layout-overlay-close {
     position: absolute;
@@ -2569,7 +2590,17 @@
       if (!src) return;
       const overlay = document.createElement('div');
       overlay.className = 'layout-overlay';
-      overlay.innerHTML = '<div class="layout-overlay-close">&times;</div><div class="layout-overlay-inner"><img src="' + src + '" alt="放大查看" /></div>';
+      overlay.innerHTML = '<div class="layout-overlay-close">&times;</div><div class="layout-overlay-inner"><img src="' + src + '" alt="放大查看" /><div class="layout-watermark">未来园</div></div>';
+      const img = overlay.querySelector('img');
+      const watermark = overlay.querySelector('.layout-watermark');
+      const adjustWatermark = () => {
+        const minDim = Math.min(img.clientWidth, img.clientHeight) * 0.85;
+        watermark.style.width = minDim + 'px';
+        watermark.style.height = minDim + 'px';
+      };
+      if (img.complete) adjustWatermark();
+      img.addEventListener('load', adjustWatermark);
+      window.addEventListener('resize', adjustWatermark);
       overlay.addEventListener('click', function(e) {
         if (e.target === overlay || e.target.classList.contains('layout-overlay-close')) {
           overlay.remove();
