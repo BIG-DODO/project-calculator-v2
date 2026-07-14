@@ -2649,6 +2649,7 @@
         inner.style.cursor = 'default';
         inner.style.alignItems = 'center';
         inner.style.justifyContent = 'center';
+        inner.style.minHeight = 'calc(100vh - 40px)';
       }
 
       function toggleZoom() {
@@ -2660,6 +2661,7 @@
           inner.style.cursor = 'grab';
           inner.style.alignItems = 'flex-start';
           inner.style.justifyContent = 'flex-start';
+          inner.style.minHeight = 'auto';
         } else {
           resetZoom();
         }
