@@ -2614,7 +2614,7 @@
         .map((item, idx) => `
           <div class="layout-card">
             <div class="layout-title">${item.type}</div>
-            <img src="${item.src}" alt="${item.type}平面意向" class="layout-img" onclick="openLayoutImage(${idx})" onerror="this.parentElement.innerHTML='<div class=\\'layout-title\\'>${item.type}</div><div class=\\'layout-error\\'>图片加载失败</div>'" />
+            <img src="${item.src}" alt="${item.type}平面意向" class="layout-img" data-idx="${idx}" onerror="this.parentElement.innerHTML='<div class=\\'layout-title\\'>${item.type}</div><div class=\\'layout-error\\'>图片加载失败</div>'" />
           </div>
         `).join('');
 
@@ -2625,6 +2625,88 @@
             ${items || '<div class="chart-placeholder"><div class="icon">🏠</div><div>当前配置无对应户型意向图</div></div>'}
           </div>
         </div>`;
+
+      // 列表页图片：点击放大，右键下载带水印
+      container.querySelectorAll('.layout-img').forEach(imgEl => {
+        imgEl.addEventListener('click', () => openLayoutImage(parseInt(imgEl.dataset.idx, 10)));
+        imgEl.addEventListener('contextmenu', (e) => showLayoutContextMenu(e, imgEl.src));
+      });
+    }
+
+    function showLayoutContextMenu(e, src) {
+      e.preventDefault();
+      // 关闭已有菜单
+      document.querySelectorAll('.layout-context-menu').forEach(m => m.remove());
+
+      const menu = document.createElement('div');
+      menu.className = 'layout-context-menu';
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      menu.innerHTML = '<div class="layout-context-item" data-action="download">下载图片</div><div class="layout-context-item" data-action="cancel">取消</div>';
+      document.body.appendChild(menu);
+
+      function closeMenu() {
+        menu.remove();
+        document.removeEventListener('click', outsideClick);
+        document.removeEventListener('keydown', escClose);
+      }
+
+      function outsideClick(ev) {
+        if (!menu.contains(ev.target)) closeMenu();
+      }
+
+      function escClose(ev) {
+        if (ev.key === 'Escape') closeMenu();
+      }
+
+      menu.addEventListener('click', function(ev) {
+        const action = ev.target.dataset.action;
+        if (action === 'download') downloadLayoutImageWithWatermark(src);
+        closeMenu();
+      });
+
+      document.addEventListener('click', outsideClick);
+      document.addEventListener('keydown', escClose);
+    }
+
+    function downloadLayoutImageWithWatermark(src) {
+      const imgObj = new Image();
+      imgObj.crossOrigin = 'anonymous';
+      imgObj.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const w = imgObj.naturalWidth;
+        const h = imgObj.naturalHeight;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(imgObj, 0, 0, w, h);
+
+        // 斜45度水印
+        const fontSize = Math.min(w, h) * 0.15;
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(-45 * Math.PI / 180);
+        ctx.font = '700 ' + fontSize + 'px sans-serif';
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('未来园', 0, 0);
+        ctx.restore();
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = '未来园_户型图.jpg';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      };
+      imgObj.onerror = function() {
+        alert('图片加载失败，无法下载');
+      };
+      imgObj.src = src;
     }
 
     function openLayoutImage(startIdx) {
@@ -2749,61 +2831,8 @@
       });
 
       // 右键下载带水印的 JPG
-      let contextMenu = null;
       img.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-        if (contextMenu) contextMenu.remove();
-        const menu = document.createElement('div');
-        contextMenu = menu;
-        menu.className = 'layout-context-menu';
-        menu.style.left = e.clientX + 'px';
-        menu.style.top = e.clientY + 'px';
-        menu.innerHTML = '<div class="layout-context-item" data-action="download">下载带水印 JPG</div><div class="layout-context-item" data-action="cancel">取消</div>';
-        overlay.appendChild(menu);
-
-        menu.addEventListener('click', function(ev) {
-          const action = ev.target.dataset.action;
-          if (action === 'download') {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const w = img.naturalWidth;
-            const h = img.naturalHeight;
-            canvas.width = w;
-            canvas.height = h;
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(0, 0, w, h);
-            ctx.drawImage(img, 0, 0, w, h);
-
-            // 斜45度水印
-            const fontSize = Math.min(w, h) * 0.15;
-            ctx.save();
-            ctx.translate(w / 2, h / 2);
-            ctx.rotate(-45 * Math.PI / 180);
-            ctx.font = '700 ' + fontSize + 'px sans-serif';
-            ctx.fillStyle = 'rgba(0,0,0,0.12)';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('未来园', 0, 0);
-            ctx.restore();
-
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-            const link = document.createElement('a');
-            link.href = dataUrl;
-            link.download = '未来园_户型图.jpg';
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-          }
-          menu.remove();
-          contextMenu = null;
-        });
-      });
-
-      overlay.addEventListener('click', function(e) {
-        if (contextMenu && !e.target.classList.contains('layout-context-item')) {
-          contextMenu.remove();
-          contextMenu = null;
-        }
+        showLayoutContextMenu(e, img.src);
       });
 
       // 点击背景/inner空白/关闭按钮退出
