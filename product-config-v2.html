@@ -910,7 +910,7 @@
             <span class="icon">📊</span> 产品配置分析
           </div>
           <div class="nav-item" data-view="chart-height" onclick="switchView('chart-height')">
-            <span class="icon">🏢</span> 层高与层数分布
+            <span class="icon">🏢</span> 层高与荷载分布
           </div>
           <div class="nav-item" data-view="chart-layout" onclick="switchView('chart-layout')">
             <span class="icon">🏠</span> 产品户型建议
@@ -1049,7 +1049,7 @@
         </div>
         <div id="chart-analysis-content"></div>
       </div>
-      <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
+      <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与荷载分布</div><div id="chart-height-content"></div></div>
       <div class="view" id="view-chart-layout"><div class="content-header">🏠 产品户型建议</div><div id="chart-layout-content"></div></div>
       <div class="view" id="view-config-detail"><div class="content-header">📋 产品配置详表</div><div id="config-detail-content"></div></div>
       <div class="view" id="view-indicator-overview"><div class="content-header">📋 综合指标一览</div><div id="indicator-overview-content"></div></div>
@@ -2010,8 +2010,9 @@
         const displayFloors = p.id === 'light-steel' ? 1 : p.floors;
         const key = displayFloors + 'F' + p.type;
         if (!segmentTypeData[key]) {
-          segmentTypeData[key] = { type: p.type, floors: displayFloors, name: key, total: 0, segments: {} };
+          segmentTypeData[key] = { type: p.type, floors: displayFloors, name: key, totalCount: 0, total: 0, segments: {} };
         }
+        segmentTypeData[key].totalCount += p.count;
         const units = p.components || [p];
         units.forEach(u => {
           const b = u.base;
@@ -2030,6 +2031,13 @@
         const typeDiff = PRODUCT_ORDER.indexOf(aType) - PRODUCT_ORDER.indexOf(bType);
         if (typeDiff !== 0) return typeDiff;
         return segmentTypeData[a].floors - segmentTypeData[b].floors;
+      });
+      const segTypeDisplayMap = {};
+      const segTypeDisplayNames = segTypes.map(key => {
+        const t = segmentTypeData[key];
+        const name = key + '（' + t.totalCount + '栋）';
+        segTypeDisplayMap[name] = key;
+        return name;
       });
       const segBases = [...new Set(segTypes.reduce((arr, t) => arr.concat(Object.keys(segmentTypeData[t].segments).map(Number)), []))].sort((a, b) => a - b);
       const baseColorMap = {};
@@ -2169,9 +2177,10 @@
             confine: true,
             extraCssText: 'max-width:90vw;white-space:normal;word-break:break-all;',
             formatter: function(params) {
-              const type = params[0].axisValue;
-              const t = segmentTypeData[type];
-              let html = '<div style="font-weight:600;margin-bottom:4px;">' + type + '</div>';
+              const displayName = params[0].axisValue;
+              const key = segTypeDisplayMap[displayName];
+              const t = segmentTypeData[key];
+              let html = '<div style="font-weight:600;margin-bottom:4px;">' + displayName + '</div>';
               params.forEach(p => {
                 if (p.value <= 0) return;
                 const b = parseInt(p.seriesName, 10);
@@ -2187,7 +2196,7 @@
           legend: { top: 0, left: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
           grid: { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true },
           xAxis: { type: 'value', name: areaLabel + '(㎡)', axisLabel: { fontSize: 11 } },
-          yAxis: { type: 'category', data: segTypes, axisLabel: { fontSize: 12 }, inverse: true },
+          yAxis: { type: 'category', data: segTypeDisplayNames, axisLabel: { fontSize: 12 }, inverse: true },
           series: areaSeries
         });
       }
@@ -2257,7 +2266,7 @@
       if (!container) return;
       container.innerHTML = `
         <div class="card analysis-3d-card" style="padding:16px;">
-          <div class="analysis-chart-title">🏢 层高与层数分布</div>
+          <div class="analysis-chart-title">🏢 层高与荷载分布</div>
           <div id="height-chart" class="height-chart-container"></div>
         </div>`;
 
@@ -2277,11 +2286,15 @@
         const floors = g.floors;
         const baseName = floors + 'F' + p.type;
 
+        // 仅轻钢/分栋/分层厂房显示荷载，产业大厦与配套用房不显示
+        const showLoad = ['light-steel', 'split', 'layer'].includes(p.id);
+
         if (p.id === 'light-steel') {
           const parsed = parseLoad(p.load);
           rows.push({
             name: baseName,
             isLightSteel: true,
+            showLoad,
             mainHeight: p.fl.first || 0,
             mainLoad: parsed.first || 0,
             trainFirst: p.fl.second || 0,
@@ -2296,17 +2309,17 @@
           const topH = p.fl.top != null ? p.fl.top : standardH;
           const actualFloors = Math.ceil(floors);
 
-          // 生成原始段序列（含荷载）
+          // 生成原始段序列（含荷载，非厂房类荷载置空）
           const rawSegments = [];
-          rawSegments.push({ name: '首层', height: first, count: 1, load: parsed.first || 0 });
+          rawSegments.push({ name: '首层', height: first, count: 1, load: showLoad ? (parsed.first || 0) : null });
           if (actualFloors >= 3) {
-            rawSegments.push({ name: '二层', height: secondH, count: 1, load: parsed.second || 0 });
+            rawSegments.push({ name: '二层', height: secondH, count: 1, load: showLoad ? (parsed.second || 0) : null });
           }
           if (actualFloors > 3) {
-            rawSegments.push({ name: '标准层', height: standardH, count: actualFloors - 3, load: parsed.standard || 0 });
+            rawSegments.push({ name: '标准层', height: standardH, count: actualFloors - 3, load: showLoad ? (parsed.standard || 0) : null });
           }
           if (actualFloors >= 2) {
-            rawSegments.push({ name: '顶层', height: topH, count: 1, load: parsed.top || parsed.standard || 0 });
+            rawSegments.push({ name: '顶层', height: topH, count: 1, load: showLoad ? (parsed.top || parsed.standard || 0) : null });
           }
 
           // 合并相邻同高同荷载段（顶层→标准层，二层→标准层）
@@ -2322,7 +2335,7 @@
             }
           });
 
-          rows.push({ name: baseName, isLightSteel: false, segments });
+          rows.push({ name: baseName, isLightSteel: false, showLoad, segments });
         }
       });
       const names = rows.map(r => r.name);
@@ -2414,9 +2427,10 @@
             const load = api.value(7);
             const isMain = api.value(8);
             const isTrain = api.value(9);
+            const rowShowLoad = rows[rowIdx].showLoad;
             const heightLabel = count > 1 ? perFloor + 'm×' + count : perFloor + 'm';
-            const loadLabel = load > 0 ? formatLoad(load) : '';
-            const label = isTrain ? heightLabel : (loadLabel ? heightLabel + '\n' + loadLabel : heightLabel);
+            const loadLabel = (rowShowLoad && load > 0 && (isMain || !isTrain)) ? formatLoad(load) : '';
+            const label = loadLabel ? heightLabel + '\n' + loadLabel : heightLabel;
             const showLabel = value > 1.2 && h > 22;
 
             return {
@@ -2469,7 +2483,7 @@
 
             if (r.isLightSteel) {
               html += '<div style="margin-top:6px;font-weight:600;">主体部分</div>';
-              html += '<div>层高：' + r.mainHeight + 'm ' + formatLoad(r.mainLoad) + '</div>';
+              html += '<div>层高：' + r.mainHeight + 'm ' + (r.showLoad ? formatLoad(r.mainLoad) : '') + '</div>';
               html += '<div style="margin-top:6px;font-weight:600;">火车头部分</div>';
               html += '<div>首层：' + r.trainFirst + 'm</div>';
               html += '<div>二层（夹）：' + r.trainUpper + 'm</div>';
@@ -2479,7 +2493,8 @@
               r.segments.forEach(seg => {
                 total += seg.height * seg.count;
                 const heightLabel = seg.count > 1 ? seg.height + 'm×' + seg.count : seg.height + 'm';
-                html += '<div>' + seg.name + '：' + heightLabel + ' ' + formatLoad(seg.load) + '</div>';
+                const loadStr = (r.showLoad && seg.load > 0) ? formatLoad(seg.load) : '';
+                html += '<div>' + seg.name + '：' + heightLabel + (loadStr ? ' ' + loadStr : '') + '</div>';
               });
               html += '<div style="margin-top:6px;font-weight:600;">总层高：' + fmtNum(total, 1) + 'm</div>';
             }
