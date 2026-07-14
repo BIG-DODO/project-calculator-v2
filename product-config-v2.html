@@ -2002,29 +2002,35 @@
         value: typeData[type].count
       }));
 
-      // 面积段分布数据：仅厂房类 + 产业大厦
+      // 面积段分布数据：仅厂房类 + 产业大厦，按「产品类型 + 层数」细分
       const SEGMENT_TYPES = ['light-steel', 'split', 'layer', 'tower'];
       const segmentTypeData = {};
       result.products.forEach(p => {
         if (!SEGMENT_TYPES.includes(p.id)) return;
-        if (!segmentTypeData[p.type]) {
-          segmentTypeData[p.type] = { type: p.type, total: 0, segments: {} };
+        const displayFloors = p.id === 'light-steel' ? 1 : p.floors;
+        const key = displayFloors + 'F' + p.type;
+        if (!segmentTypeData[key]) {
+          segmentTypeData[key] = { type: p.type, floors: displayFloors, name: key, total: 0, segments: {} };
         }
         const units = p.components || [p];
         units.forEach(u => {
           const b = u.base;
           const unitVal = analysisMode === 'cap' ? u.unitCap : u.unitArea;
           const segTotal = unitVal * p.count;
-          const seg = segmentTypeData[p.type].segments[b] || (segmentTypeData[p.type].segments[b] = { base: b, count: 0, total: 0, _elevators: new Set() });
+          const seg = segmentTypeData[key].segments[b] || (segmentTypeData[key].segments[b] = { base: b, count: 0, total: 0, _elevators: new Set() });
           seg.count += p.count;
           seg.total += segTotal;
           seg._elevators.add(getSegmentElevator(p, b));
-          segmentTypeData[p.type].total += segTotal;
+          segmentTypeData[key].total += segTotal;
         });
       });
-      const segTypesAll = Object.keys(segmentTypeData);
-      const typeOrder = PRODUCT_ORDER;
-      const segTypes = typeOrder.filter(t => segTypesAll.includes(t));
+      const segTypes = Object.keys(segmentTypeData).sort((a, b) => {
+        const aType = segmentTypeData[a].type;
+        const bType = segmentTypeData[b].type;
+        const typeDiff = PRODUCT_ORDER.indexOf(aType) - PRODUCT_ORDER.indexOf(bType);
+        if (typeDiff !== 0) return typeDiff;
+        return segmentTypeData[a].floors - segmentTypeData[b].floors;
+      });
       const segBases = [...new Set(segTypes.reduce((arr, t) => arr.concat(Object.keys(segmentTypeData[t].segments).map(Number)), []))].sort((a, b) => a - b);
       const baseColorMap = {};
       segBases.forEach((b, i) => {
