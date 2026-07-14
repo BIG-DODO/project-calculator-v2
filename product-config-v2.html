@@ -909,14 +909,8 @@
           <div class="nav-item" data-view="chart-analysis" onclick="switchView('chart-analysis')">
             <span class="icon">📊</span> 产品配置分析
           </div>
-          <div class="nav-item" data-view="chart-load" onclick="switchView('chart-load')">
-            <span class="icon">🏋️</span> 产品荷载分布
-          </div>
           <div class="nav-item" data-view="chart-height" onclick="switchView('chart-height')">
             <span class="icon">🏢</span> 层高与层数分布
-          </div>
-          <div class="nav-item" data-view="chart-elevator" onclick="switchView('chart-elevator')">
-            <span class="icon">🛗</span> 产品电梯配置
           </div>
           <div class="nav-item" data-view="chart-layout" onclick="switchView('chart-layout')">
             <span class="icon">🏠</span> 产品户型建议
@@ -1055,9 +1049,7 @@
         </div>
         <div id="chart-analysis-content"></div>
       </div>
-      <div class="view" id="view-chart-load"><div class="content-header">🏋️ 产品荷载分布</div><div id="chart-load-content"></div></div>
       <div class="view" id="view-chart-height"><div class="content-header">🏢 层高与层数分布</div><div id="chart-height-content"></div></div>
-      <div class="view" id="view-chart-elevator"><div class="content-header">🛗 产品电梯配置</div><div id="chart-elevator-content"></div></div>
       <div class="view" id="view-chart-layout"><div class="content-header">🏠 产品户型建议</div><div id="chart-layout-content"></div></div>
       <div class="view" id="view-config-detail"><div class="content-header">📋 产品配置详表</div><div id="config-detail-content"></div></div>
       <div class="view" id="view-indicator-overview"><div class="content-header">📋 综合指标一览</div><div id="indicator-overview-content"></div></div>
@@ -1961,7 +1953,7 @@
     let analysisBarChart = null;
     let analysisAreaChart = null;
     let analysisHeightChart = null;
-    let analysisLoadChart = null;
+
 
     // 全部分析视图统一产品排序
     const PRODUCT_ORDER = ['产业大厦', '分层厂房', '分栋厂房', '轻钢厂房', '配套宿舍', '配套楼'];
@@ -2145,14 +2137,22 @@
             },
             label: {
               show: true,
-              position: 'insideRight',
+              position: 'inside',
               color: '#fff',
               fontSize: 10,
-              formatter: p => p.data.count > 0 ? p.data.count + '单元' : ''
+              textAlign: 'center',
+              textVerticalAlign: 'middle',
+              formatter: p => {
+                if (p.data.count <= 0) return '';
+                const elevators = p.data.elevators || '-';
+                return p.data.count + '单元\n' + elevators;
+              }
             },
             data: segTypes.map(type => {
               const seg = segmentTypeData[type].segments[base];
-              return seg ? { value: seg.total, count: seg.count, base: base } : { value: 0, count: 0, base: base };
+              if (!seg) return { value: 0, count: 0, base: base, elevators: '-' };
+              const elevators = seg._elevators ? [...seg._elevators].sort().join(' / ') : '-';
+              return { value: seg.total, count: seg.count, base: base, elevators: elevators };
             })
           };
         });
@@ -2220,14 +2220,12 @@
         if (analysisBarChart) analysisBarChart.resize();
         if (analysisAreaChart) analysisAreaChart.resize();
         if (analysisHeightChart) analysisHeightChart.resize();
-        if (analysisLoadChart) analysisLoadChart.resize();
       };
       window.removeEventListener('resize', resizeCharts);
       window.addEventListener('resize', resizeCharts);
 
       // 渲染层高与荷载分布图
       renderHeightChart(result);
-      renderLoadChart(result);
 
       renderLayoutChart(result);
     }
@@ -2274,44 +2272,47 @@
         const baseName = floors + 'F' + p.type;
 
         if (p.id === 'light-steel') {
+          const parsed = parseLoad(p.load);
           rows.push({
             name: baseName,
             isLightSteel: true,
             mainHeight: p.fl.first || 0,
+            mainLoad: parsed.first || 0,
             trainFirst: p.fl.second || 0,
             trainUpper: p.fl.standard || 0,
             trainUpperCount: 2
           });
         } else {
+          const parsed = parseLoad(p.load);
           const first = p.fl.first || 0;
           const secondH = p.fl.second != null ? p.fl.second : (p.fl.standard != null ? p.fl.standard : p.fl.top);
           const standardH = p.fl.standard != null ? p.fl.standard : p.fl.top;
           const topH = p.fl.top != null ? p.fl.top : standardH;
           const actualFloors = Math.ceil(floors);
 
-          // 生成原始段序列
+          // 生成原始段序列（含荷载）
           const rawSegments = [];
-          rawSegments.push({ name: '首层', height: first, count: 1 });
+          rawSegments.push({ name: '首层', height: first, count: 1, load: parsed.first || 0 });
           if (actualFloors >= 3) {
-            rawSegments.push({ name: '二层', height: secondH, count: 1 });
+            rawSegments.push({ name: '二层', height: secondH, count: 1, load: parsed.second || 0 });
           }
           if (actualFloors > 3) {
-            rawSegments.push({ name: '标准层', height: standardH, count: actualFloors - 3 });
+            rawSegments.push({ name: '标准层', height: standardH, count: actualFloors - 3, load: parsed.standard || 0 });
           }
           if (actualFloors >= 2) {
-            rawSegments.push({ name: '顶层', height: topH, count: 1 });
+            rawSegments.push({ name: '顶层', height: topH, count: 1, load: parsed.top || parsed.standard || 0 });
           }
 
-          // 合并相邻同高段（顶层→标准层，二层→标准层）
+          // 合并相邻同高同荷载段（顶层→标准层，二层→标准层）
           const segments = [];
           rawSegments.forEach(seg => {
             const last = segments[segments.length - 1];
-            if (last && Math.abs(last.height - seg.height) < 0.01) {
+            if (last && Math.abs(last.height - seg.height) < 0.01 && last.load === seg.load) {
               const priority = { '标准层': 3, '二层': 2, '顶层': 1, '首层': 0 };
               if (priority[seg.name] > priority[last.name]) last.name = seg.name;
               last.count += seg.count;
             } else {
-              segments.push({ name: seg.name, height: seg.height, count: seg.count });
+              segments.push({ name: seg.name, height: seg.height, count: seg.count, load: seg.load });
             }
           });
 
@@ -2333,12 +2334,18 @@
 
       const segmentRows = { '首层': [], '二层': [], '标准层': [], '顶层': [] };
 
+      // 荷载格式化：首层 ≥1000kg 显示为 T/m²，其余为 kg/m²
+      function formatLoad(loadKg) {
+        if (loadKg >= 1000) return (loadKg / 1000).toFixed(1) + 'T/m²';
+        return loadKg + 'kg/m²';
+      }
+
       rows.forEach((r, idx) => {
         if (r.isLightSteel) {
           // 主体 → 首层色；火车头首层 → 二层色；火车头夹层 → 标准层色
-          segmentRows['首层'].push({ idx, value: r.mainHeight, base: 0, xOffset: -0.15, width: 0.3, count: 1, perFloor: r.mainHeight });
-          segmentRows['二层'].push({ idx, value: r.trainFirst, base: 0, xOffset: 0.15, width: 0.3, count: 1, perFloor: r.trainFirst });
-          segmentRows['标准层'].push({ idx, value: r.trainUpper * r.trainUpperCount, base: r.trainFirst, xOffset: 0.15, width: 0.3, count: r.trainUpperCount, perFloor: r.trainUpper });
+          segmentRows['首层'].push({ idx, value: r.mainHeight, base: 0, xOffset: -0.15, width: 0.3, count: 1, perFloor: r.mainHeight, load: r.mainLoad, isMain: true });
+          segmentRows['二层'].push({ idx, value: r.trainFirst, base: 0, xOffset: 0.15, width: 0.3, count: 1, perFloor: r.trainFirst, load: 0, isTrain: true });
+          segmentRows['标准层'].push({ idx, value: r.trainUpper * r.trainUpperCount, base: r.trainFirst, xOffset: 0.15, width: 0.3, count: r.trainUpperCount, perFloor: r.trainUpper, load: 0, isTrain: true });
         } else {
           // 普通产品：柱宽 0.55，居中
           let base = 0;
@@ -2350,7 +2357,8 @@
               xOffset: 0,
               width: 0.55,
               count: seg.count,
-              perFloor: seg.height
+              perFloor: seg.height,
+              load: seg.load
             });
             base += seg.height * seg.count;
           });
@@ -2397,8 +2405,13 @@
             const yBottom = api.coord([rowIdx, base])[1];
             const h = yBottom - yTop;
 
-            const label = count > 1 ? perFloor + 'm×' + count : perFloor + 'm';
-            const showLabel = value > 1.2 && h > 14;
+            const load = api.value(7);
+            const isMain = api.value(8);
+            const isTrain = api.value(9);
+            const heightLabel = count > 1 ? perFloor + 'm×' + count : perFloor + 'm';
+            const loadLabel = load > 0 ? formatLoad(load) : '';
+            const label = isTrain ? heightLabel : (loadLabel ? heightLabel + '\n' + loadLabel : heightLabel);
+            const showLabel = value > 1.2 && h > 22;
 
             return {
               type: 'group',
@@ -2425,13 +2438,14 @@
                     textAlign: 'center',
                     textVerticalAlign: 'middle',
                     fill: '#fff',
-                    fontSize: 10
+                    fontSize: 10,
+                    lineHeight: 12
                   }
                 } : null
               ].filter(Boolean)
             };
           },
-          data: segmentRows[name].map(r => [r.idx, r.base, r.value, r.xOffset, r.width, r.count, r.perFloor])
+          data: segmentRows[name].map(r => [r.idx, r.base, r.value, r.xOffset, r.width, r.count, r.perFloor, r.load || 0, r.isMain ? 1 : 0, r.isTrain ? 1 : 0])
         };
       });
 
@@ -2446,16 +2460,23 @@
             const idx = params[0].data[0];
             const r = rows[idx];
             let html = '<div style="font-weight:600;margin-bottom:4px;">' + r.name + '</div>';
-            let total = 0;
-            params.forEach(p => {
-              const value = p.data[2];
-              if (value <= 0) return;
-              total += value;
-              const d = { count: p.data[5], perFloor: p.data[6] };
-              const label = d.count > 1 ? d.perFloor + 'm×' + d.count : d.perFloor + 'm';
-              html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + p.seriesName + '：' + label + '</span></div>';
-            });
-            html += '<div style="margin-top:6px;font-weight:600;">总层高：' + fmtNum(total, 1) + 'm</div>';
+
+            if (r.isLightSteel) {
+              html += '<div style="margin-top:6px;font-weight:600;">主体部分</div>';
+              html += '<div>层高：' + r.mainHeight + 'm ' + formatLoad(r.mainLoad) + '</div>';
+              html += '<div style="margin-top:6px;font-weight:600;">火车头部分</div>';
+              html += '<div>首层：' + r.trainFirst + 'm</div>';
+              html += '<div>二层（夹）：' + r.trainUpper + 'm</div>';
+              html += '<div>三层（夹）：' + r.trainUpper + 'm</div>';
+            } else {
+              let total = 0;
+              r.segments.forEach(seg => {
+                total += seg.height * seg.count;
+                const heightLabel = seg.count > 1 ? seg.height + 'm×' + seg.count : seg.height + 'm';
+                html += '<div>' + seg.name + '：' + heightLabel + ' ' + formatLoad(seg.load) + '</div>';
+              });
+              html += '<div style="margin-top:6px;font-weight:600;">总层高：' + fmtNum(total, 1) + 'm</div>';
+            }
             return html;
           }
         },
@@ -2471,194 +2492,6 @@
           }
         },
         yAxis: { type: 'value', name: '高度(m)', min: 0, max: yAxisMax, axisLabel: { fontSize: 11 } },
-        dataZoom: names.length > 10 ? [
-          { type: 'inside', start: 0, end: Math.min(100, Math.max(30, 600 / names.length)) },
-          { type: 'slider', start: 0, end: Math.min(100, Math.max(30, 600 / names.length)), height: 16, bottom: 10 }
-        ] : undefined,
-        series
-      });
-    }
-
-    // ==================== 产品荷载分布图 ====================
-    function renderLoadChart(result) {
-      const container = document.getElementById('chart-load-content');
-      if (!container) return;
-
-      // 按类型+层数分组（仅厂房类）
-      const groups = {};
-      result.products
-        .filter(p => ['light-steel', 'split', 'layer'].includes(p.id))
-        .forEach(p => {
-          const displayFloors = p.id === 'light-steel' ? 1 : p.floors;
-          const key = p.type + '|' + displayFloors;
-          if (!groups[key]) groups[key] = { type: p.type, floors: displayFloors, product: p };
-        });
-
-      const rows = Object.values(groups)
-        .sort((a, b) => sortByProductType(a.type, b.type) || a.floors - b.floors)
-        .map(g => {
-          const parsed = parseLoad(g.product.load);
-          const segments = [];
-          if (parsed.first > 0) segments.push({ name: '首层', load: parsed.first });
-          if (parsed.second > 0) segments.push({ name: '二层', load: parsed.second });
-          if (parsed.standard > 0) segments.push({ name: '标准层', load: parsed.standard });
-          // 顶层与标准层荷载相同时合并到标准层
-          if (parsed.top > 0 && Math.abs(parsed.top - parsed.standard) > 0.01) {
-            segments.push({ name: '顶层', load: parsed.top });
-          }
-          return { name: g.floors + 'F' + g.type, segments };
-        });
-
-      if (rows.length === 0) {
-        container.innerHTML = `
-          <div class="card analysis-3d-card" style="padding:16px;">
-            <div class="analysis-chart-title">🏋️ 产品荷载分布</div>
-            <div class="chart-placeholder" style="height:200px;">
-              <div class="icon">🏋️</div>
-              <div>当前配置无厂房类产品，无需展示荷载分布</div>
-            </div>
-          </div>`;
-        if (analysisLoadChart) { analysisLoadChart.dispose(); analysisLoadChart = null; }
-        return;
-      }
-
-      container.innerHTML = `
-        <div class="card analysis-3d-card" style="padding:16px;">
-          <div class="analysis-chart-title">🏋️ 产品荷载分布</div>
-          <div id="load-chart" class="load-chart-container"></div>
-        </div>`;
-
-      const names = rows.map(r => r.name);
-
-      // 荷载段颜色：首层最深，向上依次变浅
-      const segmentDefs = {
-        '首层': { color: ['#0B2B5C', '#1E4E8C'] },
-        '二层': { color: ['#1E4E8C', '#3B8DD8'] },
-        '标准层': { color: ['#3B8DD8', '#60A5FA'] },
-        '顶层': { color: ['#60A5FA', '#93C5FD'] }
-      };
-
-      const segmentRows = { '首层': [], '二层': [], '标准层': [], '顶层': [] };
-      rows.forEach((r, idx) => {
-        let base = 0;
-        r.segments.forEach(seg => {
-          segmentRows[seg.name].push({
-            idx,
-            value: seg.load,
-            base,
-            xOffset: 0,
-            width: 0.55,
-            perFloor: seg.load
-          });
-          base += seg.load;
-        });
-      });
-
-      // y 轴上限：按最大堆叠荷载向上取 500kg 的倍数
-      const maxTotalLoad = rows.reduce((max, r) => {
-        return Math.max(max, r.segments.reduce((s, seg) => s + seg.load, 0));
-      }, 0);
-      const yAxisMax = Math.ceil(maxTotalLoad / 500) * 500;
-
-      function getCatWidth(api, rowIdx) {
-        const center = api.coord([rowIdx, 0])[0];
-        if (rowIdx < names.length - 1) {
-          return api.coord([rowIdx + 1, 0])[0] - center;
-        }
-        return center - api.coord([rowIdx - 1, 0])[0];
-      }
-
-      const series = Object.keys(segmentRows).map(name => {
-        const cfg = segmentDefs[name];
-        return {
-          name,
-          type: 'custom',
-          itemStyle: { color: cfg.color[0] },
-          renderItem: function(params, api) {
-            const rowIdx = api.value(0);
-            const base = api.value(1);
-            const value = api.value(2);
-            if (value <= 0) return;
-            const xOffset = api.value(3);
-            const width = api.value(4);
-            const perFloor = api.value(5);
-
-            const catWidth = getCatWidth(api, rowIdx);
-            const xCenter = api.coord([rowIdx, 0])[0] + xOffset * catWidth;
-            const barW = width * catWidth;
-            const yTop = api.coord([rowIdx, base + value])[1];
-            const yBottom = api.coord([rowIdx, base])[1];
-            const h = yBottom - yTop;
-
-            const showLabel = value > 0 && h > 14;
-
-            return {
-              type: 'group',
-              children: [
-                {
-                  type: 'rect',
-                  shape: { x: xCenter - barW / 2, y: yTop, width: barW, height: h },
-                  style: {
-                    fill: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                      { offset: 0, color: cfg.color[0] },
-                      { offset: 1, color: cfg.color[1] }
-                    ]),
-                    shadowBlur: 4,
-                    shadowColor: 'rgba(0,0,0,0.15)',
-                    shadowOffsetY: 2
-                  }
-                },
-                showLabel ? {
-                  type: 'text',
-                  style: {
-                    text: perFloor + 'kg',
-                    x: xCenter,
-                    y: yTop + h / 2,
-                    textAlign: 'center',
-                    textVerticalAlign: 'middle',
-                    fill: '#fff',
-                    fontSize: 10
-                  }
-                } : null
-              ].filter(Boolean)
-            };
-          },
-          data: segmentRows[name].map(r => [r.idx, r.base, r.value, r.xOffset, r.width, r.perFloor])
-        };
-      });
-
-      if (analysisLoadChart) analysisLoadChart.dispose();
-      analysisLoadChart = echarts.init(document.getElementById('load-chart'));
-      analysisLoadChart.setOption({
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'shadow' },
-          confine: true,
-          extraCssText: 'max-width:90vw;white-space:normal;word-break:break-all;',
-          formatter: function(params) {
-            if (!params.length) return '';
-            const idx = params[0].data[0];
-            const r = rows[idx];
-            let html = '<div style="font-weight:600;margin-bottom:4px;">' + r.name + '</div>';
-            let total = 0;
-            params.forEach(p => {
-              const value = p.data[2];
-              if (value <= 0) return;
-              total += value;
-              html += '<div style="display:flex;align-items:center;gap:6px;">' + p.marker + '<span>' + p.seriesName + '：' + value + 'kg</span></div>';
-            });
-            html += '<div style="margin-top:6px;font-weight:600;">合计：' + total + 'kg</div>';
-            return html;
-          }
-        },
-        legend: { top: 0, left: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
-        grid: { left: '3%', right: '4%', bottom: names.length > 10 ? '16%' : '8%', top: '12%', containLabel: true },
-        xAxis: {
-          type: 'category',
-          data: names,
-          axisLabel: { fontSize: 11, interval: 0, rotate: names.length > 6 ? 35 : 0 }
-        },
-        yAxis: { type: 'value', name: '荷载(kg)', min: 0, max: yAxisMax, axisLabel: { fontSize: 11 } },
         dataZoom: names.length > 10 ? [
           { type: 'inside', start: 0, end: Math.min(100, Math.max(30, 600 / names.length)) },
           { type: 'slider', start: 0, end: Math.min(100, Math.max(30, 600 / names.length)), height: 16, bottom: 10 }
@@ -2904,14 +2737,13 @@
         document.getElementById('config-summary').style.display = 'block';
 
         // 分析视图图表在 display:none 中初始化时尺寸为 0，视图可见后延迟重绘
-        if (['chart-analysis', 'chart-height', 'chart-load'].includes(viewId)) {
+        if (['chart-analysis', 'chart-height'].includes(viewId)) {
           requestAnimationFrame(() => {
             setTimeout(() => {
               if (analysisPieChart) analysisPieChart.resize();
               if (analysisBarChart) analysisBarChart.resize();
               if (analysisAreaChart) analysisAreaChart.resize();
               if (analysisHeightChart) analysisHeightChart.resize();
-              if (analysisLoadChart) analysisLoadChart.resize();
             }, 80);
           });
         }
