@@ -1986,3 +1986,15 @@ git config --global --unset https.proxy
 - 明日提醒（2026-07-14）：
   - 用户开启对话后，第一时间说「请先测试昨晚的层高图与荷载图修改」。
   - 待办优先级：财务测算模块 → 总表集成 → 三表联动拆分。
+
+
+- 2026-07-14 09:25 用户测试反馈与再次修复：
+  - 问题1：荷载图没有实现柱变窄与类型间留白。根本原因是 heatmap 单元格占满整个 category，splitLine 无法真正压缩单元格高度。
+  - 问题2：层高图 y 轴未动态取整，柱子顶到上沿。根本原因是未设置 yAxis.max，ECharts 自动边界可能等于数据最大值。
+  - 问题3：层高图 legend 色块与实际柱子渐变不一致。根本原因是 custom series 的 legend 不读取 renderItem 动态渐变，需要 series 级别 itemStyle.color。
+  - 修复方案：
+    - 荷载图改为与层高图完全一致的 custom series 垂直堆叠柱：x 轴产品类型，y 轴荷载(kg)，段为「首层/二层/标准层/顶层」，颜色由深至浅。
+    - 层高图：yAxis.max = 最大产品高度向上取 10 的倍数；每个 custom series 增加 `itemStyle: { color: cfg.color[0] }`。
+  - Git 提交：`4854c7c fix(charts): 荷载图改为与层高图统一的 custom 堆叠柱；层高图 y 轴动态取整、图例颜色修正`。
+  - GitHub Pages v2 已推送。
+  - 当前待测试：新的荷载图与层高图效果。
