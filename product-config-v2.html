@@ -968,6 +968,9 @@
       <div class="nav-group">
         <div class="nav-group-title" onclick="toggleNavGroup(this)">产品配置</div>
         <div class="nav-items">
+          <div class="nav-item" data-view="project-overview" onclick="switchView('project-overview')">
+            <span class="icon">🏠</span> 项目概览
+          </div>
           <div class="nav-item" data-view="config-overview" onclick="switchView('config-overview')">
             <span class="icon">📋</span> 产品配置一览
           </div>
@@ -996,28 +999,42 @@
           <div class="nav-item" data-view="indicator-overview" onclick="switchView('indicator-overview')">
             <span class="icon">📋</span> 综合指标一览
           </div>
-          <div class="nav-item" onclick="downloadIndicatorDetail()">
-            <span class="icon">⬇️</span> 总体经济技术指标表下载
-          </div>
-          <div class="nav-item" onclick="downloadIndicatorImage()">
-            <span class="icon">🖼️</span> 总体经济技术指标图下载
+          <div class="nav-item" onclick="showIndicatorDownloadMenu(event)">
+            <span class="icon">⬇️</span> 综合指标详表下载
           </div>
         </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-title" onclick="toggleNavGroup(this)">财务测算</div>
         <div class="nav-items">
-          <div class="nav-item" onclick="alert('投资估算功能开发中...')">
+          <div class="nav-item" data-view="investment-estimate" onclick="switchView('investment-estimate')">
             <span class="icon">💰</span> 投资估算
           </div>
-          <div class="nav-item" onclick="alert('静态投资分析功能开发中...')">
+          <div class="nav-item" onclick="alert('投资估算表下载功能开发中...')">
+            <span class="icon">⬇️</span> 投资估算表下载
+          </div>
+          <div class="nav-item" data-view="static-analysis" onclick="switchView('static-analysis')">
             <span class="icon">📊</span> 静态投资分析
           </div>
-          <div class="nav-item" onclick="alert('动态投资分析功能开发中...')">
+          <div class="nav-item" onclick="alert('静态投资分析表下载功能开发中...')">
+            <span class="icon">⬇️</span> 静态投资分析表下载
+          </div>
+          <div class="nav-item" data-view="dynamic-analysis" onclick="switchView('dynamic-analysis')">
             <span class="icon">📈</span> 动态投资分析
           </div>
-          <div class="nav-item" onclick="alert('财务测算详表下载功能开发中...')">
-            <span class="icon">⬇️</span> 财务测算详表下载
+          <div class="nav-item" onclick="alert('动态投资分析表下载功能开发中...')">
+            <span class="icon">⬇️</span> 动态投资分析表下载
+          </div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title" onclick="toggleNavGroup(this)">成果输出</div>
+        <div class="nav-items">
+          <div class="nav-item" onclick="alert('规划指标与产品配置总表下载功能开发中...')">
+            <span class="icon">⬇️</span> 规划指标与产品配置总表下载
+          </div>
+          <div class="nav-item" onclick="alert('综合指标测算总表下载功能开发中...')">
+            <span class="icon">⬇️</span> 综合指标测算总表下载
           </div>
         </div>
       </div>
@@ -1126,6 +1143,10 @@
       <div class="view" id="view-chart-layout"><div class="content-header">🏠 产品户型建议</div><div id="chart-layout-content"></div></div>
       <div class="view" id="view-config-detail"><div class="content-header">📋 产品配置详表</div><div id="config-detail-content"></div></div>
       <div class="view" id="view-indicator-overview"><div class="content-header">📋 综合指标一览</div><div id="indicator-overview-content"></div></div>
+      <div class="view" id="view-project-overview"><div class="content-header">🏠 项目概览</div><div id="project-overview-content"></div></div>
+      <div class="view" id="view-investment-estimate"><div class="content-header">💰 投资估算</div><div id="investment-estimate-content"></div></div>
+      <div class="view" id="view-static-analysis"><div class="content-header">📊 静态投资分析</div><div id="static-analysis-content"></div></div>
+      <div class="view" id="view-dynamic-analysis"><div class="content-header">📈 动态投资分析</div><div id="dynamic-analysis-content"></div></div>
     </main>
   </div>
 
@@ -3339,6 +3360,26 @@ ${warningHtml}
       const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
       const fileName = title + '_' + dateStr;
       return { html, title, fileName, warning };
+    }
+
+    function showIndicatorDownloadMenu(event) {
+      event.preventDefault();
+      document.querySelectorAll('.layout-context-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'layout-context-menu';
+      menu.innerHTML = '<div class="layout-context-item" onclick="downloadIndicatorDetail(); document.querySelectorAll(\'.layout-context-menu\').forEach(m => m.remove());" style="padding:10px 16px;font-size:0.85rem;cursor:pointer;white-space:nowrap;">下载表格（.xls）</div>' +
+                       '<div class="layout-context-item" onclick="downloadIndicatorImage(); document.querySelectorAll(\'.layout-context-menu\').forEach(m => m.remove());" style="padding:10px 16px;font-size:0.85rem;cursor:pointer;white-space:nowrap;">下载图片（.png）</div>';
+      const rect = event.currentTarget.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.left = rect.left + 'px';
+      menu.style.top = (rect.bottom + 4) + 'px';
+      menu.style.zIndex = '10000';
+      document.body.appendChild(menu);
+      setTimeout(() => {
+        document.addEventListener('click', function hide(e) {
+          if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', hide); }
+        });
+      }, 0);
     }
 
     function downloadIndicatorDetail() {
