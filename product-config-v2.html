@@ -139,6 +139,11 @@
       transition: all 0.15s;
       border-left: 3px solid transparent;
     }
+    .nav-item.sub {
+      padding: 6px 20px 6px 36px;
+      font-size: 0.8rem;
+      color: var(--neutral-500);
+    }
     .nav-item:hover {
       background: var(--neutral-50);
       color: var(--neutral-900);
@@ -756,6 +761,7 @@
   .analysis-chart-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 2px 8px rgba(11,43,92,0.04); }
   .analysis-chart-title { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); margin-bottom: 12px; }
   .analysis-chart { width: 100%; height: 280px; }
+  #analysis-pie-chart { height: 320px; }
 
   .analysis-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
   .analysis-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 4px 12px rgba(11,43,92,0.06); transition: transform 0.3s, box-shadow 0.3s; transform-style: preserve-3d; }
@@ -1010,19 +1016,19 @@
           <div class="nav-item" data-view="investment-estimate" onclick="switchView('investment-estimate')">
             <span class="icon">💰</span> 投资估算
           </div>
-          <div class="nav-item" onclick="alert('投资估算表下载功能开发中...')" style="padding-left:36px;">
+          <div class="nav-item sub" onclick="alert('投资估算表下载功能开发中...')">
             <span class="icon">↳</span> 下载
           </div>
           <div class="nav-item" data-view="static-analysis" onclick="switchView('static-analysis')">
             <span class="icon">📊</span> 静态投资分析
           </div>
-          <div class="nav-item" onclick="alert('静态投资分析表下载功能开发中...')" style="padding-left:36px;">
+          <div class="nav-item sub" onclick="alert('静态投资分析表下载功能开发中...')">
             <span class="icon">↳</span> 下载
           </div>
           <div class="nav-item" data-view="dynamic-analysis" onclick="switchView('dynamic-analysis')">
             <span class="icon">📈</span> 动态投资分析
           </div>
-          <div class="nav-item" onclick="alert('动态投资分析表下载功能开发中...')" style="padding-left:36px;">
+          <div class="nav-item sub" onclick="alert('动态投资分析表下载功能开发中...')">
             <span class="icon">↳</span> 下载
           </div>
         </div>
@@ -2168,12 +2174,12 @@
       analysisPieChart = echarts.init(pieDom);
       analysisPieChart.setOption({
         tooltip: { trigger: 'item', formatter: '{b}: {c}㎡ ({d}%)' },
-        legend: { bottom: 0, left: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
+        legend: { orient: 'vertical', right: 0, top: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
         series: [{
           name: areaLabel,
           type: 'pie',
-          radius: ['40%', '70%'],
-          center: ['50%', '45%'],
+          radius: ['45%', '70%'],
+          center: ['40%', '50%'],
           avoidLabelOverlap: true,
           label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
           labelLine: { show: true },
