@@ -1023,7 +1023,7 @@
           <div class="nav-item" data-view="investment-estimate" onclick="switchView('investment-estimate')">
             <span class="icon">💰</span> 投资估算
           </div>
-          <div class="nav-item sub" onclick="alert('投资估算表下载功能开发中...')">
+          <div class="nav-item sub" onclick="downloadInvestmentEstimate()">
             <span class="icon">↳</span> 投资估算表下载
           </div>
           <div class="nav-item" data-view="static-analysis" onclick="switchView('static-analysis')">
@@ -1173,6 +1173,8 @@
   <script src="product-config-algorithm-v2.js?v=20260710-2"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="financial-modules.js?v=20260715-1"></script>
   <script>
     // ==================== 全局状态 ====================
     let projectData = null;
@@ -3079,6 +3081,109 @@
         </div>`;
     }
 
+    // ==================== 投资估算视图 ====================
+    window.investmentEstimateResult = null;
+
+    function renderInvestmentEstimate() {
+      const container = document.getElementById('investment-estimate-content');
+      if (!container) return;
+      const city = (projectData && projectData.region) || '';
+      container.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">投资估算参数</div>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+            <div class="form-group">
+              <label>城市</label>
+              <input type="text" id="inv-city" class="form-control" value="${city}" placeholder="如：上海、杭州">
+            </div>
+            <div class="form-group">
+              <label>土地出让金（万元/亩）<span class="required">*</span></label>
+              <input type="number" id="inv-land-price" class="form-control" value="100" step="1" min="0">
+            </div>
+            <div class="form-group">
+              <label>大市政配套费（元/m² 用地）</label>
+              <input type="number" id="inv-municipal-fee" class="form-control" value="" step="0.1" min="0" placeholder="留空按城市默认，上海为0">
+            </div>
+            <div class="form-group">
+              <label>海绵城市</label>
+              <select id="inv-sponge" class="form-control">
+                <option value="auto">按城市自动（上海/杭州默认是）</option>
+                <option value="yes">是</option>
+                <option value="no">否</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>融资占比</label>
+              <input type="number" id="inv-financing-ratio" class="form-control" value="60" step="1" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label>融资利率（%）</label>
+              <input type="number" id="inv-financing-rate" class="form-control" value="5" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>计息年限（年）</label>
+              <input type="number" id="inv-interest-years" class="form-control" value="2" step="0.5" min="0">
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn-primary" onclick="calculateInvestmentEstimate()">计算投资估算</button>
+          </div>
+        </div>
+        <div id="inv-result-panel"></div>
+      `;
+    }
+
+    function calculateInvestmentEstimate() {
+      if (!window.configResult || !projectData) {
+        alert('请先生成产品配置'); return;
+      }
+      const city = document.getElementById('inv-city').value.trim();
+      const landPrice = FinancialModules.safeNum(document.getElementById('inv-land-price').value, 0);
+      const municipalInput = document.getElementById('inv-municipal-fee').value;
+      const municipalFee = municipalInput === '' ? null : FinancialModules.safeNum(municipalInput);
+      const spongeSel = document.getElementById('inv-sponge').value;
+      let spongeCity;
+      if (spongeSel === 'auto') spongeCity = undefined;
+      else spongeCity = spongeSel === 'yes';
+      const financingRatio = FinancialModules.safeNum(document.getElementById('inv-financing-ratio').value, 60) / 100;
+      const financingRate = FinancialModules.safeNum(document.getElementById('inv-financing-rate').value, 5) / 100;
+      const interestYears = FinancialModules.safeNum(document.getElementById('inv-interest-years').value, 2);
+
+      const inputs = { city, landPrice, municipalFee, spongeCity, financingRatio, financingRate, interestYears };
+      const result = FinancialModules.calculateInvestmentEstimate(inputs, window.configResult, projectData);
+      window.investmentEstimateResult = result;
+      renderInvestmentEstimateResult(result);
+    }
+
+    function renderInvestmentEstimateResult(result) {
+      const panel = document.getElementById('inv-result-panel');
+      if (!panel) return;
+      const simple = FinancialModules.simplifyInvestmentEstimate(result);
+      const rows = simple.map(it => `
+        <tr><td>${it.category}</td><td class="num">${fmtNum(it.amount, 2)}</td><td class="unit">万元</td></tr>
+      `).join('');
+      panel.innerHTML = `
+        <div class="card">
+          <div class="card-title">投资估算简化版</div>
+          <table class="data-table">
+            <thead><tr><th>费用大类</th><th>金额</th><th>单位</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div style="margin-top:12px;color:var(--neutral-500);font-size:0.8rem;">
+            单位地上建面成本：${fmtNum(result.summary.unitGroundCost, 2)} 元/m² &nbsp;|&nbsp;
+            单位总建面成本：${fmtNum(result.summary.unitTotalAreaCost, 2)} 元/m²
+          </div>
+        </div>
+      `;
+    }
+
+    function downloadInvestmentEstimate() {
+      if (!window.investmentEstimateResult) {
+        alert('请先进入“投资估算”页面完成计算'); return;
+      }
+      FinancialModules.downloadInvestmentEstimateExcel(window.investmentEstimateResult, '投资估算表.xlsx');
+    }
+
     // ==================== 视图切换 ====================
     function switchView(viewId) {
       if (viewId === 'input') {
@@ -3093,6 +3198,8 @@
         document.getElementById('view-' + viewId).classList.add('active');
         // 切换到结果视图时显示配置摘要
         document.getElementById('config-summary').style.display = 'block';
+
+        if (viewId === 'investment-estimate') renderInvestmentEstimate();
 
         // 分析视图图表在 display:none 中初始化时尺寸为 0，视图可见后延迟重绘
         if (['chart-analysis', 'chart-height'].includes(viewId)) {
