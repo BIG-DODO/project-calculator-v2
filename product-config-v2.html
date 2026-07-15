@@ -1173,8 +1173,8 @@
   <script src="product-config-algorithm-v2.js?v=20260710-2"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="financial-modules.js?v=20260715-1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+  <script src="financial-modules.js?v=20260715-2"></script>
   <script>
     // ==================== 全局状态 ====================
     let projectData = null;
@@ -3090,12 +3090,13 @@
       if (!container) return;
       const saved = window.investmentEstimateInputs || {};
       const city = saved.city != null ? saved.city : ((projectData && projectData.region) || '');
-      const landPrice = saved.landPrice != null ? saved.landPrice : 100;
+      const landPrice = saved.landPrice != null ? saved.landPrice : 70;
       const municipalFee = saved.municipalFee != null ? saved.municipalFee : '';
       const spongeSel = saved.spongeSel != null ? saved.spongeSel : 'auto';
-      const financingRatio = saved.financingRatio != null ? saved.financingRatio : 60;
+      const financingRatio = saved.financingRatio != null ? saved.financingRatio : 0;
       const financingRate = saved.financingRate != null ? saved.financingRate : 5;
-      const interestYears = saved.interestYears != null ? saved.interestYears : 2;
+      const devPhases = saved.devPhases != null ? saved.devPhases : 1;
+      const phasePeriod = saved.phasePeriod != null ? saved.phasePeriod : 2;
 
       container.innerHTML = `
         <div class="card" style="margin-bottom:16px;">
@@ -3130,8 +3131,12 @@
               <input type="number" id="inv-financing-rate" class="form-control" value="${financingRate}" step="0.1" min="0">
             </div>
             <div class="form-group">
-              <label>计息年限（年）</label>
-              <input type="number" id="inv-interest-years" class="form-control" value="${interestYears}" step="0.5" min="0">
+              <label>开发期数</label>
+              <input type="number" id="inv-dev-phases" class="form-control" value="${devPhases}" step="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>单期开发周期（年）</label>
+              <input type="number" id="inv-phase-period" class="form-control" value="${phasePeriod}" step="0.5" min="0">
             </div>
           </div>
           <div style="margin-top:16px;">
@@ -3155,12 +3160,13 @@
       let spongeCity;
       if (spongeSel === 'auto') spongeCity = undefined;
       else spongeCity = spongeSel === 'yes';
-      const financingRatio = FinancialModules.safeNum(document.getElementById('inv-financing-ratio').value, 60);
+      const financingRatio = FinancialModules.safeNum(document.getElementById('inv-financing-ratio').value, 0);
       const financingRate = FinancialModules.safeNum(document.getElementById('inv-financing-rate').value, 5);
-      const interestYears = FinancialModules.safeNum(document.getElementById('inv-interest-years').value, 2);
+      const devPhases = FinancialModules.safeNum(document.getElementById('inv-dev-phases').value, 1);
+      const phasePeriod = FinancialModules.safeNum(document.getElementById('inv-phase-period').value, 2);
 
-      window.investmentEstimateInputs = { city, landPrice, municipalFee, spongeSel, financingRatio, financingRate, interestYears };
-      const inputs = { city, landPrice, municipalFee, spongeCity, financingRatio: financingRatio / 100, financingRate: financingRate / 100, interestYears };
+      window.investmentEstimateInputs = { city, landPrice, municipalFee, spongeSel, financingRatio, financingRate, devPhases, phasePeriod };
+      const inputs = { city, landPrice, municipalFee, spongeCity, financingRatio: financingRatio / 100, financingRate: financingRate / 100, devPhases, phasePeriod };
       const result = FinancialModules.calculateInvestmentEstimate(inputs, window.configResult, projectData);
       window.investmentEstimateResult = result;
       renderInvestmentEstimateResult(result);
@@ -3181,8 +3187,8 @@
             <tbody>${rows}</tbody>
           </table>
           <div style="margin-top:12px;color:var(--neutral-500);font-size:0.8rem;">
-            单位地上建面成本：${fmtNum(result.summary.unitGroundCost, 2)} 元/m² &nbsp;|&nbsp;
-            单位总建面成本：${fmtNum(result.summary.unitTotalAreaCost, 2)} 元/m²
+            单位建面成本：${fmtNum(result.summary.unitGroundCost, 2)} 元/m² &nbsp;|&nbsp;
+            单位地上建面成本：${fmtNum(result.summary.unitAboveGroundCost, 2)} 元/m²
           </div>
         </div>
       `;
@@ -3208,6 +3214,12 @@
       const priceSplit = saved.priceSplit != null ? saved.priceSplit : 1.0;
       const rentLayer = saved.rentLayer != null ? saved.rentLayer : '';
       const priceLayer = saved.priceLayer != null ? saved.priceLayer : '';
+      const marketingRate = saved.marketingRate != null ? saved.marketingRate : 3.5;
+      const managementRate = saved.managementRate != null ? saved.managementRate : 3;
+      const rentalOpRate = saved.rentalOpRate != null ? saved.rentalOpRate : 6;
+      const occupancyRate = saved.occupancyRate != null ? saved.occupancyRate : 90;
+      const rentalPeriod = saved.rentalPeriod != null ? saved.rentalPeriod : 20;
+      const rentGrowthRate = saved.rentGrowthRate != null ? saved.rentGrowthRate : 0;
 
       container.innerHTML = `
         <div class="card" style="margin-bottom:16px;">
@@ -3233,6 +3245,30 @@
               <label>分层售价（万元/m²）</label>
               <input type="number" id="static-price-layer" class="form-control" value="${priceLayer}" step="0.05" min="0" placeholder="默认同分栋">
             </div>
+            <div class="form-group">
+              <label>营销费用率（%）</label>
+              <input type="number" id="static-marketing-rate" class="form-control" value="${marketingRate}" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>管理费用率（%）</label>
+              <input type="number" id="static-management-rate" class="form-control" value="${managementRate}" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>租赁运营费用率（%）</label>
+              <input type="number" id="static-rental-op-rate" class="form-control" value="${rentalOpRate}" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>出租率（%）</label>
+              <input type="number" id="static-occupancy-rate" class="form-control" value="${occupancyRate}" step="1" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label>租赁运营期（年）</label>
+              <input type="number" id="static-rental-period" class="form-control" value="${rentalPeriod}" step="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>租金年增长率（%）</label>
+              <input type="number" id="static-rent-growth-rate" class="form-control" value="${rentGrowthRate}" step="0.1" min="0">
+            </div>
           </div>
           <div style="margin-top:16px;">
             <button class="btn btn-primary" onclick="calculateStaticAnalysis()">计算静态投资分析</button>
@@ -3257,9 +3293,15 @@
       const priceLayerInput = document.getElementById('static-price-layer').value;
       const rentLayer = rentLayerInput === '' ? null : FinancialModules.safeNum(rentLayerInput);
       const priceLayer = priceLayerInput === '' ? null : FinancialModules.safeNum(priceLayerInput);
+      const marketingRate = FinancialModules.safeNum(document.getElementById('static-marketing-rate').value, 3.5);
+      const managementRate = FinancialModules.safeNum(document.getElementById('static-management-rate').value, 3);
+      const rentalOpRate = FinancialModules.safeNum(document.getElementById('static-rental-op-rate').value, 6);
+      const occupancyRate = FinancialModules.safeNum(document.getElementById('static-occupancy-rate').value, 90);
+      const rentalPeriod = FinancialModules.safeNum(document.getElementById('static-rental-period').value, 20);
+      const rentGrowthRate = FinancialModules.safeNum(document.getElementById('static-rent-growth-rate').value, 0);
 
-      window.staticAnalysisInputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer };
-      const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer };
+      window.staticAnalysisInputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate };
+      const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate };
       const result = FinancialModules.calculateStaticAnalysis(inputs, window.configResult, projectData, window.investmentEstimateResult);
       window.staticAnalysisResult = result;
       renderStaticAnalysisResult(result);
@@ -3269,7 +3311,7 @@
       const panel = document.getElementById('static-result-panel');
       if (!panel) return;
       const saleRows = result.sale.details.map(it => `
-        <tr><td>${it.type}</td><td class="num">${fmtNum(it.area, 2)}</td><td class="num">${fmtNum(it.price, 4)}</td><td class="num">${fmtNum(it.revenue, 2)}</td></tr>
+        <tr><td>${it.type}</td><td class="num">${fmtNum(it.area, 2)}</td><td class="num">${fmtNum(it.price, 2)}</td><td class="num">${fmtNum(it.revenue, 2)}</td></tr>
       `).join('');
       const rentRows = result.rent.details.map(it => `
         <tr><td>${it.type}</td><td class="num">${fmtNum(it.area, 2)}</td><td class="num">${fmtNum(it.rent, 2)}</td><td class="num">${fmtNum(it.annualRevenue, 2)}</td></tr>
@@ -3286,24 +3328,34 @@
         <div class="card" style="margin-bottom:16px;">
           <div class="card-title">销售测算</div>
           <table class="data-table">
-            <thead><tr><th>产品类型</th><th>销售面积（m²）</th><th>单价（万元/m²）</th><th>销售收入（万元）</th></tr></thead>
-            <tbody>${saleRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.soldAreaTotal, 2)}</td><td>—</td><td class="num">${fmtNum(result.sale.totalRevenue, 2)}</td></tr></tbody>
+            <thead><tr><th>产品类型</th><th>销售面积（m²）</th><th>售价（万元/m²）</th><th>销售收入（万元）</th></tr></thead>
+            <tbody>${saleRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.soldAreaTotal, 2)}</td><td class="num">${fmtNum(result.sale.weightedPrice, 2)}</td><td class="num">${fmtNum(result.sale.totalRevenue, 2)}</td></tr></tbody>
           </table>
         </div>
         <div class="card" style="margin-bottom:16px;">
-          <div class="card-title">租赁测算（首年）</div>
+          <div class="card-title">租赁测算</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px;">
+            <div class="stat-card"><div class="label">加权平均租金</div><div class="value">${fmtNum(result.rent.weightedRent, 2)}</div><div class="unit">元/天/㎡</div></div>
+            <div class="stat-card"><div class="label">有效年租金</div><div class="value">${fmtNum(result.rent.effectiveYearlyRent, 2)}</div><div class="unit">元/年/㎡</div></div>
+            <div class="stat-card"><div class="label">净租赁收入</div><div class="value">${fmtNum(result.rent.netRentPerSqm, 2)}</div><div class="unit">元/年/㎡</div></div>
+            <div class="stat-card"><div class="label">净租赁收入总额</div><div class="value">${fmtNum(result.rent.netRentalIncome, 2)}</div><div class="unit">万元/年</div></div>
+            <div class="stat-card"><div class="label">租赁总投</div><div class="value">${fmtNum(result.rent.rentalTotalInvestment, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">NOI</div><div class="value">${fmtNum(result.rent.noi, 2)}</div><div class="unit">%</div></div>
+          </div>
           <table class="data-table">
             <thead><tr><th>产品类型</th><th>出租面积（m²）</th><th>租金（元/天/m²）</th><th>年租金收入（万元）</th></tr></thead>
-            <tbody>${rentRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.rentedAreaTotal, 2)}</td><td>—</td><td class="num">${fmtNum(result.rent.annualRevenue, 2)}</td></tr></tbody>
+            <tbody>${rentRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.rentedAreaTotal, 2)}</td><td class="num">${fmtNum(result.rent.weightedRent, 2)}</td><td class="num">${fmtNum(result.rent.netRentalIncome, 2)}</td></tr></tbody>
           </table>
         </div>
         <div class="card">
-          <div class="card-title">静态指标</div>
+          <div class="card-title">综合汇总</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
-            <div class="stat-card"><div class="label">总收入</div><div class="value">${fmtNum(result.indicators.totalRevenue, 2)}</div><div class="unit">万元</div></div>
-            <div class="stat-card"><div class="label">净利润</div><div class="value">${fmtNum(result.indicators.netProfit, 2)}</div><div class="unit">万元</div></div>
-            <div class="stat-card"><div class="label">销售净利率</div><div class="value">${fmtNum(result.indicators.grossMargin * 100, 2)}</div><div class="unit">%</div></div>
-            <div class="stat-card"><div class="label">投资回报率</div><div class="value">${fmtNum(result.indicators.investmentReturn * 100, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">总投资</div><div class="value">${fmtNum(result.summary.totalInvestment, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">销售净利润</div><div class="value">${fmtNum(result.summary.saleNetProfit, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">租赁年净收入</div><div class="value">${fmtNum(result.summary.netRentalIncome, 2)}</div><div class="unit">万元/年</div></div>
+            <div class="stat-card"><div class="label">资金缺口</div><div class="value">${fmtNum(result.summary.fundingGap, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">销售净利率</div><div class="value">${fmtNum(result.summary.saleNetMargin, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">静态投资回收期</div><div class="value">${fmtNum(result.summary.paybackPeriod, 2)}</div><div class="unit">年</div></div>
           </div>
         </div>
       `;
