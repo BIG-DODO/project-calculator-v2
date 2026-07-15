@@ -784,6 +784,13 @@
   .analysis-area-chart { grid-column: 1 / -1; }
   @media (max-width: 900px) { .analysis-area-chart { grid-column: auto; } }
 
+  .analysis-legend-card { grid-column: 1 / -1; padding: 14px 18px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .analysis-legend-title { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); white-space: nowrap; }
+  .analysis-legend-items { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+  .analysis-legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--neutral-700); }
+  .analysis-legend-color { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  @media (max-width: 768px) { .analysis-legend-card { gap: 10px; } .analysis-legend-items { gap: 10px 14px; } }
+
   /* ECharts tooltip 移动端适配 */
   .echarts-tooltip {
     max-width: 92vw !important;
@@ -2157,6 +2164,17 @@
             <div class="analysis-chart-title">📊 产品配置数量（按栋数）</div>
             <div id="analysis-bar-chart" class="analysis-chart"></div>
           </div>
+          <div class="analysis-chart-card analysis-3d-card analysis-legend-card">
+            <div class="analysis-legend-title">📋 图例</div>
+            <div class="analysis-legend-items">
+              ${types.map((type, idx) => `
+                <div class="analysis-legend-item">
+                  <span class="analysis-legend-color" style="background:${colors[idx % colors.length]}"></span>
+                  <span class="analysis-legend-text">${type}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
           ${hasAreaSegment ? `
           <div class="analysis-chart-card analysis-3d-card analysis-area-chart">
             <div class="analysis-chart-title">📐 面积段分布（按${areaLabel}）</div>
@@ -2174,12 +2192,11 @@
       analysisPieChart = echarts.init(pieDom);
       analysisPieChart.setOption({
         tooltip: { trigger: 'item', formatter: '{b}: {c}㎡ ({d}%)' },
-        legend: { orient: 'vertical', right: 0, top: 'center', itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
         series: [{
           name: areaLabel,
           type: 'pie',
           radius: ['45%', '70%'],
-          center: ['40%', '50%'],
+          center: ['50%', '50%'],
           avoidLabelOverlap: true,
           label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
           labelLine: { show: true },
@@ -2200,6 +2217,7 @@
       analysisBarChart = echarts.init(barDom);
       analysisBarChart.setOption({
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c}栋' },
+        legend: { show: false },
         grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
         xAxis: { type: 'category', data: types, axisLabel: { fontSize: 11, interval: 0, rotate: types.length > 5 ? 30 : 0 } },
         yAxis: { type: 'value', name: '栋数', axisLabel: { fontSize: 11 } },
