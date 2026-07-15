@@ -338,12 +338,156 @@
     ];
   };
 
-  // ==================== 静态投资分析（占位框架） ====================
+  // ==================== 静态投资分析 ====================
+  // 产品排序（用于销售/出租优先级）
+  const SALE_PRIORITY = ['轻钢厂房', '分栋厂房', '分层厂房', '产业大厦'];
+  const RENT_PRIORITY = ['产业大厦', '分层厂房', '分栋厂房', '轻钢厂房'];
+
+  function allocateAreaByPriority(targetArea, products, priority, getArea) {
+    const allocation = {};
+    let remaining = targetArea;
+    priority.forEach(type => {
+      const p = products.find(x => x.type === type);
+      if (!p || remaining <= 0) return;
+      const available = getArea(p);
+      const allocate = Math.min(remaining, available);
+      allocation[type] = allocate;
+      remaining -= allocate;
+    });
+    return { allocation, remaining };
+  }
+
   NS.calculateStaticAnalysis = function (inputs, result, projectData, investmentEstimate) {
-    // TODO: 实现静态分析完整逻辑
+    inputs = inputs || {};
+    const products = (result && result.products) || [];
+    const pd = projectData || {};
+    const inv = investmentEstimate || {};
+    const metrics = inv.metrics || getProductMetrics(result);
+
+    const totalCap = safeNum(result.totalCap, 0);
+    const aboveGroundArea = safeNum(result.totalArea, 0);
+    const ancillaryRatio = safeNum(pd.ancillaryRatio, 0);
+    const rdRatio = safeNum(pd.rdRatio, 0);
+    const supportArea = metrics.supportArea || 0;
+
+    // 用户输入
+    const saleRatio = safeNum(inputs.saleRatio, 0) / 100;
+    const rentSplit = safeNum(inputs.rentSplit, 0);          // 元/天/m²
+    const priceSplit = safeNum(inputs.priceSplit, 0);        // 万元/m²
+    const rentLayer = inputs.rentLayer != null ? safeNum(inputs.rentLayer, rentSplit) : rentSplit;
+    const priceLayer = inputs.priceLayer != null ? safeNum(inputs.priceLayer, priceSplit) : priceSplit;
+
+    // 各类产品单价（万元/m² 与 元/天/m²）
+    const priceMap = {};
+    const rentMap = {};
+    products.forEach(p => {
+      if (p.type === '轻钢厂房') { priceMap[p.type] = priceSplit; rentMap[p.type] = rentSplit; }
+      else if (p.type === '分栋厂房') { priceMap[p.type] = priceSplit; rentMap[p.type] = rentSplit; }
+      else if (p.type === '分层厂房') { priceMap[p.type] = priceLayer; rentMap[p.type] = rentLayer; }
+      else if (p.type === '产业大厦') { priceMap[p.type] = priceLayer; rentMap[p.type] = rentLayer; }
+      else if (p.type === '配套宿舍') { priceMap[p.type] = 0; rentMap[p.type] = rentSplit; }
+      else if (p.type === '配套楼') { priceMap[p.type] = 0; rentMap[p.type] = 0; }
+    });
+
+    // 可售/可租面积
+    const saleableCapArea = totalCap * Math.max(0, 1 - ancillaryRatio - rdRatio) * saleRatio;
+    // 注：销售面积按建面口径分配，但上限不超过按计容口径计算出的 saleableCapArea
+    const rentableArea = Math.max(0, aboveGroundArea - saleableCapArea - supportArea);
+
+    // 按优先级分配销售面积（建面）
+    const saleAlloc = allocateAreaByPriority(saleableCapArea, products, SALE_PRIORITY, p => p.totalArea || 0);
+    const soldAreaByType = saleAlloc.allocation;
+    const soldAreaTotal = Object.values(soldAreaByType).reduce((s, v) => s + v, 0);
+
+    // 按优先级分配出租面积：从产品剩余面积中分配
+    const remainingAreaByType = {};
+    products.forEach(p => {
+      remainingAreaByType[p.type] = Math.max(0, (p.totalArea || 0) - (soldAreaByType[p.type] || 0));
+    });
+    const rentAlloc = allocateAreaByPriority(rentableArea, products, RENT_PRIORITY, p => remainingAreaByType[p.type] || 0);
+    const rentedAreaByType = rentAlloc.allocation;
+    const rentedAreaTotal = Object.values(rentedAreaByType).reduce((s, v) => s + v, 0);
+
+    // 销售收入
+    let saleRevenue = 0;
+    const saleDetails = [];
+    SALE_PRIORITY.forEach(type => {
+      const area = soldAreaByType[type] || 0;
+      const price = priceMap[type] || 0;
+      const revenue = area * price;
+      saleRevenue += revenue;
+      saleDetails.push({ type, area, price, revenue });
+    });
+
+    // 租赁收入（按年）
+    let annualRentRevenue = 0;
+    const rentDetails = [];
+    RENT_PRIORITY.forEach(type => {
+      const area = rentedAreaByType[type] || 0;
+      const rent = rentMap[type] || 0;
+      const annualRevenue = area * rent * 365 / 10000; // 万元/年
+      annualRentRevenue += annualRevenue;
+      rentDetails.push({ type, area, rent, annualRevenue });
+    });
+
+    // 成本与税费
+    const totalInvestment = inv.summary ? inv.summary.totalInvestment : 0;
+    const landCost = inv.landCost ? inv.landCost.total : 0;
+    const constructionCost = inv.construction ? inv.construction.total : 0;
+
+    // 增值税（简化：销售收入 / 1.09 * 0.09）
+    const vatRate = 0.09;
+    const saleVAT = saleRevenue > 0 ? saleRevenue / (1 + vatRate) * vatRate : 0;
+
+    // 土地增值税（四级超率累进，简化模型）
+    // 扣除项目 = 土地成本×1.2 + 建安成本 + (土地+建安)×10% + 增值税附加等
+    const developmentExpenseRate = 0.10;
+    const additionalDeductionRate = 0.20;
+    const deductible = landCost * (1 + additionalDeductionRate) + constructionCost + (landCost + constructionCost) * developmentExpenseRate;
+    const appreciation = Math.max(0, saleRevenue - saleVAT - deductible);
+    const appreciationRate = deductible > 0 ? appreciation / deductible : 0;
+    let lvatRate = 0, lvatQuick = 0;
+    if (appreciationRate <= 0.5) { lvatRate = 0.30; lvatQuick = 0; }
+    else if (appreciationRate <= 1.0) { lvatRate = 0.40; lvatQuick = 0.05; }
+    else if (appreciationRate <= 2.0) { lvatRate = 0.50; lvatQuick = 0.15; }
+    else { lvatRate = 0.60; lvatQuick = 0.35; }
+    const landValueAddedTax = appreciation * lvatRate - deductible * lvatQuick;
+
+    // 企业所得税（简化：按总利润 25%）
+    const totalRevenue = saleRevenue + annualRentRevenue; // 静态首年简化
+    const totalTax = saleVAT + landValueAddedTax;
+    const taxableIncome = Math.max(0, totalRevenue - totalInvestment - totalTax);
+    const incomeTax = taxableIncome * 0.25;
+
+    // 静态指标
+    const netProfit = totalRevenue - totalInvestment - totalTax - incomeTax;
+    const grossMargin = totalRevenue > 0 ? netProfit / totalRevenue : 0;
+    const investmentReturn = totalInvestment > 0 ? netProfit / totalInvestment : 0;
+
     return {
-      status: 'placeholder',
-      message: '静态投资分析逻辑开发中...'
+      inputs: { saleRatio: saleRatio * 100, rentSplit, priceSplit, rentLayer, priceLayer },
+      metrics: {
+        landArea: safeNum(pd.landArea, 0),
+        far: safeNum(pd.far, 0),
+        totalCap,
+        aboveGroundArea,
+        undergroundArea: safeNum((inv.metrics && inv.metrics.undergroundArea) || 0, 0),
+        saleableCapArea,
+        rentableArea,
+        supportArea,
+        soldAreaTotal,
+        rentedAreaTotal
+      },
+      sale: { details: saleDetails, totalRevenue: saleRevenue },
+      rent: { details: rentDetails, annualRevenue: annualRentRevenue },
+      costs: { totalInvestment, landCost, constructionCost },
+      taxes: { vat: saleVAT, landValueAddedTax, incomeTax, total: totalTax + incomeTax },
+      indicators: {
+        totalRevenue,
+        netProfit,
+        grossMargin,
+        investmentReturn
+      }
     };
   };
 
@@ -355,6 +499,8 @@
       message: '动态投资分析逻辑开发中...'
     };
   };
+
+
 
   // ==================== Excel 导出工具 ====================
   NS.downloadInvestmentEstimateExcel = function (fullEstimate, fileName) {
@@ -402,6 +548,71 @@
     XLSX.utils.book_append_sheet(wb, wsSimple, '投资估算简化版');
 
     XLSX.writeFile(wb, fileName || '投资估算表.xlsx');
+  };
+
+  // ==================== 静态投资分析 Excel 导出 ====================
+  NS.downloadStaticAnalysisExcel = function (staticResult, fileName) {
+    if (typeof XLSX === 'undefined') {
+      alert('Excel 导出库未加载，请检查网络。');
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+
+    // Sheet1：规划指标与建造成本
+    const planningRows = [
+      ['项目', '数值', '单位'],
+      ['用地面积', fmtNum(staticResult.metrics.landArea || 0, 2), 'm²'],
+      ['容积率', fmtNum(staticResult.inputs.far || 0, 2), '—'],
+      ['计容总建筑面积', fmtNum(staticResult.metrics.totalCap, 2), 'm²'],
+      ['地上总建筑面积', fmtNum(staticResult.metrics.aboveGroundArea, 2), 'm²'],
+      ['地下总建筑面积', fmtNum(staticResult.metrics.undergroundArea || 0, 2), 'm²'],
+      ['总建筑面积', fmtNum((staticResult.metrics.aboveGroundArea || 0) + (staticResult.metrics.undergroundArea || 0), 2), 'm²'],
+      ['分割销售比例', fmtNum(staticResult.inputs.saleRatio, 2), '%'],
+      ['', '', ''],
+      ['建造成本', '金额（万元）', ''],
+      ['土地价格（含契税）', fmtNum(staticResult.costs.landCost, 2), ''],
+      ['建安成本', fmtNum(staticResult.costs.constructionCost, 2), ''],
+      ['总投资', fmtNum(staticResult.costs.totalInvestment, 2), ''],
+      ['综合单方成本', fmtNum(staticResult.costs.totalInvestment * 10000 / (staticResult.metrics.aboveGroundArea || 1), 2), '元/m²']
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(planningRows), '规划指标与建造成本');
+
+    // Sheet2：销售测算
+    const saleRows = [['产品类型', '销售面积（m²）', '单价（万元/m²）', '销售收入（万元）']];
+    staticResult.sale.details.forEach(it => saleRows.push([it.type, fmtNum(it.area, 2), fmtNum(it.price, 4), fmtNum(it.revenue, 2)]));
+    saleRows.push(['合计', fmtNum(staticResult.metrics.soldAreaTotal, 2), '—', fmtNum(staticResult.sale.totalRevenue, 2)]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(saleRows), '销售测算');
+
+    // Sheet3：租赁测算
+    const rentRows = [['产品类型', '出租面积（m²）', '租金（元/天/m²）', '年租金收入（万元）']];
+    staticResult.rent.details.forEach(it => rentRows.push([it.type, fmtNum(it.area, 2), fmtNum(it.rent, 2), fmtNum(it.annualRevenue, 2)]));
+    rentRows.push(['合计', fmtNum(staticResult.metrics.rentedAreaTotal, 2), '—', fmtNum(staticResult.rent.annualRevenue, 2)]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rentRows), '租赁测算');
+
+    // Sheet4：面积与单价汇总
+    const priceRows = [['产品类型', '销售面积（m²）', '销售单价（万元/m²）', '出租面积（m²）', '租金（元/天/m²）']];
+    const allTypes = [...new Set(staticResult.sale.details.map(d => d.type).concat(staticResult.rent.details.map(d => d.type)))];
+    allTypes.forEach(type => {
+      const s = staticResult.sale.details.find(d => d.type === type) || {};
+      const r = staticResult.rent.details.find(d => d.type === type) || {};
+      priceRows.push([type, fmtNum(s.area || 0, 2), fmtNum(s.price || 0, 4), fmtNum(r.area || 0, 2), fmtNum(r.rent || 0, 2)]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(priceRows), '面积与单价汇总');
+
+    // Sheet5：静态指标
+    const indicatorRows = [
+      ['指标', '数值', '单位'],
+      ['总收入', fmtNum(staticResult.indicators.totalRevenue, 2), '万元'],
+      ['净利润', fmtNum(staticResult.indicators.netProfit, 2), '万元'],
+      ['销售净利率', fmtNum(staticResult.indicators.grossMargin * 100, 2), '%'],
+      ['投资回报率', fmtNum(staticResult.indicators.investmentReturn * 100, 2), '%'],
+      ['增值税', fmtNum(staticResult.taxes.vat, 2), '万元'],
+      ['土地增值税', fmtNum(staticResult.taxes.landValueAddedTax, 2), '万元'],
+      ['企业所得税', fmtNum(staticResult.taxes.incomeTax, 2), '万元']
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(indicatorRows), '静态指标');
+
+    XLSX.writeFile(wb, fileName || '静态投资分析表.xlsx');
   };
 
 })(window);

@@ -1029,13 +1029,13 @@
           <div class="nav-item" data-view="static-analysis" onclick="switchView('static-analysis')">
             <span class="icon">📊</span> 静态投资分析
           </div>
-          <div class="nav-item sub" onclick="alert('静态投资分析表下载功能开发中...')">
+          <div class="nav-item sub" onclick="downloadStaticAnalysis()">
             <span class="icon">↳</span> 静态投资分析表下载
           </div>
           <div class="nav-item" data-view="dynamic-analysis" onclick="switchView('dynamic-analysis')">
             <span class="icon">📈</span> 动态投资分析
           </div>
-          <div class="nav-item sub" onclick="alert('动态投资分析表下载功能开发中...')">
+          <div class="nav-item sub" onclick="downloadDynamicAnalysis()">
             <span class="icon">↳</span> 动态投资分析表下载
           </div>
         </div>
@@ -3184,6 +3184,137 @@
       FinancialModules.downloadInvestmentEstimateExcel(window.investmentEstimateResult, '投资估算表.xlsx');
     }
 
+    // ==================== 静态投资分析视图 ====================
+    window.staticAnalysisResult = null;
+
+    function renderStaticAnalysis() {
+      const container = document.getElementById('static-analysis-content');
+      if (!container) return;
+      container.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">静态投资分析参数</div>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+            <div class="form-group">
+              <label>可分割销售比例（%）<span class="required">*</span></label>
+              <input type="number" id="static-sale-ratio" class="form-control" value="0" step="1" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label>分栋租金（元/天/m²）<span class="required">*</span></label>
+              <input type="number" id="static-rent-split" class="form-control" value="1.0" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>分栋售价（万元/m²）<span class="required">*</span></label>
+              <input type="number" id="static-price-split" class="form-control" value="1.0" step="0.05" min="0">
+            </div>
+            <div class="form-group">
+              <label>分层租金（元/天/m²）</label>
+              <input type="number" id="static-rent-layer" class="form-control" value="" step="0.1" min="0" placeholder="默认同分栋">
+            </div>
+            <div class="form-group">
+              <label>分层售价（万元/m²）</label>
+              <input type="number" id="static-price-layer" class="form-control" value="" step="0.05" min="0" placeholder="默认同分栋">
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn-primary" onclick="calculateStaticAnalysis()">计算静态投资分析</button>
+          </div>
+        </div>
+        <div id="static-result-panel"></div>
+      `;
+    }
+
+    function calculateStaticAnalysis() {
+      if (!window.configResult || !projectData) {
+        alert('请先生成产品配置'); return;
+      }
+      if (!window.investmentEstimateResult) {
+        alert('请先完成投资估算'); return;
+      }
+      const saleRatio = FinancialModules.safeNum(document.getElementById('static-sale-ratio').value, 0);
+      const rentSplit = FinancialModules.safeNum(document.getElementById('static-rent-split').value, 0);
+      const priceSplit = FinancialModules.safeNum(document.getElementById('static-price-split').value, 0);
+      const rentLayerInput = document.getElementById('static-rent-layer').value;
+      const priceLayerInput = document.getElementById('static-price-layer').value;
+      const rentLayer = rentLayerInput === '' ? null : FinancialModules.safeNum(rentLayerInput);
+      const priceLayer = priceLayerInput === '' ? null : FinancialModules.safeNum(priceLayerInput);
+
+      const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer };
+      const result = FinancialModules.calculateStaticAnalysis(inputs, window.configResult, projectData, window.investmentEstimateResult);
+      window.staticAnalysisResult = result;
+      renderStaticAnalysisResult(result);
+    }
+
+    function renderStaticAnalysisResult(result) {
+      const panel = document.getElementById('static-result-panel');
+      if (!panel) return;
+      const saleRows = result.sale.details.map(it => `
+        <tr><td>${it.type}</td><td class="num">${fmtNum(it.area, 2)}</td><td class="num">${fmtNum(it.price, 4)}</td><td class="num">${fmtNum(it.revenue, 2)}</td></tr>
+      `).join('');
+      const rentRows = result.rent.details.map(it => `
+        <tr><td>${it.type}</td><td class="num">${fmtNum(it.area, 2)}</td><td class="num">${fmtNum(it.rent, 2)}</td><td class="num">${fmtNum(it.annualRevenue, 2)}</td></tr>
+      `).join('');
+      panel.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">面积分配</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px;">
+            <div class="stat-card"><div class="label">可分割销售面积</div><div class="value">${fmtNum(result.metrics.saleableCapArea, 2)}</div><div class="unit">m²</div></div>
+            <div class="stat-card"><div class="label">可出租面积</div><div class="value">${fmtNum(result.metrics.rentableArea, 2)}</div><div class="unit">m²</div></div>
+            <div class="stat-card"><div class="label">自用面积（配套楼）</div><div class="value">${fmtNum(result.metrics.supportArea, 2)}</div><div class="unit">m²</div></div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">销售测算</div>
+          <table class="data-table">
+            <thead><tr><th>产品类型</th><th>销售面积（m²）</th><th>单价（万元/m²）</th><th>销售收入（万元）</th></tr></thead>
+            <tbody>${saleRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.soldAreaTotal, 2)}</td><td>—</td><td class="num">${fmtNum(result.sale.totalRevenue, 2)}</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">租赁测算（首年）</div>
+          <table class="data-table">
+            <thead><tr><th>产品类型</th><th>出租面积（m²）</th><th>租金（元/天/m²）</th><th>年租金收入（万元）</th></tr></thead>
+            <tbody>${rentRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.rentedAreaTotal, 2)}</td><td>—</td><td class="num">${fmtNum(result.rent.annualRevenue, 2)}</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">静态指标</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+            <div class="stat-card"><div class="label">总收入</div><div class="value">${fmtNum(result.indicators.totalRevenue, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">净利润</div><div class="value">${fmtNum(result.indicators.netProfit, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">销售净利率</div><div class="value">${fmtNum(result.indicators.grossMargin * 100, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">投资回报率</div><div class="value">${fmtNum(result.indicators.investmentReturn * 100, 2)}</div><div class="unit">%</div></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function downloadStaticAnalysis() {
+      if (!window.staticAnalysisResult) {
+        alert('请先进入“静态投资分析”页面完成计算'); return;
+      }
+      FinancialModules.downloadStaticAnalysisExcel(window.staticAnalysisResult, '静态投资分析表.xlsx');
+    }
+
+    // ==================== 动态投资分析视图（开发中） ====================
+    function renderDynamicAnalysis() {
+      const container = document.getElementById('dynamic-analysis-content');
+      if (!container) return;
+      container.innerHTML = `
+        <div class="card" style="text-align:center;padding:60px 40px;">
+          <div style="font-size:3rem;margin-bottom:16px;">🚧</div>
+          <h3 style="margin-bottom:8px;">动态投资分析</h3>
+          <p style="color:var(--neutral-400);">该模块正在开发中，敬请期待。</p>
+        </div>
+      `;
+    }
+
+    function downloadDynamicAnalysis() {
+      if (!window.staticAnalysisResult) {
+        alert('请先完成静态投资分析'); return;
+      }
+      alert('动态投资分析表下载功能开发中...');
+    }
+
     // ==================== 视图切换 ====================
     function switchView(viewId) {
       if (viewId === 'input') {
@@ -3200,6 +3331,8 @@
         document.getElementById('config-summary').style.display = 'block';
 
         if (viewId === 'investment-estimate') renderInvestmentEstimate();
+        if (viewId === 'static-analysis') renderStaticAnalysis();
+        if (viewId === 'dynamic-analysis') renderDynamicAnalysis();
 
         // 分析视图图表在 display:none 中初始化时尺寸为 0，视图可见后延迟重绘
         if (['chart-analysis', 'chart-height'].includes(viewId)) {
