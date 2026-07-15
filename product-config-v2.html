@@ -759,6 +759,7 @@
   .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
   @media (max-width: 900px) { .analysis-grid { grid-template-columns: 1fr; } }
   .analysis-chart-card { background: #fff; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--neutral-200); box-shadow: 0 2px 8px rgba(11,43,92,0.04); }
+  .analysis-chart-card.analysis-top-chart { padding-bottom: 8px; }
   .analysis-chart-title { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); margin-bottom: 12px; }
   .analysis-chart { width: 100%; height: 280px; }
   #analysis-pie-chart { height: 320px; }
@@ -785,7 +786,6 @@
   @media (max-width: 900px) { .analysis-area-chart { grid-column: auto; } }
 
   .analysis-legend-card { grid-column: 1 / -1; padding: 14px 18px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-  .analysis-legend-title { font-size: 0.85rem; font-weight: 600; color: var(--neutral-700); white-space: nowrap; }
   .analysis-legend-items { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
   .analysis-legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--neutral-700); }
   .analysis-legend-color { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
@@ -2156,16 +2156,15 @@
       const hasAreaSegment = segTypes.length > 0;
       container.innerHTML = `
         <div class="analysis-grid">
-          <div class="analysis-chart-card analysis-3d-card">
+          <div class="analysis-chart-card analysis-3d-card analysis-top-chart">
             <div class="analysis-chart-title">🥧 产品业态分布（按${areaLabel}）</div>
             <div id="analysis-pie-chart" class="analysis-chart"></div>
           </div>
-          <div class="analysis-chart-card analysis-3d-card">
+          <div class="analysis-chart-card analysis-3d-card analysis-top-chart">
             <div class="analysis-chart-title">📊 产品配置数量（按栋数）</div>
             <div id="analysis-bar-chart" class="analysis-chart"></div>
           </div>
           <div class="analysis-chart-card analysis-3d-card analysis-legend-card">
-            <div class="analysis-legend-title">📋 图例</div>
             <div class="analysis-legend-items">
               ${types.map((type, idx) => `
                 <div class="analysis-legend-item">
