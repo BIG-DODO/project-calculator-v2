@@ -3083,11 +3083,20 @@
 
     // ==================== 投资估算视图 ====================
     window.investmentEstimateResult = null;
+    window.investmentEstimateInputs = null;
 
     function renderInvestmentEstimate() {
       const container = document.getElementById('investment-estimate-content');
       if (!container) return;
-      const city = (projectData && projectData.region) || '';
+      const saved = window.investmentEstimateInputs || {};
+      const city = saved.city != null ? saved.city : ((projectData && projectData.region) || '');
+      const landPrice = saved.landPrice != null ? saved.landPrice : 100;
+      const municipalFee = saved.municipalFee != null ? saved.municipalFee : '';
+      const spongeSel = saved.spongeSel != null ? saved.spongeSel : 'auto';
+      const financingRatio = saved.financingRatio != null ? saved.financingRatio : 60;
+      const financingRate = saved.financingRate != null ? saved.financingRate : 5;
+      const interestYears = saved.interestYears != null ? saved.interestYears : 2;
+
       container.innerHTML = `
         <div class="card" style="margin-bottom:16px;">
           <div class="card-title">投资估算参数</div>
@@ -3098,31 +3107,31 @@
             </div>
             <div class="form-group">
               <label>土地出让金（万元/亩）<span class="required">*</span></label>
-              <input type="number" id="inv-land-price" class="form-control" value="100" step="1" min="0">
+              <input type="number" id="inv-land-price" class="form-control" value="${landPrice}" step="1" min="0">
             </div>
             <div class="form-group">
               <label>大市政配套费（元/m² 用地）</label>
-              <input type="number" id="inv-municipal-fee" class="form-control" value="" step="0.1" min="0" placeholder="留空按城市默认，上海为0">
+              <input type="number" id="inv-municipal-fee" class="form-control" value="${municipalFee}" step="0.1" min="0" placeholder="留空按城市默认，上海为0">
             </div>
             <div class="form-group">
               <label>海绵城市</label>
               <select id="inv-sponge" class="form-control">
-                <option value="auto">按城市自动（上海/杭州默认是）</option>
-                <option value="yes">是</option>
-                <option value="no">否</option>
+                <option value="auto" ${spongeSel === 'auto' ? 'selected' : ''}>按城市自动（上海/杭州默认是）</option>
+                <option value="yes" ${spongeSel === 'yes' ? 'selected' : ''}>是</option>
+                <option value="no" ${spongeSel === 'no' ? 'selected' : ''}>否</option>
               </select>
             </div>
             <div class="form-group">
-              <label>融资占比</label>
-              <input type="number" id="inv-financing-ratio" class="form-control" value="60" step="1" min="0" max="100">
+              <label>融资占比（%）</label>
+              <input type="number" id="inv-financing-ratio" class="form-control" value="${financingRatio}" step="1" min="0" max="100">
             </div>
             <div class="form-group">
               <label>融资利率（%）</label>
-              <input type="number" id="inv-financing-rate" class="form-control" value="5" step="0.1" min="0">
+              <input type="number" id="inv-financing-rate" class="form-control" value="${financingRate}" step="0.1" min="0">
             </div>
             <div class="form-group">
               <label>计息年限（年）</label>
-              <input type="number" id="inv-interest-years" class="form-control" value="2" step="0.5" min="0">
+              <input type="number" id="inv-interest-years" class="form-control" value="${interestYears}" step="0.5" min="0">
             </div>
           </div>
           <div style="margin-top:16px;">
@@ -3131,6 +3140,7 @@
         </div>
         <div id="inv-result-panel"></div>
       `;
+      if (window.investmentEstimateResult) renderInvestmentEstimateResult(window.investmentEstimateResult);
     }
 
     function calculateInvestmentEstimate() {
@@ -3145,11 +3155,12 @@
       let spongeCity;
       if (spongeSel === 'auto') spongeCity = undefined;
       else spongeCity = spongeSel === 'yes';
-      const financingRatio = FinancialModules.safeNum(document.getElementById('inv-financing-ratio').value, 60) / 100;
-      const financingRate = FinancialModules.safeNum(document.getElementById('inv-financing-rate').value, 5) / 100;
+      const financingRatio = FinancialModules.safeNum(document.getElementById('inv-financing-ratio').value, 60);
+      const financingRate = FinancialModules.safeNum(document.getElementById('inv-financing-rate').value, 5);
       const interestYears = FinancialModules.safeNum(document.getElementById('inv-interest-years').value, 2);
 
-      const inputs = { city, landPrice, municipalFee, spongeCity, financingRatio, financingRate, interestYears };
+      window.investmentEstimateInputs = { city, landPrice, municipalFee, spongeSel, financingRatio, financingRate, interestYears };
+      const inputs = { city, landPrice, municipalFee, spongeCity, financingRatio: financingRatio / 100, financingRate: financingRate / 100, interestYears };
       const result = FinancialModules.calculateInvestmentEstimate(inputs, window.configResult, projectData);
       window.investmentEstimateResult = result;
       renderInvestmentEstimateResult(result);
@@ -3186,33 +3197,41 @@
 
     // ==================== 静态投资分析视图 ====================
     window.staticAnalysisResult = null;
+    window.staticAnalysisInputs = null;
 
     function renderStaticAnalysis() {
       const container = document.getElementById('static-analysis-content');
       if (!container) return;
+      const saved = window.staticAnalysisInputs || {};
+      const saleRatio = saved.saleRatio != null ? saved.saleRatio : 0;
+      const rentSplit = saved.rentSplit != null ? saved.rentSplit : 1.0;
+      const priceSplit = saved.priceSplit != null ? saved.priceSplit : 1.0;
+      const rentLayer = saved.rentLayer != null ? saved.rentLayer : '';
+      const priceLayer = saved.priceLayer != null ? saved.priceLayer : '';
+
       container.innerHTML = `
         <div class="card" style="margin-bottom:16px;">
           <div class="card-title">静态投资分析参数</div>
           <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
             <div class="form-group">
               <label>可分割销售比例（%）<span class="required">*</span></label>
-              <input type="number" id="static-sale-ratio" class="form-control" value="0" step="1" min="0" max="100">
+              <input type="number" id="static-sale-ratio" class="form-control" value="${saleRatio}" step="1" min="0" max="100">
             </div>
             <div class="form-group">
               <label>分栋租金（元/天/m²）<span class="required">*</span></label>
-              <input type="number" id="static-rent-split" class="form-control" value="1.0" step="0.1" min="0">
+              <input type="number" id="static-rent-split" class="form-control" value="${rentSplit}" step="0.1" min="0">
             </div>
             <div class="form-group">
               <label>分栋售价（万元/m²）<span class="required">*</span></label>
-              <input type="number" id="static-price-split" class="form-control" value="1.0" step="0.05" min="0">
+              <input type="number" id="static-price-split" class="form-control" value="${priceSplit}" step="0.05" min="0">
             </div>
             <div class="form-group">
               <label>分层租金（元/天/m²）</label>
-              <input type="number" id="static-rent-layer" class="form-control" value="" step="0.1" min="0" placeholder="默认同分栋">
+              <input type="number" id="static-rent-layer" class="form-control" value="${rentLayer}" step="0.1" min="0" placeholder="默认同分栋">
             </div>
             <div class="form-group">
               <label>分层售价（万元/m²）</label>
-              <input type="number" id="static-price-layer" class="form-control" value="" step="0.05" min="0" placeholder="默认同分栋">
+              <input type="number" id="static-price-layer" class="form-control" value="${priceLayer}" step="0.05" min="0" placeholder="默认同分栋">
             </div>
           </div>
           <div style="margin-top:16px;">
@@ -3221,6 +3240,7 @@
         </div>
         <div id="static-result-panel"></div>
       `;
+      if (window.staticAnalysisResult) renderStaticAnalysisResult(window.staticAnalysisResult);
     }
 
     function calculateStaticAnalysis() {
@@ -3238,6 +3258,7 @@
       const rentLayer = rentLayerInput === '' ? null : FinancialModules.safeNum(rentLayerInput);
       const priceLayer = priceLayerInput === '' ? null : FinancialModules.safeNum(priceLayerInput);
 
+      window.staticAnalysisInputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer };
       const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer };
       const result = FinancialModules.calculateStaticAnalysis(inputs, window.configResult, projectData, window.investmentEstimateResult);
       window.staticAnalysisResult = result;
