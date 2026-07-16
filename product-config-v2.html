@@ -2984,6 +2984,12 @@
 
       const totalBuildingArea = actualAboveGround + undergroundArea;
 
+      // 保存地下面积到 result.calculated，供投资估算等模块使用
+      if (!result.calculated) result.calculated = {};
+      result.calculated.undergroundArea = undergroundArea;
+      result.calculated.totalBuildingArea = totalBuildingArea;
+      result.calculated.aboveGroundArea = actualAboveGround;
+
       document.getElementById('indicator-overview-content').innerHTML = `
         <div class="card">
           <div class="indicator-table-wrap">
