@@ -172,47 +172,47 @@
     const landVAT = round2(offsiteMunicipalTotal * 0.06 / 1.06);
 
     const landCostItems = [
-      { code: '1-1', name: '土地出让金', unit: '万元/亩', unitPrice: landPrice, quantity: acre, cost: landTransferFee, note: '单价×亩数' },
-      { code: '1-2', name: '土地转让费（契税）', unit: '万元', unitPrice: round2(landPrice * 0.03 + 10 / acre), quantity: acre, cost: deedTax, note: '出让金×3%+10' },
+      { code: '1-1', name: '土地出让金', unit: '万元/亩', unitPrice: landPrice, quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: landTransferFee, note: '单价×亩数' },
+      { code: '1-2', name: '土地转让费（契税）', unit: '万元', unitPrice: round2(landPrice * 0.03 + 10 / acre), quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: deedTax, note: '出让金×3%+10' },
       { code: '1-3', name: '拆迁补偿费', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '删除，不输出' },
-      { code: '1-4', name: '大市政配套费', unit: '元/m²', unitPrice: effectiveMunicipalFee, quantity: landArea, cost: municipalSupportingFee, note: city === '上海' ? '上海默认0' : '' },
-      { code: '1-5-2', name: '电力增容费/高可靠性用电', unit: '元/KVA', unitPrice: REFERENCE_PRICES.offsiteMunicipal.powerCapacity, quantity: powerKva, cost: powerCapacityCost, note: '(地上建面×70+地下建面×50)/1000' },
-      { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: landArea, cost: waterDrainageCost, note: '按用地面积' },
+      { code: '1-4', name: '大市政配套费', unit: '元/m²', unitPrice: effectiveMunicipalFee, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: municipalSupportingFee, note: city === '上海' ? '上海默认0' : '' },
+      { code: '1-5-2', name: '电力增容费/高可靠性用电', unit: '元/KVA', unitPrice: REFERENCE_PRICES.offsiteMunicipal.powerCapacity, quantity: powerKva, quantityFormula: "('规划指标'!B6*70+'规划指标'!B7*50)/1000", cost: powerCapacityCost, note: '(地上建面×70+地下建面×50)/1000' },
+      { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: waterDrainageCost, note: '按用地面积' },
       { code: '1-6', name: '其他费用', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '' },
-      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: offsiteMunicipalTotal, cost: landVAT, note: '红线外市政×6%/1.06' }
+      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: offsiteMunicipalTotal, quantityFormula: 'F7+F8', cost: landVAT, costFormula: '(F7+F8)*0.06/1.06', note: '红线外市政×6%/1.06' }
     ];
     const landCostTotal = round2(landCostItems.reduce((s, it) => s + it.cost, 0));
 
     // 二、前期费用
     const pre = REFERENCE_PRICES.preliminary;
     const prelimItems = [
-      { code: '2-1', name: '勘察费用', unit: '元/m²', unitPrice: pre.survey, quantity: landArea, cost: round2(pre.survey * landArea / 10000), note: '按用地面积' },
-      { code: '2-2', name: '规划设计费', unit: '元/m²', unitPrice: pre.planning, quantity: aboveGroundArea, cost: round2(pre.planning * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-3', name: '报批报建费', unit: '元/m²', unitPrice: pre.approval, quantity: aboveGroundArea, cost: round2(pre.approval * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-4', name: '造价咨询服务费', unit: '元/m²', unitPrice: pre.consulting, quantity: aboveGroundArea, cost: round2(pre.consulting * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-5', name: '工程监理费', unit: '元/m²', unitPrice: pre.supervision, quantity: aboveGroundArea, cost: round2(pre.supervision * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-6', name: '临时工程费', unit: '元/m²', unitPrice: pre.temporary, quantity: aboveGroundArea, cost: round2(pre.temporary * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-7', name: '拆除工程', unit: '元/m²', unitPrice: pre.demolition, quantity: aboveGroundArea, cost: round2(pre.demolition * aboveGroundArea / 10000), note: '无拆除时为0' },
-      { code: '2-8', name: '其他', unit: '元/m²', unitPrice: pre.other, quantity: aboveGroundArea, cost: round2(pre.other * aboveGroundArea / 10000), note: '' }
+      { code: '2-1', name: '勘察费用', unit: '元/m²', unitPrice: pre.survey, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: round2(pre.survey * landArea / 10000), note: '按用地面积' },
+      { code: '2-2', name: '规划设计费', unit: '元/m²', unitPrice: pre.planning, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.planning * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '2-3', name: '报批报建费', unit: '元/m²', unitPrice: pre.approval, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.approval * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '2-4', name: '造价咨询服务费', unit: '元/m²', unitPrice: pre.consulting, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.consulting * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '2-5', name: '工程监理费', unit: '元/m²', unitPrice: pre.supervision, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.supervision * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '2-6', name: '临时工程费', unit: '元/m²', unitPrice: pre.temporary, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.temporary * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '2-7', name: '拆除工程', unit: '元/m²', unitPrice: pre.demolition, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.demolition * aboveGroundArea / 10000), note: '无拆除时为0' },
+      { code: '2-8', name: '其他', unit: '元/m²', unitPrice: pre.other, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.other * aboveGroundArea / 10000), note: '' }
     ];
     const prelimSubtotal = round2(prelimItems.reduce((s, it) => s + it.cost, 0));
     const prelimVAT = round2(prelimSubtotal * 0.06 / 1.06);
-    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: prelimSubtotal, cost: prelimVAT, note: '前期合计×6%/1.06' });
+    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: prelimSubtotal, quantityFormula: 'SUM(F13:F20)', cost: prelimVAT, costFormula: 'SUM(F13:F20)*0.06/1.06', note: '前期小计×6%/1.06' });
     const prelimTotal = round2(prelimSubtotal + prelimVAT);
 
     // 三、建安工程成本
     // 3.1 基础设施费
     const infra = REFERENCE_PRICES.infrastructure;
     const infraItems = [
-      { code: '3-1-1', name: '室外给水管网', unit: '元/m²', unitPrice: infra.waterSupply, quantity: aboveGroundArea, cost: round2(infra.waterSupply * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-2', name: '室外排水管网', unit: '元/m²', unitPrice: infra.drainage, quantity: aboveGroundArea, cost: round2(infra.drainage * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-3', name: '室外电缆工程', unit: '元/m²', unitPrice: infra.cable, quantity: aboveGroundArea, cost: round2(infra.cable * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-4', name: '室外弱电工程', unit: '元/m²', unitPrice: infra.weakCurrent, quantity: aboveGroundArea, cost: round2(infra.weakCurrent * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-5', name: '室外燃气管网', unit: '元/m²', unitPrice: infra.gas, quantity: aboveGroundArea, cost: round2(infra.gas * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-6', name: '供配电设备及安装', unit: '元/m²', unitPrice: infra.powerDistribution, quantity: aboveGroundArea, cost: round2(infra.powerDistribution * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-7', name: '水泵房设备及安装', unit: '元/m²', unitPrice: infra.pumpRoom, quantity: aboveGroundArea, cost: round2(infra.pumpRoom * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-8', name: '消防设备及安装', unit: '元/m²', unitPrice: infra.fire, quantity: aboveGroundArea, cost: round2(infra.fire * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-9', name: '小区车行道路工程', unit: '元/m²', unitPrice: infra.road, quantity: roadArea, cost: round2(infra.road * roadArea / 10000), note: '总用地×30%' }
+      { code: '3-1-1', name: '室外给水管网', unit: '元/m²', unitPrice: infra.waterSupply, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.waterSupply * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-2', name: '室外排水管网', unit: '元/m²', unitPrice: infra.drainage, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.drainage * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-3', name: '室外电缆工程', unit: '元/m²', unitPrice: infra.cable, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.cable * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-4', name: '室外弱电工程', unit: '元/m²', unitPrice: infra.weakCurrent, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.weakCurrent * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-5', name: '室外燃气管网', unit: '元/m²', unitPrice: infra.gas, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.gas * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-6', name: '供配电设备及安装', unit: '元/m²', unitPrice: infra.powerDistribution, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.powerDistribution * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-7', name: '水泵房设备及安装', unit: '元/m²', unitPrice: infra.pumpRoom, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.pumpRoom * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-8', name: '消防设备及安装', unit: '元/m²', unitPrice: infra.fire, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.fire * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-9', name: '小区车行道路工程', unit: '元/m²', unitPrice: infra.road, quantity: roadArea, quantityFormula: "'规划指标'!B11", cost: round2(infra.road * roadArea / 10000), note: '总用地×30%' }
     ];
     const infraTotal = round2(infraItems.reduce((s, it) => s + it.cost, 0));
 
@@ -225,21 +225,21 @@
 
     const landscapeItems = [
       { code: '3-2-1', name: '示范区景观', unit: '元/m²', unitPrice: land.demoLandscape, quantity: 1000, cost: round2(land.demoLandscape * 1000 / 10000), note: '固定1000㎡' },
-      { code: '3-2-2', name: '硬质铺装', unit: '元/m²', unitPrice: land.hardPavement, quantity: hardPavementArea, cost: round2(land.hardPavement * hardPavementArea / 10000), note: '总用地×(1-绿地率-30%-建筑密度)' },
-      { code: '3-2-3', name: '非示范区绿化', unit: '元/m²', unitPrice: land.greening, quantity: nonDemoGreenArea, cost: round2(land.greening * nonDemoGreenArea / 10000), note: '总用地×绿地率-1000' },
-      { code: '3-2-4', name: '出入口开口费', unit: '万元/个', unitPrice: land.entrance, quantity: entranceCount, cost: round2(land.entrance * entranceCount), note: 'ceil(总用地/20000),2~4个' },
-      { code: '3-2-5', name: '室外石材台阶及散水', unit: '元/m²', unitPrice: land.stoneSteps, quantity: aboveGroundArea, cost: round2(land.stoneSteps * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '3-2-6', name: '标示标牌', unit: '元/m²', unitPrice: land.signs, quantity: aboveGroundArea, cost: round2(land.signs * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '3-2-7', name: '围墙', unit: '元/m', unitPrice: land.wall, quantity: wallLength, cost: round2(land.wall * wallLength / 10000), note: '√总用地×4×1.2' },
-      { code: '3-2-8', name: '海绵城市', unit: '元/m²', unitPrice: land.spongeCity, quantity: spongeCityArea, cost: round2(land.spongeCity * spongeCityArea / 10000), note: spongeCity ? '总用地×绿地率+硬质铺装' : '未启用' }
+      { code: '3-2-2', name: '硬质铺装', unit: '元/m²', unitPrice: land.hardPavement, quantity: hardPavementArea, quantityFormula: "'规划指标'!B3-'规划指标'!B3*'规划指标'!B10/100-'规划指标'!B11-'规划指标'!B3*'规划指标'!B9/100", cost: round2(land.hardPavement * hardPavementArea / 10000), note: '总用地-绿地-道路-建筑基底' },
+      { code: '3-2-3', name: '非示范区绿化', unit: '元/m²', unitPrice: land.greening, quantity: nonDemoGreenArea, quantityFormula: "'规划指标'!B3*'规划指标'!B10/100-1000", cost: round2(land.greening * nonDemoGreenArea / 10000), note: '总用地×绿地率-1000' },
+      { code: '3-2-4', name: '出入口开口费', unit: '万元/个', unitPrice: land.entrance, quantity: entranceCount, quantityFormula: "MIN(4,MAX(2,CEILING('规划指标'!B3/20000,1)))", cost: round2(land.entrance * entranceCount), note: 'ceil(总用地/20000),2~4个' },
+      { code: '3-2-5', name: '室外石材台阶及散水', unit: '元/m²', unitPrice: land.stoneSteps, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(land.stoneSteps * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '3-2-6', name: '标示标牌', unit: '元/m²', unitPrice: land.signs, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(land.signs * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '3-2-7', name: '围墙', unit: '元/m', unitPrice: land.wall, quantity: wallLength, quantityFormula: "SQRT('规划指标'!B3)*4*1.2", cost: round2(land.wall * wallLength / 10000), note: '√总用地×4×1.2' },
+      { code: '3-2-8', name: '海绵城市', unit: '元/m²', unitPrice: land.spongeCity, quantity: spongeCityArea, quantityFormula: spongeCity ? "'规划指标'!B3*'规划指标'!B10/100+'规划指标'!B3-'规划指标'!B3*'规划指标'!B10/100-'规划指标'!B11-'规划指标'!B3*'规划指标'!B9/100" : '0', cost: round2(land.spongeCity * spongeCityArea / 10000), note: spongeCity ? '总用地×绿地率+硬质铺装' : '未启用' }
     ];
     const landscapeTotal = round2(landscapeItems.reduce((s, it) => s + it.cost, 0));
 
     // 3.3 公建配套
     const publicFacilityItems = [
-      { code: '3-3-1', name: '地下室', unit: '元/m²', unitPrice: 3700, quantity: undergroundArea, cost: round2(3700 * undergroundArea / 10000), note: '', ownArea: true, underground: true },
-      { code: '3-3-2', name: '配套楼', unit: '元/m²', unitPrice: 2200, quantity: metrics.supportArea, cost: round2(2200 * metrics.supportArea / 10000), note: '', ownArea: true },
-      { code: '3-3-3', name: '配套宿舍', unit: '元/m²', unitPrice: 2600, quantity: metrics.dormArea, cost: round2(2600 * metrics.dormArea / 10000), note: '', ownArea: true }
+      { code: '3-3-1', name: '地下室', unit: '元/m²', unitPrice: 3700, quantity: undergroundArea, quantityFormula: "'规划指标'!B7", cost: round2(3700 * undergroundArea / 10000), note: '', ownArea: true, underground: true },
+      { code: '3-3-2', name: '配套楼', unit: '元/m²', unitPrice: 2200, quantity: metrics.supportArea, quantityFormula: "'规划指标'!B19", cost: round2(2200 * metrics.supportArea / 10000), note: '', ownArea: true },
+      { code: '3-3-3', name: '配套宿舍', unit: '元/m²', unitPrice: 2600, quantity: metrics.dormArea, quantityFormula: "'规划指标'!B20", cost: round2(2600 * metrics.dormArea / 10000), note: '', ownArea: true }
     ];
     const publicFacilityTotal = round2(publicFacilityItems.reduce((s, it) => s + it.cost, 0));
 
@@ -259,10 +259,10 @@
     }
 
     const buildingItems = [
-      { code: '3-4-1', name: '轻钢厂房', unit: '元/m²', unitPrice: 1500, quantity: metrics.lightSteelArea, cost: round2(1500 * metrics.lightSteelArea / 10000), note: '非计容建面', ownArea: true },
-      { code: '3-4-2', name: '分栋厂房', unit: '元/m²', unitPrice: round2(splitUnitPrice), quantity: metrics.splitArea, cost: round2(splitUnitPrice * metrics.splitArea / 10000), note: '独栋2300/双拼2200加权', ownArea: true },
-      { code: '3-4-3', name: '分层厂房', unit: '元/m²', unitPrice: round2(layerUnitPrice), quantity: metrics.layerArea, cost: round2(layerUnitPrice * metrics.layerArea / 10000), note: '独栋2400/双拼三拼2300加权', ownArea: true },
-      { code: '3-4-4', name: '产业大厦', unit: '元/m²', unitPrice: round2(towerUnitPrice), quantity: metrics.towerArea, cost: round2(towerUnitPrice * metrics.towerArea / 10000), note: '按高度分档', ownArea: true }
+      { code: '3-4-1', name: '轻钢厂房', unit: '元/m²', unitPrice: 1500, quantity: metrics.lightSteelArea, quantityFormula: "'规划指标'!B14", cost: round2(1500 * metrics.lightSteelArea / 10000), note: '非计容建面', ownArea: true },
+      { code: '3-4-2', name: '分栋厂房', unit: '元/m²', unitPrice: round2(splitUnitPrice), quantity: metrics.splitArea, quantityFormula: "'规划指标'!B15", cost: round2(splitUnitPrice * metrics.splitArea / 10000), note: '独栋2300/双拼2200加权', ownArea: true },
+      { code: '3-4-3', name: '分层厂房', unit: '元/m²', unitPrice: round2(layerUnitPrice), quantity: metrics.layerArea, quantityFormula: "'规划指标'!B16", cost: round2(layerUnitPrice * metrics.layerArea / 10000), note: '独栋2400/双拼三拼2300加权', ownArea: true },
+      { code: '3-4-4', name: '产业大厦', unit: '元/m²', unitPrice: round2(towerUnitPrice), quantity: metrics.towerArea, quantityFormula: "'规划指标'!B17", cost: round2(towerUnitPrice * metrics.towerArea / 10000), note: '按高度分档', ownArea: true }
     ];
     const buildingTotal = round2(buildingItems.reduce((s, it) => s + it.cost, 0));
 
@@ -452,7 +452,11 @@
 
     // 销售测算
     const saleRevenue = round2(soldAreaTotal * weightedSalePrice);
-    const landCostPerArea = inv.landCost ? round2(inv.landCost.total * 10000 / aboveGroundArea) : 0;
+    const landCostItems = inv.landCost ? inv.landCost.items : [];
+    const landTransferFeeItem = landCostItems.find(it => it.code === '1-1');
+    const deedTaxItem = landCostItems.find(it => it.code === '1-2');
+    const landCostWithDeed = (landTransferFeeItem ? landTransferFeeItem.cost : 0) + (deedTaxItem ? deedTaxItem.cost : 0);
+    const landCostPerArea = aboveGroundArea > 0 ? round2(landCostWithDeed * 10000 / aboveGroundArea) : 0;
     const unitCost = inv.summary ? round2(inv.summary.totalInvestment * 10000 / inv.metrics.totalBuildingArea) : 0;
     const landCostForSale = round2(soldAreaTotal * landCostPerArea / 10000);
     const constructionCostForSale = round2(soldAreaTotal * unitCost / 10000);
@@ -492,7 +496,8 @@
 
     // 综合汇总
     const totalInvestment = inv.summary ? inv.summary.totalInvestment : 0;
-    const fundingGap = round2(totalInvestment - saleNetProfit);
+    const financingRatioInput = (inv && inv.inputs && inv.inputs.financingRatio) || 0;
+    const fundingGap = round2(totalInvestment - (1 - financingRatioInput / 100) * totalInvestment - saleRevenue);
     const saleProfitCoverRatio = rentalTotalInvestment > 0 ? round2(saleNetProfit / rentalTotalInvestment * 100) : 0;
     const totalInvestmentReturn = totalInvestment > 0 ? round2(netRentalIncome / totalInvestment * 100) : 0;
     const paybackPeriod = netRentalIncome > 0 ? round2(totalInvestment / netRentalIncome) : 0;
@@ -510,8 +515,9 @@
         occupancyRate: occupancyRate * 100,
         rentalPeriod,
         rentGrowthRate: rentGrowthRate * 100,
-        landPrice: safeNum(inputs.landPrice, 0),
-        municipalFee: safeNum(inputs.municipalFee, 0)
+        landPrice: (inv && inv.inputs && inv.inputs.landPrice) || safeNum(inputs.landPrice, 0),
+        municipalFee: safeNum(inputs.municipalFee, 0),
+        financingRatio: financingRatioInput
       },
       metrics: {
         landArea: safeNum(pd.landArea, 0),
@@ -636,28 +642,39 @@
       ws[encode(r, 1)] = textCell(it.name, '  ');
       ws[encode(r, 2)] = textCell(it.unit || '');
       ws[encode(r, 3)] = numCell(it.unitPrice);
-      ws[encode(r, 4)] = numCell(it.quantity);
+      // 工程量优先使用公式引用（如 '规划指标'!B3），回退到数值
+      if (it.quantityFormula) {
+        ws[encode(r, 4)] = numCell(it.quantity, it.quantityFormula);
+      } else {
+        ws[encode(r, 4)] = numCell(it.quantity);
+      }
       const unit = it.unit || '';
       const hasDivide = unit.includes('元/m²') || unit.includes('元/m') || unit.includes('元/KVA');
       const formula = hasDivide ? `${col(3)}${r + 1}*${col(4)}${r + 1}/10000` : `${col(3)}${r + 1}*${col(4)}${r + 1}`;
-      ws[encode(r, costCol)] = moneyCell(it.cost, formula);
+      // 若 item 自定义了成本公式（如增值税），优先使用
+      const costFormula = it.costFormula || formula;
+      ws[encode(r, costCol)] = moneyCell(it.cost, costFormula);
 
       // 单位建面成本 / 单位地上建面成本分母规则
-      let groundDenom, aboveDenom;
+      let groundDenom, aboveDenom, groundDenomFormula, aboveDenomFormula;
       if (it.ownArea) {
         groundDenom = it.quantity || 1;
         aboveDenom = it.underground ? 0 : (it.quantity || 1);
+        groundDenomFormula = it.quantityFormula || groundDenom;
+        aboveDenomFormula = it.underground ? 0 : (it.quantityFormula || aboveDenom);
       } else {
-        groundDenom = ws._totalBuildingAreaRef || 1;
-        aboveDenom = ws._aboveGroundAreaRef || 1;
+        groundDenom = ws._totalBuildingArea || 1;
+        aboveDenom = ws._aboveGroundArea || 1;
+        groundDenomFormula = ws._totalBuildingAreaRef || 1;
+        aboveDenomFormula = ws._aboveGroundAreaRef || 1;
       }
       ws[encode(r, costCol + 1)] = numCell(round2(it.cost * 10000 / groundDenom),
-        `${col(costCol)}${r + 1}/${groundDenom}*10000`);
+        `${col(costCol)}${r + 1}/${groundDenomFormula}*10000`);
       if (aboveDenom === 0) {
         ws[encode(r, costCol + 2)] = numCell(0, null);
       } else {
         ws[encode(r, costCol + 2)] = numCell(round2(it.cost * 10000 / aboveDenom),
-          `${col(costCol)}${r + 1}/${aboveDenom}*10000`);
+          `${col(costCol)}${r + 1}/${aboveDenomFormula}*10000`);
       }
       ws[encode(r, costCol + 3)] = textCell(it.note || '');
     });
@@ -691,7 +708,11 @@
       ['产业大厦建筑面积', round2(fullEstimate.metrics.towerArea), 'm²'],
       ['产业大厦建筑高度', round2(fullEstimate.metrics.towerHeight), 'm'],
       ['配套楼建筑面积', round2(fullEstimate.metrics.supportArea), 'm²'],
-      ['配套宿舍建筑面积', round2(fullEstimate.metrics.dormArea), 'm²']
+      ['配套宿舍建筑面积', round2(fullEstimate.metrics.dormArea), 'm²'],
+      ['分栋独栋建筑面积', round2(fullEstimate.metrics.splitSingleArea || 0), 'm²'],
+      ['分栋双拼建筑面积', round2(fullEstimate.metrics.splitDuplexArea || 0), 'm²'],
+      ['分层独栋建筑面积', round2(fullEstimate.metrics.layerSingleArea || 0), 'm²'],
+      ['分层双拼/三拼建筑面积', round2(fullEstimate.metrics.layerMultiArea || 0), 'm²']
     ];
     planningMetricRows.forEach((row, idx) => {
       const r = idx + 2;
@@ -711,31 +732,32 @@
       .forEach((h, c) => ws0_5[encode(1, c)] = headerCell(h));
     const m = fullEstimate.metrics;
     const costPriceRows = [];
-    costPriceRows.push({ type: '轻钢厂房', form: '主体/火车头', area: m.lightSteelArea, price: 1500 });
+    costPriceRows.push({ type: '轻钢厂房', form: '主体/火车头', area: m.lightSteelArea, areaRef: "'规划指标'!B14", price: 1500 });
     if (m.splitArea > 0) {
-      costPriceRows.push({ type: '分栋厂房', form: '独栋', area: m.splitSingleArea, price: 2300 });
-      if (m.splitDuplexArea > 0) costPriceRows.push({ type: '分栋厂房', form: '双拼', area: m.splitDuplexArea, price: 2200 });
+      costPriceRows.push({ type: '分栋厂房', form: '独栋', area: m.splitSingleArea, areaRef: "'规划指标'!B21", price: 2300 });
+      if (m.splitDuplexArea > 0) costPriceRows.push({ type: '分栋厂房', form: '双拼', area: m.splitDuplexArea, areaRef: "'规划指标'!B22", price: 2200 });
     }
     if (m.layerArea > 0) {
-      costPriceRows.push({ type: '分层厂房', form: '独栋', area: m.layerSingleArea, price: 2400 });
-      if (m.layerMultiArea > 0) costPriceRows.push({ type: '分层厂房', form: '双拼/三拼', area: m.layerMultiArea, price: 2300 });
+      costPriceRows.push({ type: '分层厂房', form: '独栋', area: m.layerSingleArea, areaRef: "'规划指标'!B23", price: 2400 });
+      if (m.layerMultiArea > 0) costPriceRows.push({ type: '分层厂房', form: '双拼/三拼', area: m.layerMultiArea, areaRef: "'规划指标'!B24", price: 2300 });
     }
     if (m.towerArea > 0) {
       const th = m.towerHeight;
       let towerPrice = 0;
-      if (th <= 50) towerPrice = 2400;
-      else if (th <= 60) towerPrice = 2500;
-      else if (th <= 80) towerPrice = 2600;
-      else if (th <= 100) towerPrice = 2800;
-      else towerPrice = 3000;
-      costPriceRows.push({ type: '产业大厦', form: `H≤${th <= 50 ? 50 : th <= 60 ? 60 : th <= 80 ? 80 : th <= 100 ? 100 : 100}m`, area: m.towerArea, price: towerPrice });
+      let towerBand = 50;
+      if (th <= 50) { towerPrice = 2400; towerBand = 50; }
+      else if (th <= 60) { towerPrice = 2500; towerBand = 60; }
+      else if (th <= 80) { towerPrice = 2600; towerBand = 80; }
+      else if (th <= 100) { towerPrice = 2800; towerBand = 100; }
+      else { towerPrice = 3000; towerBand = 100; }
+      costPriceRows.push({ type: '产业大厦', form: `H≤${towerBand}m`, area: m.towerArea, areaRef: "'规划指标'!B17", price: towerPrice });
     }
     costPriceRows.forEach((it, idx) => {
       const r = idx + 2; // 0-based
       const rowNum = r + 1; // 1-based
       ws0_5[encode(r, 0)] = textCell(it.type);
       ws0_5[encode(r, 1)] = textCell(it.form);
-      ws0_5[encode(r, 2)] = numCell(it.area);
+      ws0_5[encode(r, 2)] = numCell(it.area, it.areaRef);
       ws0_5[encode(r, 3)] = numCell(it.price);
       ws0_5[encode(r, 4)] = moneyCell(round2(it.area * it.price / 10000), `C${rowNum}*D${rowNum}/10000`);
       ws0_5[encode(r, 5)] = numCell(0);
@@ -747,7 +769,7 @@
       if (!typeRange[it.type]) typeRange[it.type] = { first: rowNum, last: rowNum };
       else typeRange[it.type].last = rowNum;
     });
-    // 在有面积的子形态行写入加权平均单价公式
+    // 写入加权平均单价：有面积的子形态行显示该类型加权平均单价，面积为0的留空
     costPriceRows.forEach((it, idx) => {
       const r = idx + 2;
       const range = typeRange[it.type];
@@ -755,14 +777,15 @@
         const formula = `SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/SUM(C${range.first}:C${range.last})`;
         ws0_5[encode(r, 5)] = numCell(0, formula);
       } else {
-        ws0_5[encode(r, 5)] = numCell(0, null);
+        ws0_5[encode(r, 5)] = textCell('—');
       }
     });
     const cprTotalRow = costPriceRows.length + 2; // 0-based
     const cprTotalRowNum = cprTotalRow + 1; // 1-based
+    const cprDataLastRowNum = cprTotalRowNum - 1; // 1-based，最后一个数据行
     ws0_5[encode(cprTotalRow, 0)] = totalCell('合计');
-    ws0_5[encode(cprTotalRow, 2)] = totalCell(0, `SUM(C3:C${cprTotalRowNum})`);
-    ws0_5[encode(cprTotalRow, 4)] = totalCell(0, `SUM(E3:E${cprTotalRowNum})`);
+    ws0_5[encode(cprTotalRow, 2)] = totalCell(0, `SUM(C3:C${cprDataLastRowNum})`);
+    ws0_5[encode(cprTotalRow, 4)] = totalCell(0, `SUM(E3:E${cprDataLastRowNum})`);
     ws0_5[encode(cprTotalRow, 5)] = totalCell(0, `IF(C${cprTotalRowNum}=0,0,E${cprTotalRowNum}/C${cprTotalRowNum}*10000)`);
     ws0_5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: cprTotalRow, c: 5 } });
     setWsMeta(ws0_5, [14, 16, 14, 14, 14, 18]);
@@ -775,8 +798,8 @@
     const aboveGroundArea = fullEstimate.metrics.aboveGroundArea || 1;
     ws._totalBuildingArea = totalBuildingArea;
     ws._aboveGroundArea = aboveGroundArea;
-    ws._totalBuildingAreaRef = totalBuildingArea;
-    ws._aboveGroundAreaRef = aboveGroundArea;
+    ws._totalBuildingAreaRef = "'规划指标'!B8";
+    ws._aboveGroundAreaRef = "'规划指标'!B6";
 
     ws[encode(0, 0)] = cell('投资估算表（完整版）', { bold: true, sz: 14, align: 'left' });
     ws['!merge'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
@@ -973,6 +996,10 @@
     if (typeof XLSX === 'undefined') { alert('Excel 导出库未加载，请检查网络。'); return; }
     const wb = XLSX.utils.book_new();
     let ssr = 0, rsr = 0;
+    const saleDetailCount = (staticResult.sale && staticResult.sale.details && staticResult.sale.details.length) || 0;
+    const rentDetailCount = (staticResult.rent && staticResult.rent.details && staticResult.rent.details.length) || 0;
+    const saleAllocTotalRow = saleDetailCount + 4; // 1-based
+    const rentAllocTotalRow = saleDetailCount + rentDetailCount + 8; // 1-based
 
     function addPlanningAndCost(ws, startRow) {
       ws[encode(startRow, 0)] = cell('一、规划指标', { bold: true, sz: 12 });
@@ -1117,10 +1144,11 @@
     });
     const saleTotalIdx = staticResult.sale.details.length + 3; // 0-based
     const saleTotalRowNum = saleTotalIdx + 1; // 1-based
+    const saleDataLastRowNum = saleTotalRowNum - 1; // 1-based，最后一个数据行
     ws3[encode(saleTotalIdx, 0)] = totalCell('合计');
-    ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `SUM(B4:B${saleTotalRowNum})`);
+    ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `SUM(B4:B${saleDataLastRowNum})`);
     ws3[encode(saleTotalIdx, 2)] = totalCell('—');
-    ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `SUM(D4:D${saleTotalRowNum})`);
+    ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `SUM(D4:D${saleDataLastRowNum})`);
     ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,D${saleTotalRowNum}/B${saleTotalRowNum})`);
 
     const rentAllocStartIdx = saleTotalIdx + 2; // 0-based title
@@ -1141,11 +1169,12 @@
     const rentTotalIdx = rentHeaderIdx + 1 + staticResult.rent.details.length; // 0-based
     const rentTotalRowNum = rentTotalIdx + 1; // 1-based
     const rentDetailStartRowNum = rentHeaderIdx + 2; // 1-based
+    const rentDataLastRowNum = rentTotalRowNum - 1; // 1-based，最后一个数据行
     ws3[encode(rentTotalIdx, 0)] = totalCell('合计');
-    ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `SUM(B${rentDetailStartRowNum}:B${rentTotalRowNum})`);
+    ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `SUM(B${rentDetailStartRowNum}:B${rentDataLastRowNum})`);
     ws3[encode(rentTotalIdx, 2)] = totalCell('—');
-    ws3[encode(rentTotalIdx, 3)] = totalCell(staticResult.rent.netRentalIncome, `SUM(D${rentDetailStartRowNum}:D${rentTotalRowNum})`);
-    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,SUMPRODUCT(B${rentDetailStartRowNum}:B${rentTotalRowNum},C${rentDetailStartRowNum}:C${rentTotalRowNum})/B${rentTotalRowNum})`);
+    ws3[encode(rentTotalIdx, 3)] = totalCell(staticResult.rent.netRentalIncome, `SUM(D${rentDetailStartRowNum}:D${rentDataLastRowNum})`);
+    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum})`);
 
     ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentTotalIdx, c: 5 } });
     setWsMeta(ws3, [16, 16, 16, 18, 16, 4]);
