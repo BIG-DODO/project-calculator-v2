@@ -3362,7 +3362,7 @@
             <div class="stat-card"><div class="label">总投资</div><div class="value">${fmtNum(result.summary.totalInvestment, 2)}</div><div class="unit">万元</div></div>
             <div class="stat-card"><div class="label">销售净利润</div><div class="value">${fmtNum(result.summary.saleNetProfit, 2)}</div><div class="unit">万元</div></div>
             <div class="stat-card"><div class="label">租赁年净收入</div><div class="value">${fmtNum(result.summary.netRentalIncome, 2)}</div><div class="unit">万元/年</div></div>
-            <div class="stat-card"><div class="label">资金缺口</div><div class="value">${fmtNum(result.summary.fundingGap, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">${result.summary.fundingGap >= 0 ? '资金缺口' : '资金盈余'}</div><div class="value">${fmtNum(Math.abs(result.summary.fundingGap), 2)}</div><div class="unit">万元</div></div>
             <div class="stat-card"><div class="label">销售净利率</div><div class="value">${fmtNum(result.summary.saleNetMargin, 2)}</div><div class="unit">%</div></div>
             <div class="stat-card"><div class="label">静态投资回收期</div><div class="value">${fmtNum(result.summary.paybackPeriod, 2)}</div><div class="unit">年</div></div>
           </div>
