@@ -3300,8 +3300,11 @@
       const rentalPeriod = FinancialModules.safeNum(document.getElementById('static-rental-period').value, 20);
       const rentGrowthRate = FinancialModules.safeNum(document.getElementById('static-rent-growth-rate').value, 0);
 
-      window.staticAnalysisInputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate };
-      const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate };
+      const invInputs = window.investmentEstimateInputs || {};
+      const landPrice = FinancialModules.safeNum(invInputs.landPrice, 0);
+      const municipalFee = FinancialModules.safeNum(invInputs.municipalFee, 0);
+      window.staticAnalysisInputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate, landPrice, municipalFee };
+      const inputs = { saleRatio, rentSplit, priceSplit, rentLayer, priceLayer, marketingRate, managementRate, rentalOpRate, occupancyRate, rentalPeriod, rentGrowthRate, landPrice, municipalFee };
       const result = FinancialModules.calculateStaticAnalysis(inputs, window.configResult, projectData, window.investmentEstimateResult);
       window.staticAnalysisResult = result;
       renderStaticAnalysisResult(result);
