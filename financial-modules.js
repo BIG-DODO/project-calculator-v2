@@ -173,13 +173,13 @@
 
     const landCostItems = [
       { code: '1-1', name: '土地出让金', unit: '万元/亩', unitPrice: landPrice, quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: landTransferFee, note: '单价×亩数' },
-      { code: '1-2', name: '土地转让费（契税）', unit: '万元', unitPrice: round2(landPrice * 0.03 + 10 / acre), quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: deedTax, note: '出让金×3%+10' },
+      { code: '1-2', name: '土地转让费（契税）', unit: '万元', unitPrice: round2(landPrice * 0.03 + 10 / acre), quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: deedTax, costFormula: 'F4*0.03+10', note: '出让金×3%+10' },
       { code: '1-3', name: '拆迁补偿费', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '删除，不输出' },
       { code: '1-4', name: '大市政配套费', unit: '元/m²', unitPrice: effectiveMunicipalFee, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: municipalSupportingFee, note: city === '上海' ? '上海默认0' : '' },
       { code: '1-5-2', name: '电力增容费/高可靠性用电', unit: '元/KVA', unitPrice: REFERENCE_PRICES.offsiteMunicipal.powerCapacity, quantity: powerKva, quantityFormula: "('规划指标'!B6*70+'规划指标'!B7*50)/1000", cost: powerCapacityCost, note: '(地上建面×70+地下建面×50)/1000' },
       { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: waterDrainageCost, note: '按用地面积' },
       { code: '1-6', name: '其他费用', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '' },
-      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: offsiteMunicipalTotal, quantityFormula: 'F7+F8', cost: landVAT, costFormula: '(F7+F8)*0.06/1.06', note: '红线外市政×6%/1.06' }
+      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: offsiteMunicipalTotal, quantityFormula: 'F8+F9', cost: landVAT, costFormula: '(F8+F9)*0.06/1.06', note: '红线外市政×6%/1.06' }
     ];
     const landCostTotal = round2(landCostItems.reduce((s, it) => s + it.cost, 0));
 
@@ -197,7 +197,7 @@
     ];
     const prelimSubtotal = round2(prelimItems.reduce((s, it) => s + it.cost, 0));
     const prelimVAT = round2(prelimSubtotal * 0.06 / 1.06);
-    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: prelimSubtotal, quantityFormula: 'SUM(F13:F20)', cost: prelimVAT, costFormula: 'SUM(F13:F20)*0.06/1.06', note: '前期小计×6%/1.06' });
+    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: prelimSubtotal, quantityFormula: 'SUM(F14:F21)', cost: prelimVAT, costFormula: 'SUM(F14:F21)*0.06/1.06', note: '前期小计×6%/1.06' });
     const prelimTotal = round2(prelimSubtotal + prelimVAT);
 
     // 三、建安工程成本
@@ -669,12 +669,12 @@
         aboveDenomFormula = ws._aboveGroundAreaRef || 1;
       }
       ws[encode(r, costCol + 1)] = numCell(round2(it.cost * 10000 / groundDenom),
-        `${col(costCol)}${r + 1}/${groundDenomFormula}*10000`);
+        `IF(${groundDenomFormula}=0,0,${col(costCol)}${r + 1}/${groundDenomFormula}*10000)`);
       if (aboveDenom === 0) {
         ws[encode(r, costCol + 2)] = numCell(0, null);
       } else {
         ws[encode(r, costCol + 2)] = numCell(round2(it.cost * 10000 / aboveDenom),
-          `${col(costCol)}${r + 1}/${aboveDenomFormula}*10000`);
+          `IF(${aboveDenomFormula}=0,0,${col(costCol)}${r + 1}/${aboveDenomFormula}*10000)`);
       }
       ws[encode(r, costCol + 3)] = textCell(it.note || '');
     });
@@ -774,7 +774,7 @@
       const r = idx + 2;
       const range = typeRange[it.type];
       if (it.area > 0 && range) {
-        const formula = `SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/SUM(C${range.first}:C${range.last})`;
+        const formula = `IF(SUM(C${range.first}:C${range.last})=0,0,SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/SUM(C${range.first}:C${range.last}))`;
         ws0_5[encode(r, 5)] = numCell(0, formula);
       } else {
         ws0_5[encode(r, 5)] = textCell('—');
@@ -896,7 +896,10 @@
     ws[encode(row, 7)] = numCell(0, `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const contingencyRow = row + 1;
     row += 1;
+    const constructionSubtotalCost = round2(fullEstimate.infrastructure.total + fullEstimate.landscape.total + fullEstimate.publicFacility.total + fullEstimate.building.total);
     ws[encode(row, 1)] = textCell('  其中增值税', '  ');
+    ws[encode(row, 3)] = numCell(0.09 / 1.09, '0.09/1.09');
+    ws[encode(row, 4)] = numCell(constructionSubtotalCost, constructionSubtotalFormula);
     ws[encode(row, 5)] = moneyCell(fullEstimate.construction.vat, `(${constructionSubtotalFormula})*0.09/1.09`);
     ws[encode(row, 6)] = numCell(0, `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(0, `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
@@ -1060,10 +1063,10 @@
       { name: '加权平均售价', value: staticResult.sale.weightedPrice, unit: '万元/㎡', desc: '', f: `'租售面积分配'!E${saleAllocTotalRow}` },
       { name: '不含税售价', value: round2(staticResult.sale.weightedPrice / 1.09), unit: '万元/㎡', desc: '售价/1.09', f: `B${ssr + 1}/1.09` },
       { name: '销售收入', value: staticResult.sale.totalRevenue, unit: '万元', desc: '可售面积×加权平均售价', f: `B${ssr}*B${ssr + 1}` },
-      { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costStart1 + 2}/10000` },
-      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costStart1 + 4}/10000` },
+      { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costLandTaxRow}/10000` },
+      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costUnitRow}/10000` },
       { name: '减：税金及附加', value: staticResult.sale.taxSurcharge, unit: '万元', desc: '', f: `B${ssr + 3}/1.09*0.006` },
-      { name: '减：土地增值税', value: 0, unit: '万元', desc: '', f: `'土地增值税测算表'!B12` },
+      { name: '减：土地增值税', value: 0, unit: '万元', desc: '', f: `'土地增值税测算表'!C14` },
       { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `B${ssr + 3}*${staticResult.inputs.marketingRate / 100}` },
       { name: '减：管理费用', value: staticResult.sale.managementCost, unit: '万元', desc: '', f: `B${ssr + 3}*${staticResult.inputs.managementRate / 100}` },
       { name: '减：财务费用', value: staticResult.sale.financialCost, unit: '万元', desc: '', f: null },
@@ -1192,19 +1195,19 @@
     const landTaxTaxSurchargeCell = `'销售测算'!B${ssr + 6}`;
     const landTaxRows = [
       { no: '1', name: '转让房地产收入总额', f: landTaxSaleRevenueCell },
-      { no: '2', name: '扣除项目金额合计', f: 'B5+B6+B7+B8+B9' },
+      { no: '2', name: '扣除项目金额合计', f: 'C5+C6+C7+C8+C9' },
       { no: '3', name: '①取得土地使用权所支付的金额', f: landTaxLandCostCell },
       { no: '4', name: '②房地产开发成本', f: landTaxConstructCell },
-      { no: '5', name: '③房地产开发费用', f: '(B5+B6)*10%' },
+      { no: '5', name: '③房地产开发费用', f: '(C5+C6)*10%' },
       { no: '6', name: '④与转让房地产有关的税金', f: landTaxTaxSurchargeCell },
-      { no: '7', name: '⑤财政部规定的其他扣除项目', f: '(B5+B6)*20%' },
-      { no: '8', name: '增值额', f: 'B3-B4' },
-      { no: '9', name: '增值额与扣除项目金额之比（%）', f: 'IF(B4=0,0,B10/B4*100)' },
-      { no: '10', name: '适用税率（%）', f: 'IF(B11<=50,30,IF(B11<=100,40,IF(B11<=200,50,60)))' },
-      { no: '11', name: '速算扣除系数（%）', f: 'IF(B11<=50,0,IF(B11<=100,5,IF(B11<=200,15,35)))' },
-      { no: '12', name: '应缴土地增值税税额', f: 'B10*B12/100-B4*B13/100' },
-      { no: '13', name: '土增税负率', f: 'IF(B3=0,0,B14/B3*100)' },
-      { no: '14', name: '土增税（元/㎡）', f: `IF(${landTaxSoldAreaCell}=0,0,B14/${landTaxSoldAreaCell}*10000)` }
+      { no: '7', name: '⑤财政部规定的其他扣除项目', f: '(C5+C6)*20%' },
+      { no: '8', name: '增值额', f: 'C3-C4' },
+      { no: '9', name: '增值额与扣除项目金额之比（%）', f: 'IF(C4=0,0,C10/C4*100)' },
+      { no: '10', name: '适用税率（%）', f: 'IF(C11<=50,30,IF(C11<=100,40,IF(C11<=200,50,60)))' },
+      { no: '11', name: '速算扣除系数（%）', f: 'IF(C11<=50,0,IF(C11<=100,5,IF(C11<=200,15,35)))' },
+      { no: '12', name: '应缴土地增值税税额', f: 'C10*C12/100-C4*C13/100' },
+      { no: '13', name: '土增税负率', f: 'IF(C3=0,0,C14/C3*100)' },
+      { no: '14', name: '土增税（元/㎡）', f: `IF(${landTaxSoldAreaCell}=0,0,C14/${landTaxSoldAreaCell}*10000)` }
     ];
     landTaxRows.forEach((row, idx) => {
       const r = idx + 2;
