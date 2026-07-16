@@ -603,6 +603,18 @@
   function cell(v, opts) {
     opts = opts || {};
     const c = { v: typeof v === 'number' ? round2(v) : v };
+    if (v == null) {
+      c.v = '';
+      c.t = 's';
+    } else if (typeof c.v === 'number') {
+      c.t = 'n';
+    } else if (typeof c.v === 'string') {
+      c.t = 's';
+    } else if (typeof c.v === 'boolean') {
+      c.t = 'b';
+    } else if (c.v instanceof Date) {
+      c.t = 'd';
+    }
     if (opts.f) c.f = opts.f;
     c.s = {
       font: { name: STYLE.fontName, sz: opts.sz || 11, bold: !!opts.bold, color: { rgb: opts.fontColor || STYLE.textColor } },
