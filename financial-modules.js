@@ -505,7 +505,7 @@
     // 租赁测算（按元/m²/年口径，使用 raw weighted rent 减少累计误差）
     const monthlyRent = round2(rawWeightedRent * 30);
     const yearlyRent = round2(rawWeightedRent * 360);
-    const effectiveYearlyRent = round2(rawWeightedRent * 360 * occupancyRate);
+    const effectiveYearlyRent = round2(yearlyRent * occupancyRate);
     const taxSurcharge = round2(effectiveYearlyRent * 0.006);
     const propertyTax = round2(effectiveYearlyRent * 0.12);
     const landUseTax = 6;
@@ -1231,7 +1231,7 @@
     ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `ROUND(SUM(B4:B${saleDataLastRowNum}),2)`);
     ws3[encode(saleTotalIdx, 2)] = totalCell('—');
     ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `ROUND(SUM(D4:D${saleDataLastRowNum}),2)`);
-    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,ROUND(D${saleTotalRowNum}/B${saleTotalRowNum},2))`);
+    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,ROUND(D${saleTotalRowNum}/B${saleTotalRowNum},6))`);
 
     const rentAllocStartIdx = saleTotalIdx + 2; // 0-based title
     ws3[encode(rentAllocStartIdx, 0)] = cell('二、租赁面积分配', { bold: true, sz: 12 });
@@ -1257,7 +1257,7 @@
     ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `ROUND(SUM(B${rentDetailStartRowNum}:B${rentDataLastRowNum}),2)`);
     ws3[encode(rentTotalIdx, 2)] = totalCell('—');
     ws3[encode(rentTotalIdx, 3)] = totalCell(grossAnnualRentTotal, `ROUND(SUM(D${rentDetailStartRowNum}:D${rentDataLastRowNum}),2)`);
-    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,ROUND(SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum},2))`);
+    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,ROUND(SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum},6))`);
 
     ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentTotalIdx, c: 5 } });
     setWsMeta(ws3, [16, 16, 16, 18, 16, 4]);

@@ -103,7 +103,9 @@ console.log('加权平均售价:', sa.sale.weightedPrice);
 console.log('销售收入:', sa.sale.totalRevenue);
 console.log('销售净利润:', sa.sale.netProfit);
 console.log('加权平均租金:', sa.rent.weightedRent);
+console.log('rawWeightedRent:', (sa.metrics.rentedAreaTotal > 0 ? sa.rent.details.reduce((s, d) => s + d.area * d.rent, 0) / sa.metrics.rentedAreaTotal : 0));
 console.log('年租金收入(元/年/㎡):', sa.rent.yearlyRent);
+console.log('有效年租金(元/年/㎡):', sa.rent.effectiveYearlyRent);
 console.log('净租赁收入(万元/年):', sa.rent.netRentalIncome);
 console.log('资金盈余/缺口:', sa.summary.fundingGap);
 
