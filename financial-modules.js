@@ -179,7 +179,7 @@
       { code: '1-5-2', name: '电力增容费/高可靠性用电', unit: '元/KVA', unitPrice: REFERENCE_PRICES.offsiteMunicipal.powerCapacity, quantity: powerKva, quantityFormula: "('规划指标'!B6*70+'规划指标'!B7*50)/1000", cost: powerCapacityCost, note: '(地上建面×70+地下建面×50)/1000' },
       { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: waterDrainageCost, note: '按用地面积' },
       { code: '1-6', name: '其他费用', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '' },
-      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: offsiteMunicipalTotal, quantityFormula: 'F8+F9', cost: landVAT, costFormula: '(F8+F9)*0.06/1.06', note: '红线外市政×6%/1.06' }
+      { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: round2(offsiteMunicipalTotal / 1.06), quantityFormula: '(F8+F9)/1.06', cost: landVAT, vatDE: true, note: '红线外市政×6%/1.06' }
     ];
     const landCostTotal = round2(landCostItems.reduce((s, it) => s + it.cost, 0));
 
@@ -197,7 +197,7 @@
     ];
     const prelimSubtotal = round2(prelimItems.reduce((s, it) => s + it.cost, 0));
     const prelimVAT = round2(prelimSubtotal * 0.06 / 1.06);
-    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: prelimSubtotal, quantityFormula: 'SUM(F14:F21)', cost: prelimVAT, costFormula: 'SUM(F14:F21)*0.06/1.06', note: '前期小计×6%/1.06' });
+    prelimItems.push({ code: '2-9', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: round2(prelimSubtotal / 1.06), quantityFormula: 'ROUND(SUM(F14:F21),2)/1.06', cost: prelimVAT, vatDE: true, note: '前期小计×6%/1.06' });
     const prelimTotal = round2(prelimSubtotal + prelimVAT);
 
     // 三、建安工程成本
@@ -438,20 +438,26 @@
 
     const RENT_DISPLAY_ORDER = ['产业大厦', '分层厂房', '分栋厂房', '轻钢厂房', '配套宿舍'];
 
-    // 加权平均售价/租金
-    let weightedSalePrice = 0;
-    let weightedRent = 0;
-    if (soldAreaTotal > 0) {
-      weightedSalePrice = SALE_PRIORITY.reduce((s, type) => s + (soldAreaByType[type] || 0) * (priceMap[type] || 0), 0) / soldAreaTotal;
-    }
-    if (rentedAreaTotal > 0) {
-      weightedRent = RENT_DISPLAY_ORDER.reduce((s, type) => s + (rentedAreaByType[type] || 0) * (rentMap[type] || 0), 0) / rentedAreaTotal;
-    }
-    weightedSalePrice = round2(weightedSalePrice);
-    weightedRent = round2(weightedRent);
+    // 租售面积分配明细（先于加权价计算，确保收入与 Excel SUMPRODUCT 一致）
+    const saleDetails = SALE_PRIORITY.map(type => {
+      const area = soldAreaByType[type] || 0;
+      const price = priceMap[type] || 0;
+      return { type, area: round2(area), price: round2(price), revenue: round2(area * price) };
+    });
+    const rentDetails = RENT_DISPLAY_ORDER.map(type => {
+      const area = rentedAreaByType[type] || 0;
+      const rent = rentMap[type] || 0;
+      return { type, area: round2(area), rent: round2(rent), annualRevenue: round2(area * rent * 360 * occupancyRate / 10000) };
+    });
+
+    // 加权平均售价/租金（完整精度用于后续计算，展示值保留两位）
+    const rawWeightedSalePrice = soldAreaTotal > 0 ? SALE_PRIORITY.reduce((s, type) => s + (soldAreaByType[type] || 0) * (priceMap[type] || 0), 0) / soldAreaTotal : 0;
+    const rawWeightedRent = rentedAreaTotal > 0 ? RENT_DISPLAY_ORDER.reduce((s, type) => s + (rentedAreaByType[type] || 0) * (rentMap[type] || 0), 0) / rentedAreaTotal : 0;
+    const weightedSalePrice = round2(rawWeightedSalePrice);
+    const weightedRent = round2(rawWeightedRent);
 
     // 销售测算
-    const saleRevenue = round2(soldAreaTotal * weightedSalePrice);
+    const saleRevenue = round2(saleDetails.reduce((s, d) => s + d.revenue, 0));
     const landCostItems = inv.landCost ? inv.landCost.items : [];
     const landTransferFeeItem = landCostItems.find(it => it.code === '1-1');
     const deedTaxItem = landCostItems.find(it => it.code === '1-2');
@@ -496,10 +502,10 @@
     const saleNetProfit = round2(saleProfit - saleIncomeTax);
     const saleNetMargin = saleRevenue > 0 ? round2(saleNetProfit / saleRevenue * 100) : 0;
 
-    // 租赁测算（按元/m²/年口径）
-    const monthlyRent = round2(weightedRent * 30);
-    const yearlyRent = round2(monthlyRent * 12);
-    const effectiveYearlyRent = round2(yearlyRent * occupancyRate);
+    // 租赁测算（按元/m²/年口径，使用 raw weighted rent 减少累计误差）
+    const monthlyRent = round2(rawWeightedRent * 30);
+    const yearlyRent = round2(rawWeightedRent * 360);
+    const effectiveYearlyRent = round2(rawWeightedRent * 360 * occupancyRate);
     const taxSurcharge = round2(effectiveYearlyRent * 0.006);
     const propertyTax = round2(effectiveYearlyRent * 0.12);
     const landUseTax = 6;
@@ -508,18 +514,6 @@
     const netRentalIncome = round2(netRentPerSqm * rentedAreaTotal / 10000);
     const rentalTotalInvestment = round2(rentedAreaTotal * costUnitCost / 10000 + rentFinancialCost);
     const noi = rentalTotalInvestment > 0 ? round2(netRentalIncome / rentalTotalInvestment * 100) : 0;
-
-    // 租售面积分配明细
-    const saleDetails = SALE_PRIORITY.map(type => {
-      const area = soldAreaByType[type] || 0;
-      const price = priceMap[type] || 0;
-      return { type, area: round2(area), price: round2(price), revenue: round2(area * price) };
-    });
-    const rentDetails = RENT_DISPLAY_ORDER.map(type => {
-      const area = rentedAreaByType[type] || 0;
-      const rent = rentMap[type] || 0;
-      return { type, area: round2(area), rent: round2(rent), annualRevenue: round2(area * rent * 360 * occupancyRate / 10000) };
-    });
 
     // 综合汇总
     const totalInvestment = inv.summary ? inv.summary.totalInvestment : 0;
@@ -648,7 +642,7 @@
 
   function cell(v, opts) {
     opts = opts || {};
-    const c = { v: typeof v === 'number' ? round2(v) : v };
+    const c = { v: typeof v === 'number' ? (opts.raw ? v : round2(v)) : v };
     if (v == null) {
       c.v = '';
       c.t = 's';
@@ -682,8 +676,8 @@
   function headerCell(v) { return cell(v, { bold: true, fill: STYLE.headerFill, fontColor: STYLE.headerFont, align: 'center', sz: 11 }); }
   function subtotalCell(v, f) { return cell(v, { bold: true, fill: STYLE.subtotalFill, numFmt: '#,##0.00', f: f }); }
   function totalCell(v, f) { return cell(v, { bold: true, fill: STYLE.totalFill, fontColor: STYLE.totalFont, numFmt: '#,##0.00', f: f }); }
-  function moneyCell(v, f) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f }); }
-  function numCell(v, f) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f }); }
+  function moneyCell(v, f, raw) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f, raw: !!raw }); }
+  function numCell(v, f, raw) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f, raw: !!raw }); }
   function textCell(v, indent) { return cell((indent || '') + v, { align: 'left' }); }
 
   function setWsMeta(ws, cols) {
@@ -710,7 +704,13 @@
       const hasDivide = unit.includes('元/m²') || unit.includes('元/m') || unit.includes('元/KVA');
       const formula = hasDivide ? `${col(3)}${r + 1}*${col(4)}${r + 1}/10000` : `${col(3)}${r + 1}*${col(4)}${r + 1}`;
       // 若 item 自定义了成本公式（如增值税），优先使用
-      const costFormula = it.costFormula || formula;
+      let costFormula;
+      if (it.vatDE) {
+        // 增值税专用：成本 = 税率 × 不含税工程量
+        costFormula = `${col(3)}${r + 1}*${col(4)}${r + 1}`;
+      } else {
+        costFormula = it.costFormula || formula;
+      }
       ws[encode(r, costCol)] = moneyCell(it.cost, costFormula);
 
       // 单位建面成本 / 单位地上建面成本分母规则
@@ -837,7 +837,7 @@
       if (it.area > 0 && range) {
         const sum = typeSum[it.type];
         const avg = sum.area > 0 ? round2(sum.cost * 10000 / sum.area) : 0;
-        const formula = `IF(SUM(C${range.first}:C${range.last})=0,0,SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/SUM(C${range.first}:C${range.last}))`;
+        const formula = `IF(ROUND(SUM(C${range.first}:C${range.last}),2)=0,0,ROUND(SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/ROUND(SUM(C${range.first}:C${range.last}),2),2))`;
         ws0_5[encode(r, 5)] = numCell(avg, formula);
       } else {
         ws0_5[encode(r, 5)] = textCell('—');
@@ -850,8 +850,8 @@
     const cprTotalCost = costPriceRows.reduce((s, it) => s + round2(it.area * it.price / 10000), 0);
     const cprWeightedAvg = cprTotalArea > 0 ? round2(cprTotalCost * 10000 / cprTotalArea) : 0;
     ws0_5[encode(cprTotalRow, 0)] = totalCell('合计');
-    ws0_5[encode(cprTotalRow, 2)] = totalCell(cprTotalArea, `SUM(C3:C${cprDataLastRowNum})`);
-    ws0_5[encode(cprTotalRow, 4)] = totalCell(cprTotalCost, `SUM(E3:E${cprDataLastRowNum})`);
+    ws0_5[encode(cprTotalRow, 2)] = totalCell(cprTotalArea, `ROUND(SUM(C3:C${cprDataLastRowNum}),2)`);
+    ws0_5[encode(cprTotalRow, 4)] = totalCell(cprTotalCost, `ROUND(SUM(E3:E${cprDataLastRowNum}),2)`);
     ws0_5[encode(cprTotalRow, 5)] = totalCell(cprWeightedAvg, `IF(C${cprTotalRowNum}=0,0,E${cprTotalRowNum}/C${cprTotalRowNum}*10000)`);
     ws0_5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: cprTotalRow, c: 5 } });
     setWsMeta(ws0_5, [14, 16, 14, 14, 14, 18]);
@@ -881,7 +881,7 @@
     const landStart = row + 1;
     row = addItems(ws, landStart, fullEstimate.landCost.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('  小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.landCost.total, `SUM(${col(5)}${landStart + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.landCost.total, `ROUND(SUM(${col(5)}${landStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.landCost.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.landCost.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const landSubtotalRow = row + 1;
@@ -894,7 +894,7 @@
     const prelimStart = row + 1;
     row = addItems(ws, prelimStart, fullEstimate.preliminary.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('  小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.preliminary.total, `SUM(${col(5)}${prelimStart + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.preliminary.total, `ROUND(SUM(${col(5)}${prelimStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.preliminary.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.preliminary.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const prelimSubtotalRow = row + 1;
@@ -912,7 +912,7 @@
     const infraStart = row + 1;
     row = addItems(ws, infraStart, fullEstimate.infrastructure.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('    小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.infrastructure.total, `SUM(${col(5)}${infraStart + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.infrastructure.total, `ROUND(SUM(${col(5)}${infraStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.infrastructure.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.infrastructure.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const infraSubtotalRow = row + 1;
@@ -924,7 +924,7 @@
     const landStart2 = row + 1;
     row = addItems(ws, landStart2, fullEstimate.landscape.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('    小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.landscape.total, `SUM(${col(5)}${landStart2 + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.landscape.total, `ROUND(SUM(${col(5)}${landStart2 + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.landscape.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.landscape.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const landscapeSubtotalRow = row + 1;
@@ -936,7 +936,7 @@
     const pubStart = row + 1;
     row = addItems(ws, pubStart, fullEstimate.publicFacility.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('    小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.publicFacility.total, `SUM(${col(5)}${pubStart + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.publicFacility.total, `ROUND(SUM(${col(5)}${pubStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.publicFacility.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.publicFacility.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const publicSubtotalRow = row + 1;
@@ -948,7 +948,7 @@
     const buildStart = row + 1;
     row = addItems(ws, buildStart, fullEstimate.building.items, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('    小计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.building.total, `SUM(${col(5)}${buildStart + 1}:${col(5)}${row})`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.building.total, `ROUND(SUM(${col(5)}${buildStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.building.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.building.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const buildingSubtotalRow = row + 1;
@@ -964,15 +964,15 @@
     row += 1;
     const constructionSubtotalCost = round2(fullEstimate.infrastructure.total + fullEstimate.landscape.total + fullEstimate.publicFacility.total + fullEstimate.building.total);
     ws[encode(row, 1)] = textCell('  其中增值税', '  ');
-    ws[encode(row, 3)] = numCell(0.09 / 1.09, '0.09/1.09');
-    ws[encode(row, 4)] = numCell(constructionSubtotalCost, constructionSubtotalFormula);
-    ws[encode(row, 5)] = moneyCell(fullEstimate.construction.vat, `(${constructionSubtotalFormula})*0.09/1.09`);
+    ws[encode(row, 3)] = numCell(0.09, '0.09');
+    ws[encode(row, 4)] = numCell(round2(constructionSubtotalCost / 1.09), `ROUND(${constructionSubtotalFormula},2)/1.09`);
+    ws[encode(row, 5)] = moneyCell(fullEstimate.construction.vat, `${col(3)}${row + 1}*${col(4)}${row + 1}`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.construction.vat * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.construction.vat * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const constructionVATRow = row + 1;
     row += 1;
     ws[encode(row, 1)] = subtotalCell('  建安工程成本合计');
-    ws[encode(row, 5)] = subtotalCell(fullEstimate.construction.total, `${constructionSubtotalFormula}+${col(5)}${contingencyRow}+${col(5)}${constructionVATRow}`);
+    ws[encode(row, 5)] = subtotalCell(fullEstimate.construction.total, `ROUND(${constructionSubtotalFormula}+${col(5)}${contingencyRow}+${col(5)}${constructionVATRow},2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.construction.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.construction.total * 10000 / aboveGroundArea), `${col(5)}${row + 1}/${ws._aboveGroundAreaRef}*10000`);
     const constructionTotalRow = row + 1;
@@ -987,7 +987,7 @@
       { code: '四', name: '开发间接费', cost: fullEstimate.indirect.cost, f: '0' },
       { code: '五', name: '营销费用', cost: fullEstimate.marketing.cost, f: '0' },
       { code: '六', name: '公司管理费', cost: fullEstimate.management.cost, f: '0' },
-      { code: '七', name: '财务费用', cost: fullEstimate.financial.total, f: `(${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow})*${finRatio}*${finRate}*${avgInterestYears}+${fullEstimate.financial.bankFee}` }
+      { code: '七', name: '财务费用', cost: fullEstimate.financial.total, f: `ROUND((${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow})*${finRatio}*${finRate}*${avgInterestYears}+${fullEstimate.financial.bankFee},2)` }
     ];
     categories.forEach(cat => {
       const catRow = row + 1; // 1-based Excel row
@@ -1006,7 +1006,7 @@
     ws[encode(row, 0)] = textCell('合计');
     ws[encode(row, 1)] = totalCell('发展成本合计');
     for (let c = 2; c <= 8; c++) ws[encode(row, c)] = cell('', { fill: STYLE.totalFill });
-    ws[encode(row, 5)] = totalCell(fullEstimate.summary.totalInvestment, `${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow}+${col(5)}${categoryRows[0]}+${col(5)}${categoryRows[1]}+${col(5)}${categoryRows[2]}+${col(5)}${categoryRows[3]}`);
+    ws[encode(row, 5)] = totalCell(fullEstimate.summary.totalInvestment, `ROUND(${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow}+${col(5)}${categoryRows[0]}+${col(5)}${categoryRows[1]}+${col(5)}${categoryRows[2]}+${col(5)}${categoryRows[3]},2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.summary.totalInvestment * 10000 / totalBuildingArea), `${col(5)}${totalRow}/${ws._totalBuildingAreaRef}*10000`);
     ws[encode(row, 7)] = numCell(round2(fullEstimate.summary.totalInvestment * 10000 / aboveGroundArea), `${col(5)}${totalRow}/${ws._aboveGroundAreaRef}*10000`);
     row += 1;
@@ -1049,7 +1049,7 @@
       ws2[encode(r, 0)] = isTotal ? totalCell(it.code) : textCell(it.code);
       ws2[encode(r, 1)] = isTotal ? totalCell(it.category) : textCell(it.category);
       ws2[encode(r, 2)] = isTotal ? totalCell(it.amount, amountFormula) : moneyCell(it.amount, amountFormula);
-      ws2[encode(r, 3)] = isTotal ? totalCell(100, null, { numFmt: '0.00"%"' }) : numCell(pct, `IF($C$${totalSimpleRow}=0,0,C${rowNum}/$C$${totalSimpleRow}*100)`);
+      ws2[encode(r, 3)] = isTotal ? totalCell(100, null, { numFmt: '0.00"%"' }) : numCell(pct, `IF($C$${totalSimpleRow}=0,0,ROUND(C${rowNum}/$C$${totalSimpleRow}*100,2))`);
       ws2[encode(r, 3)].s = Object.assign({}, ws2[encode(r, 3)].s, { numFmt: '0.00"%"', alignment: { horizontal: 'right', vertical: 'center' } });
     });
     ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: simple.length + 1, c: 3 } });
@@ -1139,19 +1139,19 @@
     const saleRows = [
       { name: '可售面积', value: staticResult.metrics.soldAreaTotal, unit: 'm²', desc: '', f: `'租售面积分配'!B${saleAllocTotalRow}` },
       { name: '加权平均售价', value: staticResult.sale.weightedPrice, unit: '万元/㎡', desc: '', f: `'租售面积分配'!E${saleAllocTotalRow}` },
-      { name: '不含税售价', value: round2(staticResult.sale.weightedPrice / 1.09), unit: '万元/㎡', desc: '售价/1.09', f: `B${ssr + 1}/1.09` },
-      { name: '销售收入', value: staticResult.sale.totalRevenue, unit: '万元', desc: '可售面积×加权平均售价', f: `B${ssr}*B${ssr + 1}` },
-      { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costLandTaxRow}/10000` },
-      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `B${ssr}*$B$${costConstructionRow}/10000` },
-      { name: '减：税金及附加', value: staticResult.sale.taxSurcharge, unit: '万元', desc: '', f: `B${ssr + 3}/1.09*0.006` },
+      { name: '不含税售价', value: round2(staticResult.sale.weightedPrice / 1.09), unit: '万元/㎡', desc: '售价/1.09', f: `ROUND(B${ssr + 1}/1.09,2)` },
+      { name: '销售收入', value: staticResult.sale.totalRevenue, unit: '万元', desc: '可售面积×加权平均售价', f: `'租售面积分配'!D${saleAllocTotalRow}` },
+      { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costLandTaxRow}/10000,2)` },
+      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costConstructionRow}/10000,2)` },
+      { name: '减：税金及附加', value: staticResult.sale.taxSurcharge, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}/1.09*0.006,2)` },
       { name: '减：土地增值税', value: staticResult.sale.landValueAddedTax, unit: '万元', desc: '', f: `'土地增值税测算表'!C14` },
-      { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `B${ssr + 3}*${staticResult.inputs.marketingRate / 100}` },
-      { name: '减：管理费用', value: staticResult.sale.managementCost, unit: '万元', desc: '', f: `B${ssr + 3}*${staticResult.inputs.managementRate / 100}` },
-      { name: '减：财务费用', value: staticResult.sale.financialCost, unit: '万元', desc: '', f: `B${ssr}/(B${ssr}+'租赁测算'!B${rsr})*$B$${financialRow}` },
-      { name: '利润总额', value: staticResult.sale.profit, unit: '万元', desc: '', f: `B${ssr + 3}-SUM(B${ssr + 4}:B${ssr + 10})` },
-      { name: '减：所得税', value: staticResult.sale.incomeTax, unit: '万元', desc: '', f: `MAX(B${ssr + 11}*0.25,0)` },
-      { name: '净利润', value: staticResult.sale.netProfit, unit: '万元', desc: '', f: `B${ssr + 11}-B${ssr + 12}` },
-      { name: '销售净利率', value: staticResult.sale.netMargin, unit: '%', desc: '', f: `IF(B${ssr + 3}=0,0,B${ssr + 13}/B${ssr + 3}*100)` }
+      { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*${staticResult.inputs.marketingRate / 100},2)` },
+      { name: '减：管理费用', value: staticResult.sale.managementCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*${staticResult.inputs.managementRate / 100},2)` },
+      { name: '减：财务费用', value: staticResult.sale.financialCost, unit: '万元', desc: '', f: `ROUND(B${ssr}/(B${ssr}+'租赁测算'!B${rsr})*$B$${financialRow},2)` },
+      { name: '利润总额', value: staticResult.sale.profit, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}-SUM(B${ssr + 4}:B${ssr + 10}),2)` },
+      { name: '减：所得税', value: staticResult.sale.incomeTax, unit: '万元', desc: '', f: `ROUND(MAX(B${ssr + 11}*0.25,0),2)` },
+      { name: '净利润', value: staticResult.sale.netProfit, unit: '万元', desc: '', f: `ROUND(B${ssr + 11}-B${ssr + 12},2)` },
+      { name: '销售净利率', value: staticResult.sale.netMargin, unit: '%', desc: '', f: `IF(B${ssr + 3}=0,0,ROUND(B${ssr + 13}/B${ssr + 3}*100,2))` }
     ];
     saleRows.forEach((row, idx) => {
       const r = saleStartIdx + idx;
@@ -1182,18 +1182,18 @@
     const rentRows = [
       { name: '可租面积', value: staticResult.metrics.rentableArea, unit: 'm²', desc: '', f: `'租售面积分配'!B${rentAllocTotalRow}` },
       { name: '加权平均租金', value: staticResult.rent.weightedRent, unit: '元/天/㎡', desc: '', f: `'租售面积分配'!E${rentAllocTotalRow}` },
-      { name: '月租金', value: staticResult.rent.monthlyRent, unit: '元/月/㎡', desc: '日租金×30', f: `B${rsr + 1}*30` },
-      { name: '年租金收入', value: staticResult.rent.yearlyRent, unit: '元/年/㎡', desc: '月租金×12', f: `B${rsr + 2}*12` },
+      { name: '月租金', value: staticResult.rent.monthlyRent, unit: '元/月/㎡', desc: '日租金×30', f: `ROUND(B${rsr + 1}*30,2)` },
+      { name: '年租金收入', value: staticResult.rent.yearlyRent, unit: '元/年/㎡', desc: '年租金=加权平均租金×360', f: `ROUND(B${rsr + 1}*360,2)` },
       { name: '出租率', value: staticResult.rent.occupancyRate, unit: '%', desc: '', f: null },
-      { name: '有效年租金', value: staticResult.rent.effectiveYearlyRent, unit: '元/年/㎡', desc: '年租金×出租率', f: `B${rsr + 3}*B${rsr + 4}/100` },
-      { name: '减：税金及附加', value: staticResult.rent.taxSurcharge, unit: '元/年/㎡', desc: '', f: `B${rsr + 5}*0.006` },
-      { name: '减：房产税', value: staticResult.rent.propertyTax, unit: '元/年/㎡', desc: '', f: `B${rsr + 5}*0.12` },
+      { name: '有效年租金', value: staticResult.rent.effectiveYearlyRent, unit: '元/年/㎡', desc: '年租金×出租率', f: `ROUND(B${rsr + 3}*B${rsr + 4}/100,2)` },
+      { name: '减：税金及附加', value: staticResult.rent.taxSurcharge, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*0.006,2)` },
+      { name: '减：房产税', value: staticResult.rent.propertyTax, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*0.12,2)` },
       { name: '减：土地使用税', value: staticResult.rent.landUseTax, unit: '元/㎡/年', desc: '', f: null },
-      { name: '减：运营费用', value: staticResult.rent.rentalOpCost, unit: '元/年/㎡', desc: '', f: `B${rsr + 5}*${staticResult.inputs.rentalOpRate / 100}` },
-      { name: '净租赁收入', value: staticResult.rent.netRentPerSqm, unit: '元/年/㎡', desc: '', f: `B${rsr + 5}-SUM(B${rsr + 6}:B${rsr + 9})` },
-      { name: '净租赁收入总额', value: staticResult.rent.netRentalIncome, unit: '万元/年', desc: '', f: `B${rsr + 10}*B${rsr}/10000` },
-      { name: '租赁总投', value: staticResult.rent.rentalTotalInvestment, unit: '万元', desc: '', f: `B${rsr}*$B$${costConstructionRow2}/10000+B${rsr}/('销售测算'!B${ssr}+B${rsr})*$B$${financialRow2}` },
-      { name: 'NOI', value: staticResult.rent.noi, unit: '%', desc: '', f: `IF(B${rsr + 12}=0,0,B${rsr + 11}/B${rsr + 12}*100)` }
+      { name: '减：运营费用', value: staticResult.rent.rentalOpCost, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*${staticResult.inputs.rentalOpRate / 100},2)` },
+      { name: '净租赁收入', value: staticResult.rent.netRentPerSqm, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}-SUM(B${rsr + 6}:B${rsr + 9}),2)` },
+      { name: '净租赁收入总额', value: staticResult.rent.netRentalIncome, unit: '万元/年', desc: '', f: `ROUND(B${rsr + 10}*B${rsr}/10000,2)` },
+      { name: '租赁总投', value: staticResult.rent.rentalTotalInvestment, unit: '万元', desc: '', f: `ROUND(B${rsr}*$B$${costConstructionRow2}/10000+B${rsr}/('销售测算'!B${ssr}+B${rsr})*$B$${financialRow2},2)` },
+      { name: 'NOI', value: staticResult.rent.noi, unit: '%', desc: '', f: `IF(B${rsr + 12}=0,0,ROUND(B${rsr + 11}/B${rsr + 12}*100,2))` }
     ];
     rentRows.forEach((row, idx) => {
       const r = rentStartIdx + idx;
@@ -1228,10 +1228,10 @@
     const saleTotalRowNum = saleTotalIdx + 1; // 1-based
     const saleDataLastRowNum = saleTotalRowNum - 1; // 1-based，最后一个数据行
     ws3[encode(saleTotalIdx, 0)] = totalCell('合计');
-    ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `SUM(B4:B${saleDataLastRowNum})`);
+    ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `ROUND(SUM(B4:B${saleDataLastRowNum}),2)`);
     ws3[encode(saleTotalIdx, 2)] = totalCell('—');
-    ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `SUM(D4:D${saleDataLastRowNum})`);
-    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,D${saleTotalRowNum}/B${saleTotalRowNum})`);
+    ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `ROUND(SUM(D4:D${saleDataLastRowNum}),2)`);
+    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,ROUND(D${saleTotalRowNum}/B${saleTotalRowNum},2))`);
 
     const rentAllocStartIdx = saleTotalIdx + 2; // 0-based title
     ws3[encode(rentAllocStartIdx, 0)] = cell('二、租赁面积分配', { bold: true, sz: 12 });
@@ -1252,11 +1252,12 @@
     const rentTotalRowNum = rentTotalIdx + 1; // 1-based
     const rentDetailStartRowNum = rentHeaderIdx + 2; // 1-based
     const rentDataLastRowNum = rentTotalRowNum - 1; // 1-based，最后一个数据行
+    const grossAnnualRentTotal = round2(staticResult.rent.details.reduce((s, d) => s + d.annualRevenue, 0));
     ws3[encode(rentTotalIdx, 0)] = totalCell('合计');
-    ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `SUM(B${rentDetailStartRowNum}:B${rentDataLastRowNum})`);
+    ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `ROUND(SUM(B${rentDetailStartRowNum}:B${rentDataLastRowNum}),2)`);
     ws3[encode(rentTotalIdx, 2)] = totalCell('—');
-    ws3[encode(rentTotalIdx, 3)] = totalCell(staticResult.rent.netRentalIncome, `SUM(D${rentDetailStartRowNum}:D${rentDataLastRowNum})`);
-    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum})`);
+    ws3[encode(rentTotalIdx, 3)] = totalCell(grossAnnualRentTotal, `ROUND(SUM(D${rentDetailStartRowNum}:D${rentDataLastRowNum}),2)`);
+    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,ROUND(SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum},2))`);
 
     ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentTotalIdx, c: 5 } });
     setWsMeta(ws3, [16, 16, 16, 18, 16, 4]);
@@ -1279,19 +1280,19 @@
     const lvatTaxPerArea = s.soldAreaTotal > 0 ? round2(s.landValueAddedTax / s.soldAreaTotal * 10000) : 0;
     const landTaxRows = [
       { no: '1', name: '转让房地产收入总额', value: s.totalRevenue, f: landTaxSaleRevenueCell, note: '=销售测算.销售收入' },
-      { no: '2', name: '扣除项目金额合计', value: s.lvatDeductionTotal, f: 'C5+C6+C7+C8+C9', note: '=①+②+③+④+⑤' },
+      { no: '2', name: '扣除项目金额合计', value: s.lvatDeductionTotal, f: 'ROUND(C5+C6+C7+C8+C9,2)', note: '=①+②+③+④+⑤' },
       { no: '3', name: '①取得土地使用权所支付的金额', value: s.landCost, f: landTaxLandCostCell, note: '=销售测算.土地成本' },
       { no: '4', name: '②房地产开发成本', value: s.constructionCost, f: landTaxConstructCell, note: '=销售测算.建安成本' },
-      { no: '5', name: '③房地产开发费用', value: lvatDevExpense, f: '(C5+C6)*10%', note: '=(③+④)×10%' },
+      { no: '5', name: '③房地产开发费用', value: lvatDevExpense, f: 'ROUND((C5+C6)*10%,2)', note: '=(③+④)×10%' },
       { no: '6', name: '④与转让房地产有关的税金', value: s.taxSurcharge, f: landTaxTaxSurchargeCell, note: '=销售测算.税金及附加' },
-      { no: '7', name: '⑤财政部规定的其他扣除项目', value: lvatOtherDeduction, f: '(C5+C6)*20%', note: '=(③+④)×20%' },
-      { no: '8', name: '增值额', value: s.lvatIncrement, f: 'C3-C4', note: '=①-②' },
-      { no: '9', name: '增值额与扣除项目金额之比（%）', value: s.lvatRatio, f: 'IF(C4=0,0,C10/C4*100)', note: '=⑧/②' },
+      { no: '7', name: '⑤财政部规定的其他扣除项目', value: lvatOtherDeduction, f: 'ROUND((C5+C6)*20%,2)', note: '=(③+④)×20%' },
+      { no: '8', name: '增值额', value: s.lvatIncrement, f: 'ROUND(C3-C4,2)', note: '=①-②' },
+      { no: '9', name: '增值额与扣除项目金额之比（%）', value: s.lvatRatio, f: 'IF(C4=0,0,ROUND(C10/C4*100,2))', note: '=⑧/②' },
       { no: '10', name: '适用税率（%）', value: s.lvatRate, f: 'IF(C11<=50,30,IF(C11<=100,40,IF(C11<=200,50,60)))', note: '四级超率累进' },
       { no: '11', name: '速算扣除系数（%）', value: s.lvatQuick, f: 'IF(C11<=50,0,IF(C11<=100,5,IF(C11<=200,15,35)))', note: '四级超率累进' },
-      { no: '12', name: '应缴土地增值税税额', value: s.landValueAddedTax, f: 'C10*C12/100-C4*C13/100', note: '=⑧×⑩-②×⑪' },
-      { no: '13', name: '土增税负率', value: lvatTaxRate, f: 'IF(C3=0,0,C14/C3*100)', note: '=⑫/①' },
-      { no: '14', name: '土增税（元/㎡）', value: lvatTaxPerArea, f: `IF(${landTaxSoldAreaCell}=0,0,C14/${landTaxSoldAreaCell}*10000)`, note: '=⑫/可售面积' }
+      { no: '12', name: '应缴土地增值税税额', value: s.landValueAddedTax, f: 'ROUND(C10*C12/100-C4*C13/100,2)', note: '=⑧×⑩-②×⑪' },
+      { no: '13', name: '土增税负率', value: lvatTaxRate, f: 'IF(C3=0,0,ROUND(C14/C3*100,2))', note: '=⑫/①' },
+      { no: '14', name: '土增税（元/㎡）', value: lvatTaxPerArea, f: `IF(${landTaxSoldAreaCell}=0,0,ROUND(C14/${landTaxSoldAreaCell}*10000,2))`, note: '=⑫/可售面积' }
     ];
     landTaxRows.forEach((row, idx) => {
       const r = idx + 2;
@@ -1315,12 +1316,12 @@
       { name: '总投资', value: staticResult.summary.totalInvestment, unit: '万元', f: null },
       { name: '销售净利润', value: staticResult.summary.saleNetProfit, unit: '万元', f: `'销售测算'!B${ssr + 13}` },
       { name: '租赁年净收入', value: staticResult.summary.netRentalIncome, unit: '万元/年', f: `'租赁测算'!B${rsr + 11}` },
-      { name: '资金盈余/缺口', value: staticResult.summary.fundingGap, unit: '万元', f: `B3-(1-${finRatio})*B3-'销售测算'!B${ssr + 3}` },
-      { name: '销售净利润覆盖租赁总投比例', value: staticResult.summary.saleProfitCoverRatio, unit: '%', f: `IF('租赁测算'!B${rsr + 12}=0,0,B4/'租赁测算'!B${rsr + 12}*100)` },
+      { name: '资金盈余/缺口', value: staticResult.summary.fundingGap, unit: '万元', f: `ROUND(B3-(1-${finRatio})*B3-'销售测算'!B${ssr + 3},2)` },
+      { name: '销售净利润覆盖租赁总投比例', value: staticResult.summary.saleProfitCoverRatio, unit: '%', f: `IF('租赁测算'!B${rsr + 12}=0,0,ROUND(B4/'租赁测算'!B${rsr + 12}*100,2))` },
       { name: '销售净利率', value: staticResult.summary.saleNetMargin, unit: '%', f: `'销售测算'!B${ssr + 14}` },
       { name: '租赁 NOI', value: staticResult.summary.noi, unit: '%', f: `'租赁测算'!B${rsr + 13}` },
-      { name: '总投资收益率', value: staticResult.summary.totalInvestmentReturn, unit: '%', f: `IF(B3=0,0,B5/B3*100)` },
-      { name: '静态投资回收期', value: staticResult.summary.paybackPeriod, unit: '年', f: `IF(B5=0,0,B3/B5)` }
+      { name: '总投资收益率', value: staticResult.summary.totalInvestmentReturn, unit: '%', f: `IF(B3=0,0,ROUND(B5/B3*100,2))` },
+      { name: '静态投资回收期', value: staticResult.summary.paybackPeriod, unit: '年', f: `IF(B5=0,0,ROUND(B3/B5,2))` }
     ];
     summaryRows.forEach((row, idx) => {
       const r = idx + 2;
