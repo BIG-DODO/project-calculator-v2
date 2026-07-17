@@ -65,6 +65,7 @@ project-calculator/
 
 - 完整版为源头，简化版由完整版汇总反推。
 - 支持土地配套费用、前期费用、建安工程成本、开发间接费、营销费、管理费、财务费用。
+- 设计文档 `INVESTMENT_ESTIMATE_DESIGN.md` 已根据后续讨论补全，包含完整版/简化版结构、增值税 `D×E` 联动、ROUND 精度规则、财务费用计算规则等。
 - 关键约定：
   - 融资利率默认 5%（UI 输入百分比，传入 `calculateInvestmentEstimate` 时除以 100）。
   - 上海默认无大市政配套费。
@@ -77,6 +78,7 @@ project-calculator/
 - 配套宿舍强制出租，配套楼自用不出租。
 - 销售优先级：轻钢 → 分栋 → 分层 → 产业大厦；出租优先级相反。
 - 已加入土地增值税四级超率累进测算表。
+- 设计文档 `STATIC_INVESTMENT_DESIGN.md` 已根据后续讨论补全，包含 360 天年租金口径、加权平均价 6 位精度、「资金盈余/缺口」口径、租赁总投含财务费用分摊、静态回收期 = 总投资/租赁年净收入等。
 - 资金盈余/缺口 = 总投资 - (1-融资占比)*总投资 - 销售收入。
 - 最新修复：加权平均售价/租金公式精度提高到 6 位，`effectiveYearlyRent` 计算顺序与 Excel 对齐，解决启用编辑后「租赁年净收入」「静态投资回收期」不一致的问题。
 
@@ -133,9 +135,10 @@ project-calculator/
 1. `K3_HANDOVER.md`（本文件）—— 5 分钟了解全貌。
 2. `MEMORY.md` 最后 100~200 行 —— 了解最近讨论和未决事项。
 3. 根据当前任务选择设计文档：
-   - 做动态分析 → `DYNAMIC_INVESTMENT_DESIGN.md`
+   - 做动态分析 → `DYNAMIC_INVESTMENT_DESIGN.md`（已根据后续讨论补全）
    - 做三表联动 → `MASTER_TABLE_LINKAGE.md`
    - 做总表集成 → `MASTER_TABLE_INTEGRATION.md` + `MASTER_TABLE_DESIGN.md`
+   - 核对财务规则 → `INVESTMENT_ESTIMATE_DESIGN.md` + `STATIC_INVESTMENT_DESIGN.md`（均已补全）
 4. 结合代码：`financial-modules.js` 和 `product-config-v2.html`。
 
 ---
@@ -144,8 +147,18 @@ project-calculator/
 
 如果你要开一个新会话让 K3 接手，可以直接粘贴：
 
-> 请阅读 `C:/Users/Admin/project-calculator/K3_HANDOVER.md`，然后阅读 `MEMORY.md` 的最后 100 行，了解当前项目状态。当前我们要继续做 [动态投资分析 / 三表联动 / 总表集成 / 测试修复]。请基于设计文档和现有代码给出方案。
+> 请阅读 `C:/Users/Admin/project-calculator/K3_HANDOVER.md`，然后阅读 `C:/Users/Admin/project-calculator/MEMORY.md` 的最后 150 行，了解当前项目状态和最近讨论。
+>
+> 当前我们要继续开发的是：[动态投资分析 / 三表联动与规划·产品总表下载 / 总表集成与指标·测算总表下载 / 测试修复]。
+>
+> 请基于对应设计文档和现有代码，先回复你对任务和规则的理解，再给出实现方案。等我说「可以改代码」后再动手修改。
+>
+> 注意：
+> - 后续代码只推送到 `v2` 远程（`github.com/BIG-DODO/project-calculator-v2.git`），不要推送到 `origin`。
+> - `MEMORY.md` 只存在本地，不提交到 git。
+> - 所有 Excel 公式求和统一包 `ROUND(...,2)`，数字单元格不要标记为字符串。
+> - 修改财务模块后，运行 `node test-financial-selfcheck.js` 做自检。
 
 ---
 
-*文档生成时间：2026-07-17*
+*文档更新时间：2026-07-17（已同步当天补全的投资估算/静态/动态设计文档）*
