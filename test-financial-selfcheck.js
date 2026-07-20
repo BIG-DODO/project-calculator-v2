@@ -408,6 +408,20 @@ if (capturedDynWB) {
   const wsAlloc = capturedWB.Sheets['租售面积分配'];
   const rawPriceCell = Object.keys(wsAlloc).map(k => wsAlloc[k]).find(c => c && typeof c.v === 'number' && Math.abs(c.v - sa.sale.rawWeightedPrice) < 1e-9);
   check('g4: 加权售价缓存为 raw 6 位精度', !!rawPriceCell, rawPriceCell && String(rawPriceCell.v));
+  // g5: 方案B——土地成本=土地配套费合计摊（地上建面口径）、建安成本=前期+建安摊（总建面口径），互补不重叠
+  const expectLandUnit = Math.round(inv.landCost.total * 10000 / sa.metrics.aboveGroundArea * 100) / 100;
+  const expectSaleConstrUnit = Math.round((inv.preliminary.total + inv.construction.total) * 10000 / inv.metrics.totalBuildingArea * 100) / 100;
+  check('g5: 土地成本单方=土地配套费合计÷地上建面', approx(sa.constructionCost.landCostPerArea, expectLandUnit, 1e-6), sa.constructionCost.landCostPerArea + ' vs ' + expectLandUnit);
+  check('g5: 建安成本单方=(前期+建安)÷总建面', approx(sa.constructionCost.saleConstructionUnitCost, expectSaleConstrUnit, 1e-6), sa.constructionCost.saleConstructionUnitCost + ' vs ' + expectSaleConstrUnit);
+  check('g5: 销售土地成本=可售×土地成本单方', approx(sa.sale.landCost, Math.round(sa.metrics.soldAreaTotal * expectLandUnit / 100) / 100, 0.01), sa.sale.landCost + '');
+  check('g5: 销售建安成本=可售×建安成本单方（不含土地，无重复计扣）', approx(sa.sale.constructionCost, Math.round(sa.metrics.soldAreaTotal * expectSaleConstrUnit / 100) / 100, 0.01), sa.sale.constructionCost + '');
+  // g6: 销售测算 Excel「减：建安成本」引用建安成本单方行（不再引用综合建造成本行）
+  const wsSale = capturedWB.Sheets['销售测算'];
+  const saleConstrKey = Object.keys(wsSale).find(k => wsSale[k].v === '建安成本单方（前期+建安工程）');
+  const saleDeductKey = Object.keys(wsSale).find(k => wsSale[k].v === '减：建安成本');
+  const saleDeductCell = saleDeductKey ? wsSale['B' + saleDeductKey.slice(1)] : null;
+  const expectRef = saleConstrKey ? '$B$' + saleConstrKey.slice(1) : '';
+  check('g6: 销售测算减：建安成本引用建安成本单方行', !!(saleConstrKey && saleDeductCell && saleDeductCell.f && saleDeductCell.f.indexOf(expectRef) >= 0), saleDeductCell && saleDeductCell.f);
 }
 
 console.log('\n=== 动态投资分析自检结果：' + (dynChecks - dynFailed) + '/' + dynChecks + ' 通过' + (dynFailed ? '（存在未通过项）' : '') + ' ===');

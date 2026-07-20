@@ -459,17 +459,19 @@
 
     // 销售测算
     const saleRevenue = round2(saleDetails.reduce((s, d) => s + d.revenue, 0));
-    const landCostItems = inv.landCost ? inv.landCost.items : [];
-    const landTransferFeeItem = landCostItems.find(it => it.code === '1-1');
-    const deedTaxItem = landCostItems.find(it => it.code === '1-2');
-    const landCostWithDeed = (landTransferFeeItem ? landTransferFeeItem.cost : 0) + (deedTaxItem ? deedTaxItem.cost : 0);
-    const landCostPerArea = aboveGroundArea > 0 ? round2(landCostWithDeed * 10000 / aboveGroundArea) : 0;
+    const landCostTotal = inv.landCost ? inv.landCost.total : 0;
+    const prelimTotal = inv.preliminary ? inv.preliminary.total : 0;
+    const constructionTotal = inv.construction ? inv.construction.total : 0;
+    // 土地成本单方（方案B口径）：土地配套费用合计（出让金+契税+市政配套+红线外市政+土地增值税）按地上总建面摊
+    const landCostPerArea = aboveGroundArea > 0 ? round2(landCostTotal * 10000 / aboveGroundArea) : 0;
     const unitCost = inv.summary ? round2(inv.summary.totalInvestment * 10000 / inv.metrics.totalBuildingArea) : 0;
-    // 综合建造成本（不含期间费用）：用于销售/租赁直接成本口径
-    const constructionCostTotal = (inv.landCost ? inv.landCost.total : 0) + (inv.preliminary ? inv.preliminary.total : 0) + (inv.construction ? inv.construction.total : 0);
+    // 综合建造成本（不含期间费用）：仅用于租赁总投口径（租赁侧无单独土地行，含土地不重复）
+    const constructionCostTotal = landCostTotal + prelimTotal + constructionTotal;
     const costUnitCost = inv.metrics && inv.metrics.totalBuildingArea > 0 ? round2(constructionCostTotal * 10000 / inv.metrics.totalBuildingArea) : 0;
+    // 销售侧建安成本单方（方案B口径）：前期费用+建安工程成本按总建面摊，与土地成本行互补不重叠、无遗漏
+    const saleConstructionUnitCost = inv.metrics && inv.metrics.totalBuildingArea > 0 ? round2((prelimTotal + constructionTotal) * 10000 / inv.metrics.totalBuildingArea) : 0;
     const landCostForSale = round2(soldAreaTotal * landCostPerArea / 10000);
-    const constructionCostForSale = round2(soldAreaTotal * costUnitCost / 10000);
+    const constructionCostForSale = round2(soldAreaTotal * saleConstructionUnitCost / 10000);
     const saleTaxSurcharge = round2(saleRevenue / 1.09 * 0.006);
 
     // 土地增值税（四级超率累进）
@@ -554,7 +556,7 @@
         soldAreaTotal,
         rentedAreaTotal
       },
-      constructionCost: { landCostPerArea, unitCost, costUnitCost },
+      constructionCost: { landCostPerArea, unitCost, costUnitCost, saleConstructionUnitCost },
       sale: {
         weightedPrice: weightedSalePrice,
         rawWeightedPrice: rawWeightedSalePrice, // 完整精度，供动态分析参与计算
@@ -1443,7 +1445,8 @@
       const totalFinancialCost = (staticResult.sale.financialCost || 0) + (staticResult.rent.financialCost || 0);
       const costRows = [
         ['土地价格', staticResult.inputs.landPrice || 0, '万元/亩'],
-        ['土地含契税', staticResult.constructionCost.landCostPerArea, '元/㎡'],
+        ['土地成本单方（土地配套费合计）', staticResult.constructionCost.landCostPerArea, '元/㎡'],
+        ['建安成本单方（前期+建安工程）', staticResult.constructionCost.saleConstructionUnitCost, '元/㎡'],
         ['综合建造成本（不含期间费用）', staticResult.constructionCost.costUnitCost, '元/㎡'],
         ['财务费用', totalFinancialCost, '万元'],
         ['综合单方成本（含期间费用）', staticResult.constructionCost.unitCost, '元/㎡']
@@ -1457,10 +1460,11 @@
       return {
         nextRow: costStart + costRows.length + 2,
         costStart,
-        costLandTaxRow: costStart + 4,       // 1-based，土地含契税
-        costConstructionRow: costStart + 5,  // 1-based，综合建造成本
-        financialRow: costStart + 6,         // 1-based，财务费用
-        costUnitRow: costStart + 7           // 1-based，综合单方成本
+        costLandTaxRow: costStart + 4,       // 1-based，土地成本单方（土地配套费合计）
+        costSaleConstructionRow: costStart + 5, // 1-based，建安成本单方（前期+建安工程），销售测算扣减用
+        costConstructionRow: costStart + 6,  // 1-based，综合建造成本（含土地，租赁总投用）
+        financialRow: costStart + 7,         // 1-based，财务费用
+        costUnitRow: costStart + 8           // 1-based，综合单方成本
       };
     }
 
@@ -1479,7 +1483,7 @@
     // 租赁测算与销售测算的规划/成本区结构相同，因此可租面积行号相同
     const rsr = ssr;
     const costLandTaxRow = planCost1.costLandTaxRow;
-    const costConstructionRow = planCost1.costConstructionRow;
+    const costSaleConstructionRow = planCost1.costSaleConstructionRow;
     const financialRow = planCost1.financialRow;
     const saleRows = [
       { name: '可售面积', value: staticResult.metrics.soldAreaTotal, unit: 'm²', desc: '', f: `'租售面积分配'!B${saleAllocTotalRow}` },
@@ -1487,7 +1491,7 @@
       { name: '不含税售价', value: round2(staticResult.sale.weightedPrice / 1.09), unit: '万元/㎡', desc: '售价/1.09', f: `ROUND(B${ssr + 1}/1.09,2)` },
       { name: '销售收入', value: staticResult.sale.totalRevenue, unit: '万元', desc: '可售面积×加权平均售价', f: `'租售面积分配'!D${saleAllocTotalRow}` },
       { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costLandTaxRow}/10000,2)` },
-      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costConstructionRow}/10000,2)` },
+      { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costSaleConstructionRow}/10000,2)` },
       { name: '减：税金及附加', value: staticResult.sale.taxSurcharge, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}/1.09*0.006,2)` },
       { name: '减：土地增值税', value: staticResult.sale.landValueAddedTax, unit: '万元', desc: '', f: `'土地增值税测算表'!C14` },
       { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*${staticResult.inputs.marketingRate / 100},2)` },
