@@ -1043,10 +1043,10 @@
       <div class="nav-group">
         <div class="nav-group-title" onclick="toggleNavGroup(this)">成果输出</div>
         <div class="nav-items">
-          <div class="nav-item" onclick="alert('规划/产品总表下载功能开发中...')">
+          <div class="nav-item" onclick="downloadMasterLinkage()">
             <span class="icon">⬇️</span> 规划/产品总表下载
           </div>
-          <div class="nav-item" onclick="alert('指标/测算总表下载功能开发中...')">
+          <div class="nav-item" onclick="downloadMasterIntegrated()">
             <span class="icon">⬇️</span> 指标/测算总表下载
           </div>
         </div>
@@ -1174,7 +1174,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
-  <script src="financial-modules.js?v=20260720-1"></script>
+  <script src="financial-modules.js?v=20260720-2"></script>
   <script>
     // ==================== 全局状态 ====================
     let projectData = null;
@@ -3729,6 +3729,42 @@
       const today = new Date();
       const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
       FinancialModules.downloadDynamicAnalysisExcel(window.dynamicAnalysisResult, projectName + '_动态投资分析表_' + dateStr + '.xlsx');
+    }
+
+    // ==================== 总表下载（三表联动 / 总表集成） ====================
+    function downloadMasterLinkage() {
+      if (!window.configResult) {
+        alert('请先生成产品配置'); return;
+      }
+      if (typeof FinancialModules.downloadMasterLinkageExcel !== 'function') {
+        alert('规划/产品总表下载功能开发中'); return;
+      }
+      const projectName = (projectData && projectData.projectName) || '项目';
+      const today = new Date();
+      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      FinancialModules.downloadMasterLinkageExcel(window.configResult, projectData, projectName + '_规划产品总表_' + dateStr + '.xlsx');
+    }
+
+    function downloadMasterIntegrated() {
+      if (!window.configResult) {
+        alert('请先生成产品配置'); return;
+      }
+      if (!window.investmentEstimateResult) {
+        alert('请先完成投资估算'); return;
+      }
+      if (!window.staticAnalysisResult) {
+        alert('请先进行静态投资分析'); return;
+      }
+      if (!window.dynamicAnalysisResult) {
+        if (!confirm('动态分析未完成，总表中动态测算为占位，仍要下载吗？')) return;
+      }
+      if (typeof FinancialModules.downloadMasterIntegratedExcel !== 'function') {
+        alert('指标/测算总表下载功能开发中'); return;
+      }
+      const projectName = (projectData && projectData.projectName) || '项目';
+      const today = new Date();
+      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      FinancialModules.downloadMasterIntegratedExcel(window.configResult, projectData, window.investmentEstimateResult, window.staticAnalysisResult, window.dynamicAnalysisResult, projectName + '_指标测算总表_' + dateStr + '.xlsx');
     }
 
     // ==================== 视图切换 ====================

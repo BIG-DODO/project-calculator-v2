@@ -1327,14 +1327,19 @@
 
     // 四~七
     const categoryRows = [];
-    const avgInterestYears = (fullEstimate.inputs.devPhases * fullEstimate.inputs.phasePeriod) / 2;
-    const finRatio = (fullEstimate.inputs.financingRatio || 0) / 100;
-    const finRate = (fullEstimate.inputs.financingRate || 0) / 100;
+    // 融资参数小区（追加于表尾，行号预计算；不插入中间以避免行号移位）：
+    // 4 个 category 行 + 发展成本合计/单位建面/单位地上建面 3 行之后为标题行
+    const finParamRatioRow = row + 9;   // 1-based，融资占比
+    const finParamRateRow = row + 10;   // 1-based，融资利率
+    const finParamPhasesRow = row + 11; // 1-based，开发期数
+    const finParamPeriodRow = row + 12; // 1-based，单期开发周期
+    // 财务费用 = (土地+前期+建安)×融资占比/100×融资利率/100×(开发期数×单期周期/2) + 银行费用（利息>0 时 30 万），引用表尾参数格
+    const interestExpr = `(${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow})*$D$${finParamRatioRow}/100*$D$${finParamRateRow}/100*($D$${finParamPhasesRow}*$D$${finParamPeriodRow}/2)`;
     const categories = [
       { code: '四', name: '开发间接费', cost: fullEstimate.indirect.cost, f: '0' },
       { code: '五', name: '营销费用', cost: fullEstimate.marketing.cost, f: '0' },
       { code: '六', name: '公司管理费', cost: fullEstimate.management.cost, f: '0' },
-      { code: '七', name: '财务费用', cost: fullEstimate.financial.total, f: `ROUND((${col(5)}${landSubtotalRow}+${col(5)}${prelimSubtotalRow}+${col(5)}${constructionTotalRow})*${finRatio}*${finRate}*${avgInterestYears}+${fullEstimate.financial.bankFee},2)` }
+      { code: '七', name: '财务费用', cost: fullEstimate.financial.total, f: `ROUND(${interestExpr}+IF(${interestExpr}>0,30,0),2)` }
     ];
     categories.forEach(cat => {
       const catRow = row + 1; // 1-based Excel row
@@ -1363,6 +1368,23 @@
     row += 1;
     ws[encode(row, 1)] = textCell('单位地上建面成本（元/㎡）');
     ws[encode(row, 5)] = moneyCell(fullEstimate.summary.unitAboveGroundCost, `${col(5)}${totalRow}/${ws._aboveGroundAreaRef}*10000`);
+
+    // 融资参数小区（表尾追加）：黄色可编辑输入格，预填投资估算输入；财务费用公式引用此处，总表集成时供静态/动态 sheet 引用
+    row += 1;
+    ws['!merge'].push({ s: { r: row, c: 0 }, e: { r: row, c: 8 } });
+    ws[encode(row, 0)] = cell('融资参数（黄色为可编辑输入格，其他表引用此处）', { bold: true, sz: 12 });
+    const finParamRows = [
+      { name: '融资占比', value: round2(fullEstimate.inputs.financingRatio || 0), unit: '%' },
+      { name: '融资利率', value: round2(fullEstimate.inputs.financingRate || 0), unit: '%' },
+      { name: '开发期数', value: fullEstimate.inputs.devPhases || 1, unit: '期' },
+      { name: '单期开发周期', value: round2(fullEstimate.inputs.phasePeriod || 0), unit: '年' }
+    ];
+    finParamRows.forEach(p => {
+      row += 1;
+      ws[encode(row, 1)] = textCell(p.name);
+      ws[encode(row, 2)] = textCell(p.unit);
+      ws[encode(row, 3)] = cell(p.value, { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+    });
 
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row, c: 8 } });
     setWsMeta(ws, cols);
@@ -1485,6 +1507,9 @@
     const costLandTaxRow = planCost1.costLandTaxRow;
     const costSaleConstructionRow = planCost1.costSaleConstructionRow;
     const financialRow = planCost1.financialRow;
+    // 费率参数小区（追加于表尾，行号预计算）：saleRows 共 15 行，其后为标题行 + 营销费率 + 管理费率
+    const mktRateRow = saleStartIdx + 15 + 2;  // 1-based，营销费率输入格行
+    const mgmtRateRow = saleStartIdx + 15 + 3; // 1-based，管理费率输入格行
     const saleRows = [
       { name: '可售面积', value: staticResult.metrics.soldAreaTotal, unit: 'm²', desc: '', f: `'租售面积分配'!B${saleAllocTotalRow}` },
       { name: '加权平均售价', value: staticResult.sale.rawWeightedPrice, unit: '万元/㎡', desc: '', f: `'租售面积分配'!E${saleAllocTotalRow}`, raw: true },
@@ -1494,8 +1519,8 @@
       { name: '减：建安成本', value: staticResult.sale.constructionCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costSaleConstructionRow}/10000,2)` },
       { name: '减：税金及附加', value: staticResult.sale.taxSurcharge, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}/1.09*0.006,2)` },
       { name: '减：土地增值税', value: staticResult.sale.landValueAddedTax, unit: '万元', desc: '', f: `'土地增值税测算表'!C14` },
-      { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*${staticResult.inputs.marketingRate / 100},2)` },
-      { name: '减：管理费用', value: staticResult.sale.managementCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*${staticResult.inputs.managementRate / 100},2)` },
+      { name: '减：营销费用', value: staticResult.sale.marketingCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*$B$${mktRateRow}/100,2)` },
+      { name: '减：管理费用', value: staticResult.sale.managementCost, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}*$B$${mgmtRateRow}/100,2)` },
       { name: '减：财务费用', value: staticResult.sale.financialCost, unit: '万元', desc: '', f: `ROUND(B${ssr}/(B${ssr}+'租赁测算'!B${rsr})*$B$${financialRow},2)` },
       { name: '利润总额', value: staticResult.sale.profit, unit: '万元', desc: '', f: `ROUND(B${ssr + 3}-SUM(B${ssr + 4}:B${ssr + 10}),2)` },
       { name: '减：所得税', value: staticResult.sale.incomeTax, unit: '万元', desc: '', f: `ROUND(MAX(B${ssr + 11}*0.25,0),2)` },
@@ -1510,7 +1535,17 @@
       ws1[encode(r, 2)] = textCell(row.unit);
       ws1[encode(r, 3)] = textCell(row.desc);
     });
-    ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row1 + saleRows.length + 1, c: 3 } });
+    // 费率参数小区（表尾追加）：黄色可编辑输入格，营销/管理费用公式引用此处，总表集成时供动态 sheet 引用
+    let saleTail = saleStartIdx + saleRows.length; // 0-based，最后数据行的下一空行（saleStartIdx 为 0-based 首行）
+    ws1['!merge'].push({ s: { r: saleTail, c: 0 }, e: { r: saleTail, c: 3 } });
+    ws1[encode(saleTail, 0)] = cell('费率参数（黄色为可编辑输入格，其他表引用此处）', { bold: true, sz: 12 });
+    [['营销费率', round2(staticResult.inputs.marketingRate || 0)], ['管理费率', round2(staticResult.inputs.managementRate || 0)]].forEach(p => {
+      saleTail += 1;
+      ws1[encode(saleTail, 0)] = textCell(p[0]);
+      ws1[encode(saleTail, 1)] = cell(p[1], { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+      ws1[encode(saleTail, 2)] = textCell('%');
+    });
+    ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: saleTail, c: 3 } });
     setWsMeta(ws1, [22, 16, 12, 24]);
     XLSX.utils.book_append_sheet(wb, ws1, '销售测算');
 
@@ -1528,6 +1563,8 @@
     // rsr 已在销售测算前计算（两表结构相同）
     const costConstructionRow2 = planCost2.costConstructionRow;
     const financialRow2 = planCost2.financialRow;
+    // 费率参数小区（追加于表尾，行号预计算）：rentRows 共 14 行，其后为标题行 + 租赁运营费率
+    const opRateRow = rentStartIdx + 14 + 2; // 1-based，租赁运营费率输入格行
     const rentRows = [
       { name: '可租面积', value: staticResult.metrics.rentableArea, unit: 'm²', desc: '', f: `'租售面积分配'!B${rentAllocTotalRow}` },
       { name: '加权平均租金', value: staticResult.rent.rawWeightedRent, unit: '元/天/㎡', desc: '', f: `'租售面积分配'!E${rentAllocTotalRow}`, raw: true },
@@ -1538,7 +1575,7 @@
       { name: '减：税金及附加', value: staticResult.rent.taxSurcharge, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*0.006,2)` },
       { name: '减：房产税', value: staticResult.rent.propertyTax, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*0.12,2)` },
       { name: '减：土地使用税', value: staticResult.rent.landUseTax, unit: '元/㎡/年', desc: '', f: null },
-      { name: '减：运营费用', value: staticResult.rent.rentalOpCost, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*${staticResult.inputs.rentalOpRate / 100},2)` },
+      { name: '减：运营费用', value: staticResult.rent.rentalOpCost, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}*$B$${opRateRow}/100,2)` },
       { name: '净租赁收入', value: staticResult.rent.netRentPerSqm, unit: '元/年/㎡', desc: '', f: `ROUND(B${rsr + 5}-SUM(B${rsr + 6}:B${rsr + 9}),2)` },
       { name: '净租赁收入总额', value: staticResult.rent.netRentalIncome, unit: '万元/年', desc: '', f: `ROUND(B${rsr + 10}*B${rsr}/10000,2)` },
       { name: '租赁总投', value: staticResult.rent.rentalTotalInvestment, unit: '万元', desc: '', f: `ROUND(B${rsr}*$B$${costConstructionRow2}/10000+B${rsr}/('销售测算'!B${ssr}+B${rsr})*$B$${financialRow2},2)` },
@@ -1552,7 +1589,15 @@
       ws2[encode(r, 2)] = textCell(row.unit);
       ws2[encode(r, 3)] = textCell(row.desc);
     });
-    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row2 + rentRows.length + 1, c: 3 } });
+    // 费率参数小区（表尾追加）：黄色可编辑输入格，运营费用公式引用此处，总表集成时供动态 sheet 引用
+    let rentTail = rentStartIdx + rentRows.length; // 0-based，最后数据行的下一空行（rentStartIdx 为 0-based 首行）
+    ws2['!merge'].push({ s: { r: rentTail, c: 0 }, e: { r: rentTail, c: 3 } });
+    ws2[encode(rentTail, 0)] = cell('费率参数（黄色为可编辑输入格，其他表引用此处）', { bold: true, sz: 12 });
+    rentTail += 1;
+    ws2[encode(rentTail, 0)] = textCell('租赁运营费率');
+    ws2[encode(rentTail, 1)] = cell(round2(staticResult.inputs.rentalOpRate || 0), { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+    ws2[encode(rentTail, 2)] = textCell('%');
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentTail, c: 3 } });
     setWsMeta(ws2, [22, 16, 14, 28]);
     XLSX.utils.book_append_sheet(wb, ws2, '租赁测算');
 
@@ -1662,12 +1707,12 @@
     ws5[encode(0, 0)] = cell('综合汇总指标', { bold: true, sz: 14 });
     ws5['!merge'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
     ['指标', '数值', '单位'].forEach((h, c) => ws5[encode(1, c)] = headerCell(h));
-    const finRatio = staticResult.inputs.financingRatio / 100;
+    const sumFinRatioRow = 2 + 9 + 2; // 融资参数小区（表尾追加，summaryRows 共 9 行）：标题行 + 融资占比输入格行（1-based）
     const summaryRows = [
       { name: '总投资', value: staticResult.summary.totalInvestment, unit: '万元', f: null },
       { name: '销售净利润', value: staticResult.summary.saleNetProfit, unit: '万元', f: `'销售测算'!B${ssr + 13}` },
       { name: '租赁年净收入', value: staticResult.summary.netRentalIncome, unit: '万元/年', f: `'租赁测算'!B${rsr + 11}` },
-      { name: '资金盈余/缺口', value: staticResult.summary.fundingGap, unit: '万元', f: `ROUND(B3-(1-${finRatio})*B3-'销售测算'!B${ssr + 3},2)` },
+      { name: '资金盈余/缺口', value: staticResult.summary.fundingGap, unit: '万元', f: `ROUND(B3-(1-$B$${sumFinRatioRow}/100)*B3-'销售测算'!B${ssr + 3},2)` },
       { name: '销售净利润覆盖租赁总投比例', value: staticResult.summary.saleProfitCoverRatio, unit: '%', f: `IF('租赁测算'!B${rsr + 12}=0,0,ROUND(B4/'租赁测算'!B${rsr + 12}*100,2))` },
       { name: '销售净利率', value: staticResult.summary.saleNetMargin, unit: '%', f: `'销售测算'!B${ssr + 14}` },
       { name: '租赁 NOI', value: staticResult.summary.noi, unit: '%', f: `'租赁测算'!B${rsr + 13}` },
@@ -1680,7 +1725,16 @@
       ws5[encode(r, 1)] = moneyCell(row.value, row.f);
       ws5[encode(r, 2)] = textCell(row.unit);
     });
-    ws5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summaryRows.length + 1, c: 2 } });
+    // 融资参数小区（表尾追加）：黄色可编辑输入格，资金盈余/缺口公式引用此处；总表集成时重接线到「投资估算完整版」融资参数区
+    let sumTail = summaryRows.length + 1; // 0-based 最后数据行
+    sumTail += 1;
+    ws5['!merge'].push({ s: { r: sumTail, c: 0 }, e: { r: sumTail, c: 2 } });
+    ws5[encode(sumTail, 0)] = cell('融资参数（黄色为可编辑输入格，其他表引用此处）', { bold: true, sz: 12 });
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('融资占比');
+    ws5[encode(sumTail, 1)] = cell(round2(staticResult.inputs.financingRatio || 0), { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+    ws5[encode(sumTail, 2)] = textCell('%');
+    ws5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sumTail, c: 2 } });
     setWsMeta(ws5, [28, 16, 12]);
     XLSX.utils.book_append_sheet(wb, ws5, '综合汇总');
 
@@ -1916,6 +1970,570 @@
     XLSX.utils.book_append_sheet(wb, ws3, '关键指标汇总');
 
     XLSX.writeFile(wb, fileName || '动态投资分析表.xlsx');
+  };
+
+  // ==================== 三表联动（总表第一部分，5 个 sheet） ====================
+  // 需求见 MASTER_TABLE_LINKAGE.md：Sheet1 规划指标初始值（黄色可编辑输入）→ Sheet3 指标估算联动；
+  // Sheet4 产品配置详表（行内公式）→ Sheet5 总体经济技术指标联动；Sheet2 产品配置选择为只读存档。
+  // buildLinkageSheets 独立可复用，后续「指标/测算总表」集成（MASTER_TABLE_INTEGRATION.md）直接拼入前 5 个 sheet。
+
+  function buildLinkageSheets(configResult, projectData) {
+    const pd = projectData || {};
+    const result = configResult || {};
+    const products = result.products || [];
+    const LINK_INPUT_FILL = 'FFF2CC'; // 黄色可编辑输入格
+    const LINK_MID_FILL = 'F3F4F6';   // 中间计算行底色
+
+    function linkInputCell(v, numFmt) {
+      if (v == null || v === '' || (typeof v === 'number' && isNaN(v))) return cell('', { fill: LINK_INPUT_FILL, align: 'right' });
+      if (typeof v === 'number') return cell(v, { fill: LINK_INPUT_FILL, numFmt: numFmt || '#,##0.00', align: 'right', raw: true });
+      return cell(v, { fill: LINK_INPUT_FILL, align: 'left' });
+    }
+    function midTextCell(v) { return cell(v, { fill: LINK_MID_FILL, fontColor: '6B7280' }); }
+    function midNumCell(v, f, numFmt) { return cell(v, { fill: LINK_MID_FILL, fontColor: '6B7280', numFmt: numFmt || '#,##0.00', align: 'right', f: f }); }
+    // 栋数等整数语义单元格（千分位整数格式）
+    function intLikeCell(v, f) { return cell(v, { numFmt: '#,##0', align: 'right', f: f }); }
+    // 层数明细格：General 格式（整数显示 3、3.5 显示 3.5；#,##0 会把 3.5 层四舍五入成 4，0.## 会把 3 显示成「3.」）
+    function floorsCell(v, f) { return cell(v, { numFmt: 'General', align: 'right', f: f }); }
+
+    const S1 = "'规划指标初始值'!";
+    const S4 = "'产品配置详表'!";
+
+    // ---------- 公共输入值（Sheet1 预填 + Sheet3 缓存预计算，口径同 index.html calculate()） ----------
+    const landArea = safeNum(pd.landArea);
+    const far = safeNum(pd.far);
+    const greenPct = safeNum(pd.greenRate) * 100;       // 页面存储小数，Sheet1 按百分比数填（15 表示 15%）
+    const ancPct = safeNum(pd.ancillaryRatio) * 100;
+    const rdPct = safeNum(pd.rdRatio) * 100;
+    const factoryIndex = safeNum(pd.factoryIndex != null ? pd.factoryIndex : pd.factoryRate, 0.5);
+    const supportIndex = safeNum(pd.supportIndex != null ? pd.supportIndex : pd.ancillaryRate, 1.0);
+    const regionStr = pd.region || '';
+    const isHz = regionStr === '杭州';
+
+    // Sheet3 指标估算 JS 预计算（完全复刻 index.html calculate() 口径）
+    const eAbove = landArea * far;
+    const eGreen = landArea * greenPct / 100;
+    const eRoad = landArea * 0.30;
+    const eDensity = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+    const eBase = landArea * eDensity;
+    const eTotalVeh = Math.ceil(eAbove * (1 - ancPct / 100) * factoryIndex / 100 + eAbove * (ancPct / 100) * supportIndex / 100);
+    const eTotalNV = Math.ceil(eAbove * 1.0 / 100);
+    const eAvail = landArea - eRoad - eGreen - eBase - eTotalNV * 1.5;
+    let eJudge = Math.floor(eAvail / 35);
+    if (eJudge < 10) eJudge = 0;
+    let eGroundVeh, eUnderVeh, eGroundNV, eUnderNV, eUnderArea;
+    if (eJudge >= eTotalVeh) {
+      eGroundVeh = eTotalVeh; eUnderVeh = 0; eGroundNV = eTotalNV; eUnderNV = 0; eUnderArea = 500;
+    } else {
+      eGroundVeh = eJudge; eUnderVeh = eTotalVeh - eJudge;
+      if (eTotalNV > 500) { eGroundNV = Math.ceil(eTotalNV / 2); eUnderNV = Math.floor(eTotalNV / 2); }
+      else { eGroundNV = eTotalNV; eUnderNV = 0; }
+      eUnderArea = eUnderVeh * (isHz ? 42 : 35) + eUnderNV * 1.5;
+    }
+    const eTotalArea = eAbove + eUnderArea;
+
+    // Sheet4 产品配置详表行号布局（1-based）
+    const s4First = 4;
+    const s4Last = s4First + products.length - 1;
+    const s4TR = s4Last + 1; // 合计行
+
+    // Sheet5 总体经济技术指标 JS 预计算（复刻 renderIndicatorOverview 口径，地下面积系数按杭州 42/其他 35）
+    let oAbove = 0, oCap = 0, oBase = 0, oFactory = 0, oAnc = 0, oUnder = 0, oTotal = 0;
+    let oFar = 0, oDensity = 0, oTotalVeh = 0, oTotalNV = 0, oAvail = 0, oJudge = 0;
+    let oGroundVeh = 0, oUnderVeh = 0, oGroundNV = 0, oUnderNV = 0;
+    const typeAreaSum = { '轻钢厂房': 0, '分栋厂房': 0, '分层厂房': 0, '产业大厦': 0, '配套楼': 0, '配套宿舍': 0 };
+    const isShC65 = regionStr === '上海' && (pd.landUseType || '') === 'C65';
+    if (products.length) {
+      oAbove = safeNum(result.totalArea) || products.reduce((s, p) => s + safeNum(p.totalArea), 0);
+      oCap = safeNum(result.totalCap) || products.reduce((s, p) => s + safeNum(p.totalCap), 0);
+      oBase = safeNum(result.totalBase) || products.reduce((s, p) => s + safeNum(p.totalBase), 0);
+      products.forEach(p => { if (typeAreaSum[p.type] != null) typeAreaSum[p.type] += safeNum(p.totalArea); });
+      products.forEach(p => {
+        if (p.type === '配套宿舍' || p.type === '配套楼') oAnc += safeNum(p.totalArea);
+        else if (p.type === '产业大厦' && isShC65) { /* C65 研发办公，不计车位 */ }
+        else oFactory += safeNum(p.totalArea);
+      });
+      oFar = landArea > 0 ? oCap / landArea : 0;
+      oDensity = landArea > 0 ? oBase / landArea : 0;
+      oTotalVeh = Math.ceil(oFactory * factoryIndex / 100) + Math.ceil(oAnc * supportIndex / 100);
+      oTotalNV = Math.ceil(oAbove * 1.0 / 100);
+      oAvail = landArea - landArea * 0.30 - landArea * greenPct / 100 - oBase - oTotalNV * 1.5;
+      oJudge = Math.floor(oAvail / 35);
+      if (oJudge < 10) oJudge = 0;
+      if (oJudge >= oTotalVeh) {
+        oGroundVeh = oTotalVeh; oUnderVeh = 0; oGroundNV = oTotalNV; oUnderNV = 0; oUnder = 500;
+      } else {
+        oGroundVeh = oJudge; oUnderVeh = oTotalVeh - oJudge;
+        if (oTotalNV > 500) { oGroundNV = Math.ceil(oTotalNV / 2); oUnderNV = Math.floor(oTotalNV / 2); }
+        else { oGroundNV = oTotalNV; oUnderNV = 0; }
+        oUnder = oUnderVeh * (isHz ? 42 : 35) + oUnderNV * 1.5;
+      }
+      oTotal = oAbove + oUnder;
+    }
+
+    // ==================== Sheet1：规划指标初始值 ====================
+    const ws1 = {};
+    ws1['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }
+    ];
+    ws1[encode(0, 0)] = cell('规划指标初始值', { bold: true, sz: 14 });
+    ws1[encode(1, 0)] = cell('黄色底纹为可编辑输入格；「指标估算」表全部公式引用本表，修改后自动重算。', { fontColor: '6B7280' });
+    ['指标', '数值', '单位', '备注'].forEach((h, c) => ws1[encode(2, c)] = headerCell(h));
+    const s1Rows = [
+      { name: '项目名称', value: pd.projectName || '', unit: '—', note: '' },
+      { name: '城市/区域', value: regionStr, unit: '—', note: '固定枚举：上海/杭州/长三角区域/湾区/其他区域' },
+      { name: '用地性质', value: pd.landUseType || '', unit: '—', note: '固定枚举：M（工业用地）/C65（科研设计用地），仅上海需填' },
+      { name: '用地面积', value: pd.landArea != null ? landArea : null, unit: '㎡', note: '' },
+      { name: '容积率', value: pd.far != null ? far : null, unit: '—', note: '' },
+      { name: '限高', value: pd.heightLimit != null ? safeNum(pd.heightLimit) : null, unit: 'm', note: '' },
+      { name: '绿地率', value: pd.greenRate != null ? greenPct : null, unit: '%', note: '按百分比数填（如 15 表示 15%）', fmt: '0.00' },
+      { name: '配套用房占比', value: pd.ancillaryRatio != null ? ancPct : null, unit: '%', note: '按百分比数填', fmt: '0.00' },
+      { name: '研发办公占比', value: pd.rdRatio != null ? rdPct : null, unit: '%', note: '按百分比数填；仅上海 C65 用地填写', fmt: '0.00' },
+      { name: '厂房车位配建指标', value: factoryIndex, unit: '辆/100㎡', note: '' },
+      { name: '配套车位配建指标', value: supportIndex, unit: '辆/100㎡', note: '' }
+    ];
+    s1Rows.forEach((row, i) => {
+      const r = 3 + i; // 0-based；1-based 行号 4..14
+      ws1[encode(r, 0)] = textCell(row.name);
+      ws1[encode(r, 1)] = linkInputCell(row.value, row.fmt);
+      ws1[encode(r, 2)] = textCell(row.unit);
+      ws1[encode(r, 3)] = textCell(row.note || '');
+    });
+    ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: s1Rows.length + 2, c: 3 } });
+    setWsMeta(ws1, [22, 18, 12, 44]);
+
+    // ==================== Sheet2：产品配置选择（只读存档，不参与计算） ====================
+    const ws2 = {};
+    const LINK_PRODUCT_ORDER = [
+      { type: '轻钢厂房', hint: '1层+火车头' },
+      { type: '分栋厂房', hint: '2~4层' },
+      { type: '分层厂房', hint: '5~12层' },
+      { type: '产业大厦', hint: '高层研发' },
+      { type: '配套宿舍', hint: '配套用房' },
+      { type: '配套楼', hint: '配套服务' }
+    ];
+    ws2['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } }
+    ];
+    ws2[encode(0, 0)] = cell('产品配置选择（存档）', { bold: true, sz: 14 });
+    ws2[encode(1, 0)] = cell('本表为生成产品配置时的用户选择存档，由配置结果反推，仅供追溯，不参与任何公式计算。', { fontColor: '6B7280' });
+    ws2[encode(2, 0)] = cell('生成时间：' + new Date().toLocaleString('zh-CN') + '　项目：' + (pd.projectName || '—'), { fontColor: '6B7280' });
+    ['产品类型', '是否选择', '说明'].forEach((h, c) => ws2[encode(3, c)] = headerCell(h));
+    const selTypeSet = {};
+    products.forEach(p => { selTypeSet[p.type] = true; });
+    LINK_PRODUCT_ORDER.forEach((pt, i) => {
+      const r = 4 + i;
+      ws2[encode(r, 0)] = textCell(pt.type);
+      ws2[encode(r, 1)] = cell(selTypeSet[pt.type] ? '✓ 已选择' : '—', { align: 'center' });
+      ws2[encode(r, 2)] = textCell(pt.hint);
+    });
+    ws2[encode(11, 0)] = cell('选择明细（按配置结果汇总）', { bold: true, fill: STYLE.subtotalFill });
+    for (let c = 1; c <= 6; c++) ws2[encode(11, c)] = cell('', { fill: STYLE.subtotalFill });
+    ['产品类型', '层数', '面积段（㎡）', '形式', '荷载', '电梯配置', '产品型号'].forEach((h, c) => ws2[encode(12, c)] = headerCell(h));
+    let s2r = 13;
+    LINK_PRODUCT_ORDER.forEach(pt => {
+      const ps = products.filter(p => p.type === pt.type);
+      if (!ps.length) return;
+      const uniq = arr => [...new Set(arr)].join('/');
+      ws2[encode(s2r, 0)] = textCell(pt.type);
+      ws2[encode(s2r, 1)] = textCell(uniq(ps.map(p => String(p.floors))));
+      ws2[encode(s2r, 2)] = textCell(uniq(ps.map(p => String(p.base))));
+      ws2[encode(s2r, 3)] = textCell(uniq(ps.map(p => p.form != null ? String(p.form) : '—')));
+      ws2[encode(s2r, 4)] = textCell(uniq(ps.map(p => p.load != null ? String(p.load) : '—')));
+      ws2[encode(s2r, 5)] = textCell(uniq(ps.map(p => p.elevator != null ? String(p.elevator) : '—')));
+      ws2[encode(s2r, 6)] = textCell(uniq(ps.map(p => p.productType != null ? String(p.productType) : '—')));
+      s2r++;
+    });
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(s2r - 1, 12), c: 6 } });
+    setWsMeta(ws2, [14, 12, 18, 12, 30, 18, 22]);
+
+    // ==================== Sheet3：指标估算（全部公式引用 Sheet1） ====================
+    const ws3 = {};
+    ws3['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }
+    ];
+    ws3[encode(0, 0)] = cell('综合指标估算（联动「规划指标初始值」）', { bold: true, sz: 14 });
+    ws3[encode(1, 0)] = cell('全部数值由公式引用「规划指标初始值」计算，修改 Sheet1 后本表自动重算；底部灰底行为中间计算。', { fontColor: '6B7280' });
+    ['指标名称', '数值', '单位', '备注'].forEach((h, c) => ws3[encode(2, c)] = headerCell(h));
+    // 行号（1-based）：4 规划用地面积 / 5 用地性质 / 6 总建筑面积 / 7 地上 / 8 地下 / 9 容积率 / 10 限高 / 11 绿地率 / 12 建筑密度
+    // 13 研发占比 / 14 配套占比 / 15 机动车 / 16 地面机动车 / 17 地下机动车 / 18 非机动车 / 19 地面非 / 20 地下非
+    // 21 绿地面积 / 22 道路面积 / 23 中间-基底 / 24 中间-可布置面积 / 25 中间-地面车位初判
+    function s3row(r0, name, value, formula, unit, remark, kind) {
+      ws3[encode(r0, 0)] = kind === 'group' ? subtotalCell(name) : textCell(name);
+      if (kind === 'group') ws3[encode(r0, 1)] = subtotalCell(value, formula);
+      else if (typeof formula === 'string' && typeof value === 'string') ws3[encode(r0, 1)] = cell(value, { f: formula, align: 'right' });
+      else if (formula) ws3[encode(r0, 1)] = numCell(value, formula);
+      else ws3[encode(r0, 1)] = intLikeCell(value);
+      ws3[encode(r0, 2)] = textCell(unit);
+      ws3[encode(r0, 3)] = textCell(remark || '');
+      if (kind === 'group') { /* subtotalCell 已带样式 */ }
+    }
+    s3row(3, '规划用地面积', landArea, S1 + 'B7', '㎡', '约 ' + fmtNum(landArea / 666.7, 1) + ' 亩');
+    s3row(4, '用地性质',
+      pd.landUseType === 'M' ? 'M（工业用地）' : (pd.landUseType === 'C65' ? 'C65（科研设计用地）' : '—'),
+      'IF(' + S1 + 'B6="M","M（工业用地）",IF(' + S1 + 'B6="C65","C65（科研设计用地）","—"))', '—', '');
+    s3row(5, '总建筑面积', round2(eTotalArea), 'ROUND(B7+B8,2)', '㎡', '地上 + 地下', 'group');
+    s3row(6, '地上建筑面积', round2(eAbove), 'ROUND(' + S1 + 'B7*' + S1 + 'B8,2)', '㎡', '＝计容建筑面积＝用地面积×容积率');
+    s3row(7, '地下建筑面积', round2(eUnderArea), 'IF(B25>=B15,500,ROUND(B17*IF(' + S1 + 'B5="杭州",42,35)+B20*1.5,2))', '㎡', eJudge >= eTotalVeh ? '设备用房' : '含地下车库与设备用房');
+    s3row(8, '容积率', far, S1 + 'B8', '—', '');
+    s3row(9, '限高', safeNum(pd.heightLimit), S1 + 'B9', 'm', '');
+    s3row(10, '绿地率', greenPct, S1 + 'B10', '%', '');
+    s3row(11, '建筑密度', eDensity * 100, 'IF(' + S1 + 'B8<1.5,45,IF(' + S1 + 'B8<2,42,40))', '%', '按容积率分档：<1.5→45%，<2.0→42%，≥2.0→40%');
+    s3row(12, '研发办公用房占比', rdPct, S1 + 'B12', '%', '仅上海 C65 用地');
+    s3row(13, '配套用房占比', ancPct, S1 + 'B11', '%', '');
+    s3row(14, '机动车停车位数量', eTotalVeh,
+      'CEILING(B7*(1-' + S1 + 'B11/100)*' + S1 + 'B13/100+B7*' + S1 + 'B11/100*' + S1 + 'B14/100,1)',
+      '辆', '厂房 ' + factoryIndex.toFixed(2) + ' 辆/100㎡，配套 ' + supportIndex.toFixed(2) + ' 辆/100㎡', 'group');
+    s3row(15, '地面机动车停车位', eGroundVeh, 'IF(B25>=B15,B15,B25)', '辆', '可布置面积÷35，不足 10 辆归 0');
+    s3row(16, '地下机动车停车位', eUnderVeh, 'IF(B25>=B15,0,B15-B25)', '辆', '');
+    s3row(17, '非机动车停车位数量', eTotalNV, 'CEILING(B7*1/100,1)', '辆', '1.0 辆/100㎡', 'group');
+    s3row(18, '地面非机动车停车位', eGroundNV, 'IF(B25>=B15,B18,IF(B18>500,CEILING(B18/2,1),B18))', '辆', '地面车位充足时全放地面；不足且总量>500 时对半分');
+    s3row(19, '地下非机动车停车位', eUnderNV, 'IF(B25>=B15,0,IF(B18>500,FLOOR(B18/2,1),0))', '辆', '');
+    s3row(20, '绿地面积', round2(eGreen), 'ROUND(' + S1 + 'B7*' + S1 + 'B10/100,2)', '㎡', '＝用地面积×绿地率');
+    s3row(21, '道路面积', round2(eRoad), 'ROUND(' + S1 + 'B7*0.3,2)', '㎡', '按用地面积 30% 估算');
+    // 中间计算行（灰底）
+    ws3[encode(22, 0)] = midTextCell('中间计算：建筑基底面积');
+    ws3[encode(22, 1)] = midNumCell(round2(eBase), 'ROUND(' + S1 + 'B7*IF(' + S1 + 'B8<1.5,0.45,IF(' + S1 + 'B8<2,0.42,0.4)),2)');
+    ws3[encode(22, 2)] = midTextCell('㎡');
+    ws3[encode(22, 3)] = midTextCell('＝用地面积×建筑密度分档');
+    ws3[encode(23, 0)] = midTextCell('中间计算：可布置地面车位面积');
+    ws3[encode(23, 1)] = midNumCell(round2(eAvail), 'ROUND(' + S1 + 'B7-B21-B22-B23-B18*1.5,2)');
+    ws3[encode(23, 2)] = midTextCell('㎡');
+    ws3[encode(23, 3)] = midTextCell('＝用地−绿地−道路−基底−非机动车（先按全地面）×1.5');
+    ws3[encode(24, 0)] = midTextCell('中间计算：地面车位初判（<10 归 0）');
+    ws3[encode(24, 1)] = midNumCell(eJudge, 'IF(FLOOR(B24/35,1)<10,0,FLOOR(B24/35,1))', '#,##0');
+    ws3[encode(24, 2)] = midTextCell('辆');
+    ws3[encode(24, 3)] = midTextCell('＝可布置面积÷35 取整，不足 10 辆归 0');
+    // 整数语义单元格（机动车/非机动车车位各行）数字格式统一 #,##0，缓存值不变
+    ['B15', 'B16', 'B17', 'B18', 'B19', 'B20'].forEach(a => { if (ws3[a] && ws3[a].s) ws3[a].s.numFmt = '#,##0'; });
+    ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 24, c: 3 } });
+    setWsMeta(ws3, [26, 16, 8, 44]);
+
+    // ==================== Sheet4：产品配置详表（行内公式联动） ====================
+    const ws4 = {};
+    ws4['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 20 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 20 } }
+    ];
+    ws4[encode(0, 0)] = cell('产品配置详表', { bold: true, sz: 14 });
+    ws4[encode(1, 0)] = cell('算法输出写为静态初始值；总层高、单栋面积、户型总量及占比为行内联动公式，修改层数/基底/栋数/层高后自动重算。', { fontColor: '6B7280' });
+    ['厂房类型', '产品类型', '形式', '荷载', '层数', '电梯配置', '首层层高', '二层层高', '标准层层高', '顶层层高', '总层高(不含女儿墙)',
+      '单栋基底面积', '单栋面积', '单单元面积', '栋数', '户型总占地面积', '户型总面积', '建筑面积占比', '户型总计容面积', '计容面积占比', '租金与售价']
+      .forEach((h, c) => ws4[encode(2, c)] = headerCell(h));
+    products.forEach((p, i) => {
+      const r0 = s4First - 1 + i; // 0-based
+      const R = r0 + 1;           // 1-based
+      const fl = p.fl || {};
+      // 层高单元格：null（页面显示 '-'）留空白单元格，保证算术公式按 0 处理
+      function flCell(v) { return (v === null || v === undefined) ? cell('', { align: 'right' }) : numCell(v); }
+      // 总层高＝各层高求和（标准层按层数-3 重复；轻钢仅首层；3.5 层标准层计 1 次）
+      const kF = 'IF($A' + R + '="轻钢厂房",G' + R + ',G' + R + '+IF(E' + R + '>=2,H' + R + ',0)+IF(E' + R + '=3.5,I' + R + ',IF(E' + R + '>3,I' + R + '*(E' + R + '-3),0))+IF(E' + R + '>=2,J' + R + ',0))';
+      // 单栋面积：轻钢＝基底+400，其余＝基底×层数
+      const mF = 'IF($A' + R + '="轻钢厂房",ROUND(L' + R + '+400,2),ROUND(L' + R + '*E' + R + ',2))';
+      // 单栋计容（内联）：轻钢＝基底×2+200、分栋3.5层＝基底×3.5、其余＝基底×层数
+      const unitCapF = 'IF($A' + R + '="轻钢厂房",ROUND(L' + R + '*2+200,2),IF(AND($A' + R + '="分栋厂房",E' + R + '=3.5),ROUND(L' + R + '*3.5,2),ROUND(L' + R + '*E' + R + ',2)))';
+      const rentPrice = [];
+      if (safeNum(p.rent) > 0) rentPrice.push('租:' + p.rent + '元/天/m²');
+      if (safeNum(p.price) > 0) rentPrice.push(p.price < 1000 ? '售价不可用' : '售:' + Math.round(p.price) + '元/m²');
+      ws4[encode(r0, 0)] = textCell(p.type || '');
+      ws4[encode(r0, 1)] = textCell(p.productType || '');
+      ws4[encode(r0, 2)] = textCell(p.form != null ? String(p.form) : '');
+      ws4[encode(r0, 3)] = textCell(p.load != null ? String(p.load) : '');
+      ws4[encode(r0, 4)] = floorsCell(safeNum(p.floors));
+      ws4[encode(r0, 5)] = textCell(p.elevator != null ? String(p.elevator) : '');
+      ws4[encode(r0, 6)] = flCell(fl.first);
+      ws4[encode(r0, 7)] = flCell(fl.second);
+      ws4[encode(r0, 8)] = flCell(fl.standard);
+      ws4[encode(r0, 9)] = flCell(fl.top);
+      ws4[encode(r0, 10)] = numCell(round2(safeNum(p.totalHeight) - 1.2), kF);
+      ws4[encode(r0, 11)] = numCell(safeNum(p.base));
+      ws4[encode(r0, 12)] = numCell(safeNum(p.unitArea), mF);
+      ws4[encode(r0, 13)] = (typeof p.unitAreaSingle === 'number') ? numCell(p.unitAreaSingle) : textCell(p.unitAreaSingle != null ? String(p.unitAreaSingle) : '-');
+      ws4[encode(r0, 14)] = intLikeCell(safeNum(p.count));
+      ws4[encode(r0, 15)] = numCell(safeNum(p.totalBase), 'ROUND(L' + R + '*O' + R + ',2)');
+      ws4[encode(r0, 16)] = numCell(safeNum(p.totalArea), 'ROUND(M' + R + '*O' + R + ',2)');
+      ws4[encode(r0, 17)] = cell(round2(safeNum(p.areaRatio) * 100), { f: 'IF($Q$' + s4TR + '=0,0,ROUND(Q' + R + '/$Q$' + s4TR + '*100,2))', numFmt: '0.0"%"', align: 'right', raw: true });
+      ws4[encode(r0, 18)] = numCell(safeNum(p.totalCap), 'ROUND(O' + R + '*' + unitCapF + ',2)');
+      ws4[encode(r0, 19)] = cell(round2(safeNum(p.capRatio) * 100), { f: 'IF($S$' + s4TR + '=0,0,ROUND(S' + R + '/$S$' + s4TR + '*100,2))', numFmt: '0.0"%"', align: 'right', raw: true });
+      ws4[encode(r0, 20)] = textCell(rentPrice.join(' / ') || '—');
+    });
+    // 合计行
+    const tr0 = s4TR - 1; // 0-based
+    ws4[encode(tr0, 0)] = totalCell('合计');
+    for (let c = 1; c <= 10; c++) ws4[encode(tr0, c)] = cell('', { fill: STYLE.totalFill });
+    [11, 12, 13].forEach(c => ws4[encode(tr0, c)] = totalCell('—'));
+    ws4[encode(tr0, 14)] = totalCell(products.reduce((s, p) => s + safeNum(p.count), 0), 'ROUND(SUM(O' + s4First + ':O' + s4Last + '),2)');
+    ws4[encode(tr0, 14)].s.numFmt = '#,##0'; // 栋数合计整数显示
+    ws4[encode(tr0, 15)] = totalCell(oBase, 'ROUND(SUM(P' + s4First + ':P' + s4Last + '),2)');
+    ws4[encode(tr0, 16)] = totalCell(oAbove, 'ROUND(SUM(Q' + s4First + ':Q' + s4Last + '),2)');
+    ws4[encode(tr0, 17)] = totalCell(products.length ? 100 : 0, 'ROUND(SUM(R' + s4First + ':R' + s4Last + '),2)');
+    ws4[encode(tr0, 17)].s.numFmt = '0.0"%"'; // 建面占比合计 100.0%
+    ws4[encode(tr0, 18)] = totalCell(oCap, 'ROUND(SUM(S' + s4First + ':S' + s4Last + '),2)');
+    ws4[encode(tr0, 19)] = totalCell(products.length ? 100 : 0, 'ROUND(SUM(T' + s4First + ':T' + s4Last + '),2)');
+    ws4[encode(tr0, 19)].s.numFmt = '0.0"%"'; // 计容占比合计 100.0%
+    ws4[encode(tr0, 20)] = totalCell('—');
+    // 表下加注
+    const noteR0 = s4TR; // 0-based，合计行下一行
+    ws4[encode(noteR0, 0)] = cell('注：本表为算法生成初始值，请勿新增产品行；修改既有行的层数/基底/栋数/层高后，关联列自动重算。', { fontColor: '6B7280' });
+    ws4['!merge'].push({ s: { r: noteR0, c: 0 }, e: { r: noteR0, c: 20 } });
+    ws4['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: noteR0, c: 20 } });
+    setWsMeta(ws4, [11, 18, 10, 26, 7, 14, 9, 9, 10, 9, 14, 12, 11, 11, 7, 13, 12, 11, 13, 11, 26]);
+
+    // ==================== Sheet5：总体经济技术指标（双源引用 Sheet1/Sheet4） ====================
+    const ws5 = {};
+    ws5['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }
+    ];
+    ws5[encode(0, 0)] = cell('总体经济技术指标（联动「产品配置详表」）', { bold: true, sz: 14 });
+    ws5[encode(1, 0)] = cell('产品面积/基底/计容引用「产品配置详表」，用地/绿地率/配建指标引用「规划指标初始值」，修改 Sheet4 后本表自动重算；底部灰底行为中间计算。', { fontColor: '6B7280' });
+    ['指标名称', '数值', '单位', '备注'].forEach((h, c) => ws5[encode(2, c)] = headerCell(h));
+    // 行号（1-based）：4 用地 / 5 总建面 / 6 地上 / 7 地下 / 8 计容 / 9 容积率 / 10 绿地率 / 11 建筑密度
+    // 12 机动车 / 13 地面机 / 14 地下机 / 15 非机动车 / 16 地面非 / 17 地下非 / 18~23 各产品面积
+    // 24 中间-总基底 / 25 中间-厂房面积 / 26 中间-配套面积 / 27 中间-可布置面积 / 28 中间-地面车位初判
+    function s5row(r0, name, value, formula, unit, remark, kind) {
+      ws5[encode(r0, 0)] = kind === 'group' ? subtotalCell(name) : textCell(name);
+      if (kind === 'group') ws5[encode(r0, 1)] = subtotalCell(value, formula);
+      else if (formula) ws5[encode(r0, 1)] = numCell(value, formula);
+      else ws5[encode(r0, 1)] = intLikeCell(value);
+      ws5[encode(r0, 2)] = textCell(unit);
+      ws5[encode(r0, 3)] = textCell(remark || '');
+    }
+    s5row(3, '规划用地面积', landArea, S1 + 'B7', '㎡', '约 ' + fmtNum(landArea / 666.7, 1) + ' 亩');
+    s5row(4, '总建筑面积', round2(oTotal), 'ROUND(B6+B7,2)', '㎡', '地上 + 地下', 'group');
+    s5row(5, '地上建筑面积', round2(oAbove), S4 + 'Q' + s4TR, '㎡', '＝产品配置详表户型总面积合计');
+    s5row(6, '地下建筑面积', round2(oUnder), 'IF(B28>=B12,500,ROUND(B14*IF(' + S1 + 'B5="杭州",42,35)+B17*1.5,2))', '㎡', oJudge >= oTotalVeh ? '设备用房' : '含地下车库与设备用房');
+    s5row(7, '计容总建筑面积', round2(oCap), S4 + 'S' + s4TR, '㎡', '＝产品配置详表户型总计容合计');
+    s5row(8, '容积率', round2(oFar), 'ROUND(B8/B4,2)', '—', '目标 ' + fmtNum(far, 2));
+    s5row(9, '绿地率', greenPct, S1 + 'B10', '%', '');
+    s5row(10, '建筑密度', round2(oDensity * 100), 'ROUND(B24/B4*100,2)', '%', '＝总基底÷用地面积；目标 ' + fmtNum(eDensity * 100, 0) + '%');
+    s5row(11, '机动车停车位数量', oTotalVeh, 'CEILING(B25*' + S1 + 'B13/100,1)+CEILING(B26*' + S1 + 'B14/100,1)', '辆', '按厂房/配套面积分别向上取整', 'group');
+    s5row(12, '地面机动车停车位', oGroundVeh, 'IF(B28>=B12,B12,B28)', '辆', '可布置面积÷35，不足 10 辆归 0');
+    s5row(13, '地下机动车停车位', oUnderVeh, 'IF(B28>=B12,0,B12-B28)', '辆', '');
+    s5row(14, '非机动车停车位数量', oTotalNV, 'CEILING(B6*1/100,1)', '辆', '1.0 辆/100㎡', 'group');
+    s5row(15, '地面非机动车停车位', oGroundNV, 'IF(B28>=B12,B15,IF(B15>500,CEILING(B15/2,1),B15))', '辆', '地面车位充足时全放地面；不足且总量>500 时对半分');
+    s5row(16, '地下非机动车停车位', oUnderNV, 'IF(B28>=B12,0,IF(B15>500,FLOOR(B15/2,1),0))', '辆', '');
+    // 各产品面积（SUMIF 按类型汇总 Sheet4 户型总面积；条件用字面量类型名，与 Sheet4 A 列逐字一致，引用本表标签格会因带「建筑面积」后缀而失配归 0）
+    const s5TypeRows = ['轻钢厂房', '分栋厂房', '分层厂房', '产业大厦', '配套楼', '配套宿舍'];
+    s5TypeRows.forEach((t, i) => {
+      const r0 = 17 + i;
+      s5row(r0, t + '建筑面积', round2(typeAreaSum[t]),
+        'ROUND(SUMIF(' + S4 + '$A$' + s4First + ':$A$' + s4Last + ',"' + t + '",' + S4 + '$Q$' + s4First + ':$Q$' + s4Last + '),2)',
+        '㎡', 'SUMIF 汇总自产品配置详表');
+    });
+    // 中间计算行（灰底）
+    ws5[encode(23, 0)] = midTextCell('中间计算：总基底面积');
+    ws5[encode(23, 1)] = midNumCell(round2(oBase), S4 + 'P' + s4TR);
+    ws5[encode(23, 2)] = midTextCell('㎡');
+    ws5[encode(23, 3)] = midTextCell('＝产品配置详表户型总占地合计');
+    ws5[encode(24, 0)] = midTextCell('中间计算：厂房面积（车位口径）');
+    ws5[encode(24, 1)] = midNumCell(round2(oFactory), 'ROUND(B6-B22-B23-IF(AND(' + S1 + 'B5="上海",' + S1 + 'B6="C65"),B21,0),2)');
+    ws5[encode(24, 2)] = midTextCell('㎡');
+    ws5[encode(24, 3)] = midTextCell('＝地上建面−配套楼−配套宿舍−（上海C65 时）产业大厦');
+    ws5[encode(25, 0)] = midTextCell('中间计算：配套面积（车位口径）');
+    ws5[encode(25, 1)] = midNumCell(round2(oAnc), 'ROUND(B22+B23,2)');
+    ws5[encode(25, 2)] = midTextCell('㎡');
+    ws5[encode(25, 3)] = midTextCell('＝配套楼＋配套宿舍');
+    ws5[encode(26, 0)] = midTextCell('中间计算：可布置地面车位面积');
+    ws5[encode(26, 1)] = midNumCell(round2(oAvail), 'ROUND(B4-ROUND(B4*0.3,2)-ROUND(B4*' + S1 + 'B10/100,2)-B24-B15*1.5,2)');
+    ws5[encode(26, 2)] = midTextCell('㎡');
+    ws5[encode(26, 3)] = midTextCell('＝用地−道路(30%)−绿地−总基底−非机动车（先按全地面）×1.5');
+    ws5[encode(27, 0)] = midTextCell('中间计算：地面车位初判（<10 归 0）');
+    ws5[encode(27, 1)] = midNumCell(oJudge, 'IF(FLOOR(B27/35,1)<10,0,FLOOR(B27/35,1))', '#,##0');
+    ws5[encode(27, 2)] = midTextCell('辆');
+    ws5[encode(27, 3)] = midTextCell('＝可布置面积÷35 取整，不足 10 辆归 0');
+    // 整数语义单元格（机动车/非机动车车位各行）数字格式统一 #,##0，缓存值不变
+    ['B12', 'B13', 'B14', 'B15', 'B16', 'B17'].forEach(a => { if (ws5[a] && ws5[a].s) ws5[a].s.numFmt = '#,##0'; });
+    // 补充引用行（供总表第二部分「规划指标」sheet 映射引用；行号 29~32）
+    let oTowerHeight = 0;
+    products.forEach(p => { if (p.type === '产业大厦') oTowerHeight = Math.max(oTowerHeight, safeNum(p.totalHeight)); });
+    s5row(28, '配套用房占比', ancPct, S1 + 'B11', '%', '引自规划指标初始值');
+    s5row(29, '研发办公占比', rdPct, S1 + 'B12', '%', '引自规划指标初始值；仅上海 C65 用地');
+    s5row(30, '道路面积', round2(landArea * 0.3), 'ROUND(B4*0.3,2)', '㎡', '按用地面积 30% 估算');
+    s5row(31, '产业大厦建筑高度', oTowerHeight,
+      'IF(COUNTIF(' + S4 + '$A$' + s4First + ':$A$' + s4Last + ',"产业大厦")=0,0,SUMPRODUCT(MAX((' + S4 + '$A$' + s4First + ':$A$' + s4Last + '="产业大厦")*' + S4 + '$K$' + s4First + ':$K$' + s4Last + '))+1.2)',
+      'm', '＝产业大厦最高总层高＋女儿墙 1.2m');
+    ws5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 31, c: 3 } });
+    setWsMeta(ws5, [28, 16, 8, 46]);
+
+    return [
+      { name: '规划指标初始值', ws: ws1 },
+      { name: '产品配置选择', ws: ws2 },
+      { name: '指标估算', ws: ws3 },
+      { name: '产品配置详表', ws: ws4 },
+      { name: '总体经济技术指标', ws: ws5 }
+    ];
+  }
+
+  // 预留给任务A2「指标/测算总表」集成复用（总表第一部分 = 本函数返回的 5 个 sheet）
+  NS._buildLinkageSheets = buildLinkageSheets;
+
+  // 「规划/产品总表下载」：组装三表联动 5 个 sheet 并下载
+  NS.downloadMasterLinkageExcel = function (configResult, projectData, fileName) {
+    if (typeof XLSX === 'undefined') { alert('Excel 导出库未加载，请检查网络。'); return; }
+    if (!configResult || !configResult.products || !configResult.products.length) { alert('请先生成产品配置'); return; }
+    const wb = XLSX.utils.book_new();
+    buildLinkageSheets(configResult, projectData).forEach(function (s) {
+      XLSX.utils.book_append_sheet(wb, s.ws, s.name);
+    });
+    XLSX.writeFile(wb, fileName || '规划产品总表.xlsx');
+  };
+
+  // ==================== 指标/测算总表（总表集成，四部分 17 个 sheet） ====================
+  // 需求见 MASTER_TABLE_INTEGRATION.md：第一部分复用 buildLinkageSheets；
+  // 第二~四部分用「捕获 + 重接线」复用现有下载函数生成的工作簿，仅把驱动单元格改为跨部分公式引用（缓存值与被引单元格一致），结构不动。
+
+  // 临时替换 XLSX.writeFile 捕获工作簿，调用前后恢复
+  function captureWorkbook(fn, args) {
+    const origWriteFile = XLSX.writeFile;
+    let captured = null;
+    XLSX.writeFile = function (wb) { captured = wb; };
+    try {
+      fn.apply(null, args);
+    } finally {
+      XLSX.writeFile = origWriteFile;
+    }
+    return captured;
+  }
+
+  // 在 sheet 中按列与标签精确查找 1-based 行号
+  function findRowByLabel(ws, colLetter, label) {
+    const re = new RegExp('^' + colLetter + '\\d+$');
+    const keys = Object.keys(ws);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (re.test(k) && ws[k] && ws[k].v === label) return parseInt(k.slice(colLetter.length), 10);
+    }
+    return null;
+  }
+
+  // 把 ws 中 addr 单元格改为公式引用 refWs 的 refAddr；缓存值取被引单元格缓存，保证缓存 == 公式求值
+  function rewireCellToRef(ws, addr, refSheetName, refWs, refAddr) {
+    const c = ws[addr];
+    const ref = refWs[refAddr];
+    if (!c || !ref) return false;
+    c.f = "'" + refSheetName + "'!" + refAddr;
+    c.v = ref.v;
+    return true;
+  }
+
+  // 动态分析占位 sheet（结构 = 标题 + 说明行）
+  function buildDynamicPlaceholderSheet(title) {
+    const ws = {};
+    ws['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }
+    ];
+    ws[encode(0, 0)] = cell(title, { bold: true, sz: 14 });
+    ws[encode(1, 0)] = cell('动态分析未完成，请先完成动态投资分析', { fontColor: '6B7280' });
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 1, c: 3 } });
+    setWsMeta(ws, [30, 16, 12, 12]);
+    return ws;
+  }
+
+  // 「指标/测算总表下载」：四部分 17 个 sheet
+  NS.downloadMasterIntegratedExcel = function (configResult, projectData, investmentEstimateResult, staticAnalysisResult, dynamicAnalysisResult, fileName) {
+    if (typeof XLSX === 'undefined') { alert('Excel 导出库未加载，请检查网络。'); return; }
+    if (!configResult || !configResult.products || !configResult.products.length) { alert('请先生成产品配置'); return; }
+    if (!investmentEstimateResult) { alert('请先完成投资估算'); return; }
+    if (!staticAnalysisResult) { alert('请先进行静态投资分析'); return; }
+
+    const S5_NAME = '总体经济技术指标';
+    const wb = XLSX.utils.book_new();
+    const usedNames = {};
+    function appendSheet(ws, name) {
+      if (!ws) { console.error('总表集成：缺少 sheet', name); return; }
+      if (usedNames[name]) console.error('总表集成：sheet 名冲突', name);
+      if (name.length > 31) console.error('总表集成：sheet 名超过 31 字', name);
+      usedNames[name] = true;
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    }
+
+    // ---------- 第一部分：三表联动（5 sheet，直接复用） ----------
+    const linkage = buildLinkageSheets(configResult, projectData);
+    linkage.forEach(function (s) { appendSheet(s.ws, s.name); });
+    const sheet5 = linkage[4].ws; // 总体经济技术指标（下游映射源）
+
+    // ---------- 第二部分：投资估算（4 sheet；「规划指标」重接线到 Sheet5） ----------
+    const invWb = captureWorkbook(NS.downloadInvestmentEstimateExcel, [investmentEstimateResult, '_tmp.xlsx']);
+    if (!invWb || !invWb.Sheets) { alert('投资估算工作簿生成失败'); return; }
+    const invPlan = invWb.Sheets['规划指标'];
+    // [规划指标单元格, Sheet5 单元格]：用地/容积率/计容/地上/地下/总建面/密度/绿地率/道路/配套/研发/各产品面积/大厦高度/配套楼/配套宿舍
+    const invPlanMap = [
+      ['B3', 'B4'], ['B4', 'B9'], ['B5', 'B8'], ['B6', 'B6'], ['B7', 'B7'], ['B8', 'B5'],
+      ['B9', 'B11'], ['B10', 'B10'], ['B11', 'B31'], ['B12', 'B29'], ['B13', 'B30'],
+      ['B14', 'B18'], ['B15', 'B19'], ['B16', 'B20'], ['B17', 'B21'], ['B18', 'B32'],
+      ['B19', 'B22'], ['B20', 'B23']
+    ];
+    invPlanMap.forEach(function (m) { rewireCellToRef(invPlan, m[0], S5_NAME, sheet5, m[1]); });
+    // B21~B24（分栋/分层 独栋与双拼三拼面积）Sheet5 无对应行，保持静态
+    ['规划指标', '加权平均造价表', '投资估算完整版', '投资估算简化版'].forEach(function (n) { appendSheet(invWb.Sheets[n], n); });
+    // 完整版关键行（供第三、四部分引用）：发展成本合计、财务费用、融资参数区（融资占比/融资利率）
+    const invFull = invWb.Sheets['投资估算完整版'];
+    const invTotalRow = findRowByLabel(invFull, 'B', '发展成本合计');
+    const invFinRow = findRowByLabel(invFull, 'B', '财务费用');
+    const invFinRatioParamRow = findRowByLabel(invFull, 'B', '融资占比');
+    const invFinRateParamRow = findRowByLabel(invFull, 'B', '融资利率');
+
+    // ---------- 第三部分：静态投资分析（5 sheet；规划指标区 → Sheet5，总投资/财务费用 → 完整版） ----------
+    const saWb = captureWorkbook(NS.downloadStaticAnalysisExcel, [staticAnalysisResult, '_tmp.xlsx']);
+    if (!saWb || !saWb.Sheets) { alert('静态投资分析工作簿生成失败'); return; }
+    // 销售测算/租赁测算的「一、规划指标」区行号固定（B4 亩/B5 用地/B6 容积率/B7 计容/B8 地上/B9 地下/B10 总建面）
+    const saPlanMap = [['B5', 'B4'], ['B6', 'B9'], ['B7', 'B8'], ['B8', 'B6'], ['B9', 'B7'], ['B10', 'B5']];
+    ['销售测算', '租赁测算'].forEach(function (n) {
+      const ws = saWb.Sheets[n];
+      // 用地面积（亩）按 Sheet5 用地面积折算
+      const acreCell = ws['B4'];
+      if (acreCell && sheet5['B4']) {
+        acreCell.f = "ROUND('" + S5_NAME + "'!B4/666.7,2)";
+        acreCell.v = round2(sheet5['B4'].v / 666.7);
+      }
+      saPlanMap.forEach(function (m) { rewireCellToRef(ws, m[0], S5_NAME, sheet5, m[1]); });
+      // 财务费用 → 投资估算完整版「财务费用」行金额
+      if (invFinRow) rewireCellToRef(ws, 'B19', '投资估算完整版', invFull, 'F' + invFinRow);
+    });
+    // 综合汇总「总投资」→ 完整版「发展成本合计」；「融资占比」输入格 → 完整版融资参数区
+    const sumWs = saWb.Sheets['综合汇总'];
+    if (invTotalRow) rewireCellToRef(sumWs, 'B3', '投资估算完整版', invFull, 'F' + invTotalRow);
+    const sumFinRatioRow = findRowByLabel(sumWs, 'A', '融资占比');
+    if (invFinRatioParamRow && sumFinRatioRow) rewireCellToRef(sumWs, 'B' + sumFinRatioRow, '投资估算完整版', invFull, 'D' + invFinRatioParamRow);
+    ['销售测算', '租赁测算', '租售面积分配', '土地增值税测算表', '综合汇总'].forEach(function (n) { appendSheet(saWb.Sheets[n], n); });
+
+    // ---------- 第四部分：动态投资分析（3 sheet；参数区驱动单元格重接线；无结果时占位） ----------
+    if (dynamicAnalysisResult && dynamicAnalysisResult.years && dynamicAnalysisResult.years.length) {
+      const dynWb = captureWorkbook(NS.downloadDynamicAnalysisExcel, [dynamicAnalysisResult, '_tmp.xlsx']);
+      if (!dynWb || !dynWb.Sheets) { alert('动态投资分析工作簿生成失败'); return; }
+      const cashWs = dynWb.Sheets['多年现金流表'];
+      const saSaleWs = saWb.Sheets['销售测算'];
+      const saRentWs = saWb.Sheets['租赁测算'];
+      // 总投资 → 完整版发展成本合计；融资占比/贷款利率 → 完整版融资参数区
+      if (invTotalRow) rewireCellToRef(cashWs, 'C3', '投资估算完整版', invFull, 'F' + invTotalRow);
+      if (invFinRatioParamRow) rewireCellToRef(cashWs, 'C4', '投资估算完整版', invFull, 'D' + invFinRatioParamRow);
+      if (invFinRateParamRow) rewireCellToRef(cashWs, 'C6', '投资估算完整版', invFull, 'D' + invFinRateParamRow);
+      // 加权售价/租金、可售/可租面积、出租率 → 静态 sheet；营销/管理/运营费率 → 静态 sheet 表尾费率参数区
+      rewireCellToRef(cashWs, 'G3', '销售测算', saSaleWs, 'B24');
+      rewireCellToRef(cashWs, 'G5', '租赁测算', saRentWs, 'B24');
+      rewireCellToRef(cashWs, 'G9', '销售测算', saSaleWs, 'B23');
+      rewireCellToRef(cashWs, 'G10', '租赁测算', saRentWs, 'B23');
+      rewireCellToRef(cashWs, 'G11', '租赁测算', saRentWs, 'B27');
+      const mktRateRowS = findRowByLabel(saSaleWs, 'A', '营销费率');
+      const mgmtRateRowS = findRowByLabel(saSaleWs, 'A', '管理费率');
+      const opRateRowS = findRowByLabel(saRentWs, 'A', '租赁运营费率');
+      if (mktRateRowS) rewireCellToRef(cashWs, 'G13', '销售测算', saSaleWs, 'B' + mktRateRowS);
+      if (mgmtRateRowS) rewireCellToRef(cashWs, 'G14', '销售测算', saSaleWs, 'B' + mgmtRateRowS);
+      if (opRateRowS) rewireCellToRef(cashWs, 'G15', '租赁测算', saRentWs, 'B' + opRateRowS);
+      ['多年现金流表', '敏感性分析', '关键指标汇总'].forEach(function (n) { appendSheet(dynWb.Sheets[n], n); });
+    } else {
+      appendSheet(buildDynamicPlaceholderSheet('多年现金流表'), '多年现金流表');
+      appendSheet(buildDynamicPlaceholderSheet('敏感性分析'), '敏感性分析');
+      appendSheet(buildDynamicPlaceholderSheet('关键指标汇总'), '关键指标汇总');
+    }
+
+    XLSX.writeFile(wb, fileName || '指标测算总表.xlsx');
   };
 
 })(window);

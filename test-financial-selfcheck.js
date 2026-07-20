@@ -424,7 +424,451 @@ if (capturedDynWB) {
   check('g6: 销售测算减：建安成本引用建安成本单方行', !!(saleConstrKey && saleDeductCell && saleDeductCell.f && saleDeductCell.f.indexOf(expectRef) >= 0), saleDeductCell && saleDeductCell.f);
 }
 
+// ==================== h) 三表联动自检（_buildLinkageSheets / downloadMasterLinkageExcel） ====================
+console.log('\n\n=== h) 三表联动自检 ===');
+sandbox.alert = sandbox.alert || function () {};   // 防御：失败分支才调用
+sandbox.console = sandbox.console || console;      // 防御：sheet 名冲突时模块内 console.error
+let hChecks = 0, hFailed = 0;
+function hcheck(name, cond, detail) {
+  hChecks++;
+  if (cond) console.log('  [PASS]', name);
+  else { hFailed++; console.log('  [FAIL]', name, detail != null ? '→ ' + detail : ''); }
+}
+function findRowByColLabel(ws, colLetter, label) {
+  const re = new RegExp('^' + colLetter + '\\d+$');
+  const k = Object.keys(ws).find(key => re.test(key) && ws[key] && ws[key].v === label);
+  return k ? parseInt(k.slice(colLetter.length), 10) : null;
+}
+// 与 index.html calculate() 同口径的独立复算（getBuildingDensity + 车位/地下面积分支）
+function idxCalc(pd) {
+  const landArea = pd.landArea, far = pd.far;
+  const factoryIndex = pd.factoryIndex != null ? pd.factoryIndex : 0.5;
+  const supportIndex = pd.supportIndex != null ? pd.supportIndex : 1.0;
+  const buildingDensity = far < 1.5 ? 0.45 : (far < 2.0 ? 0.42 : 0.40);
+  const aboveGroundArea = landArea * far;
+  const greenArea = landArea * pd.greenRate;
+  const buildingBaseArea = landArea * buildingDensity;
+  const roadArea = landArea * 0.30;
+  const totalVehicle = Math.ceil(aboveGroundArea * (1 - pd.ancillaryRatio) * factoryIndex / 100 + aboveGroundArea * pd.ancillaryRatio * supportIndex / 100);
+  const totalNonVehicle = Math.ceil(aboveGroundArea * 1.0 / 100);
+  let groundNonVehicle = totalNonVehicle, undergroundNonVehicle = 0;
+  const availableParkingArea = landArea - roadArea - greenArea - buildingBaseArea - groundNonVehicle * 1.5;
+  let groundVehicle = Math.floor(availableParkingArea / 35);
+  if (groundVehicle < 10) groundVehicle = 0;
+  let undergroundVehicle = 0, undergroundArea = 0;
+  if (groundVehicle >= totalVehicle) {
+    groundVehicle = totalVehicle; undergroundArea = 500;
+  } else {
+    if (totalNonVehicle > 500) { groundNonVehicle = Math.ceil(totalNonVehicle / 2); undergroundNonVehicle = Math.floor(totalNonVehicle / 2); }
+    undergroundVehicle = totalVehicle - groundVehicle;
+    undergroundArea = (pd.region === '杭州' ? undergroundVehicle * 42 : undergroundVehicle * 35) + undergroundNonVehicle * 1.5;
+  }
+  return { buildingDensity, aboveGroundArea, totalVehicle, totalNonVehicle, groundVehicle, undergroundVehicle, groundNonVehicle, undergroundNonVehicle, undergroundArea, totalArea: aboveGroundArea + undergroundArea };
+}
+const idx = idxCalc(projectData); // 用地40000×容积率2.0 → 计容80000、密度分档40%、机动车460、非机动车800、地下11905
+const LINK_S1_REF = "规划指标初始值'!";
+
+const linkage = FM._buildLinkageSheets(result, projectData);
+// a) 5 个 sheet 名称与顺序
+hcheck('h-a: _buildLinkageSheets 返回 5 个 sheet 且名称/顺序正确',
+  linkage.length === 5 && ['规划指标初始值', '产品配置选择', '指标估算', '产品配置详表', '总体经济技术指标'].every((n, i) => linkage[i].name === n),
+  JSON.stringify(linkage.map(s => s.name)));
+// 组装下载路径冒烟：拦截 downloadMasterLinkageExcel，SheetNames 顺序一致
+{
+  let capLinkWB = null;
+  sandbox.XLSX.writeFile = (wb) => { capLinkWB = wb; };
+  FM.downloadMasterLinkageExcel(result, projectData, 'link-test.xlsx');
+  hcheck('h-a: downloadMasterLinkageExcel 工作簿 5 sheet 顺序一致',
+    !!capLinkWB && capLinkWB.SheetNames.length === 5 && ['规划指标初始值', '产品配置选择', '指标估算', '产品配置详表', '总体经济技术指标'].every((n, i) => capLinkWB.SheetNames[i] === n),
+    capLinkWB && JSON.stringify(capLinkWB.SheetNames));
+}
+const wsL1 = linkage[0].ws, wsL3 = linkage[2].ws, wsL4 = linkage[3].ws, wsL5 = linkage[4].ws;
+
+// b) Sheet3 指标估算：关键行公式引用 Sheet1，缓存与 index.html calculate() 同口径复算一致
+hcheck('h-b: Sheet3 用地面积 B4 引用 Sheet1 且缓存=40000',
+  !!(wsL3['B4'] && wsL3['B4'].f && wsL3['B4'].f.indexOf(LINK_S1_REF) >= 0 && wsL3['B4'].v === 40000),
+  wsL3['B4'] && (wsL3['B4'].f + ' / ' + wsL3['B4'].v));
+hcheck('h-b: Sheet3 计容（地上建面）B7 公式含「规划指标初始值\'!」',
+  !!(wsL3['B7'] && wsL3['B7'].f && wsL3['B7'].f.indexOf(LINK_S1_REF) >= 0), wsL3['B7'] && wsL3['B7'].f);
+hcheck('h-b: Sheet3 计容缓存=用地40000×容积率2.0=80000（同口径复算）',
+  !!(wsL3['B7'] && approx(wsL3['B7'].v, idx.aboveGroundArea, 1e-9) && idx.aboveGroundArea === 80000),
+  wsL3['B7'] && (wsL3['B7'].v + ' vs ' + idx.aboveGroundArea));
+hcheck('h-b: Sheet3 容积率 B9 引用 Sheet1 且缓存=2.0',
+  !!(wsL3['B9'] && wsL3['B9'].f === "'" + LINK_S1_REF + 'B8' && wsL3['B9'].v === 2),
+  wsL3['B9'] && (wsL3['B9'].f + ' / ' + wsL3['B9'].v));
+hcheck('h-b: Sheet3 建筑密度 B12 为 IF 分档公式（含 45/42/40 三档）',
+  !!(wsL3['B12'] && wsL3['B12'].f && wsL3['B12'].f.indexOf('IF(') === 0 && wsL3['B12'].f.indexOf('45') >= 0 && wsL3['B12'].f.indexOf('42') >= 0 && wsL3['B12'].f.indexOf('40') >= 0 && wsL3['B12'].f.indexOf(LINK_S1_REF) >= 0),
+  wsL3['B12'] && wsL3['B12'].f);
+hcheck('h-b: Sheet3 建筑密度缓存=40（far=2.0 不<2.0 → 第三档，与 index.html 同口径）',
+  !!(wsL3['B12'] && wsL3['B12'].v === idx.buildingDensity * 100 && idx.buildingDensity === 0.40),
+  wsL3['B12'] && (wsL3['B12'].v + ' vs ' + idx.buildingDensity * 100));
+// 分档边界补测：far=1.7 → 42%，far=1.2 → 45%
+[1.7, 1.2].forEach(f => {
+  const pdX = Object.assign({}, projectData, { far: f });
+  const wsX = FM._buildLinkageSheets(result, pdX)[2].ws;
+  const expectPct = idxCalc(pdX).buildingDensity * 100; // 42 / 45
+  hcheck('h-b: 建筑密度分档 far=' + f + ' → ' + expectPct + '%（缓存与复算一致）',
+    !!(wsX['B12'] && wsX['B12'].v === expectPct), wsX['B12'] && (wsX['B12'].v + ' vs ' + expectPct));
+});
+hcheck('h-b: Sheet3 机动车 B15 公式引用 Sheet1 配建指标',
+  !!(wsL3['B15'] && wsL3['B15'].f && wsL3['B15'].f.indexOf(LINK_S1_REF + 'B13') >= 0 && wsL3['B15'].f.indexOf(LINK_S1_REF + 'B14') >= 0),
+  wsL3['B15'] && wsL3['B15'].f);
+hcheck('h-b: Sheet3 机动车/地面/地下车位缓存=460/137/323（同口径复算）',
+  !!(wsL3['B15'] && wsL3['B16'] && wsL3['B17'] &&
+    wsL3['B15'].v === idx.totalVehicle && wsL3['B16'].v === idx.groundVehicle && wsL3['B17'].v === idx.undergroundVehicle &&
+    idx.totalVehicle === 460 && idx.groundVehicle === 137 && idx.undergroundVehicle === 323),
+  [wsL3['B15'] && wsL3['B15'].v, wsL3['B16'] && wsL3['B16'].v, wsL3['B17'] && wsL3['B17'].v].join('/') + ' vs 460/137/323');
+hcheck('h-b: Sheet3 非机动车/地面/地下缓存=800/400/400（>500 对半分，同口径复算）',
+  !!(wsL3['B18'] && wsL3['B19'] && wsL3['B20'] &&
+    wsL3['B18'].v === idx.totalNonVehicle && wsL3['B19'].v === idx.groundNonVehicle && wsL3['B20'].v === idx.undergroundNonVehicle &&
+    idx.totalNonVehicle === 800 && idx.groundNonVehicle === 400 && idx.undergroundNonVehicle === 400),
+  [wsL3['B18'] && wsL3['B18'].v, wsL3['B19'] && wsL3['B19'].v, wsL3['B20'] && wsL3['B20'].v].join('/') + ' vs 800/400/400');
+hcheck('h-b: Sheet3 地下面积 B8 为 IF 分支公式且缓存=11905（地面不足分支：323×35+400×1.5，同口径复算）',
+  !!(wsL3['B8'] && wsL3['B8'].f && wsL3['B8'].f.indexOf('IF(B25>=B15,500,') === 0 && wsL3['B8'].v === idx.undergroundArea && idx.undergroundArea === 11905),
+  wsL3['B8'] && (wsL3['B8'].f + ' / ' + wsL3['B8'].v + ' vs ' + idx.undergroundArea));
+hcheck('h-b: Sheet3 总建筑面积 B6 缓存=91905（地上80000+地下11905）',
+  !!(wsL3['B6'] && wsL3['B6'].v === idx.totalArea && idx.totalArea === 91905),
+  wsL3['B6'] && (wsL3['B6'].v + ' vs ' + idx.totalArea));
+
+// c) Sheet4 产品配置详表：合计行（第 10 行）SUM 包 ROUND、总计容与 result.totalCap 一致
+{
+  const s4TRow = 3 + result.products.length + 1; // 1-based 合计行 = 4+6+... = 10
+  const sumCols = ['O', 'P', 'Q', 'R', 'S', 'T'];
+  const badSum = sumCols.filter(c => { const cellC = wsL4[c + s4TRow]; return !cellC || !cellC.f || !/^ROUND\(SUM\(/.test(cellC.f); });
+  hcheck('h-c: Sheet4 合计行（第' + s4TRow + '行）O~T 列均为 ROUND(SUM(...)) 公式', badSum.length === 0, badSum.join(','));
+  hcheck('h-c: Sheet4 户型总面积合计 Q' + s4TRow + ' 缓存=result.totalArea=136800',
+    !!(wsL4['Q' + s4TRow] && wsL4['Q' + s4TRow].v === result.totalArea), wsL4['Q' + s4TRow] && String(wsL4['Q' + s4TRow].v));
+  hcheck('h-c: Sheet4 户型总计容合计 S' + s4TRow + ' 缓存=result.totalCap=136800',
+    !!(wsL4['S' + s4TRow] && wsL4['S' + s4TRow].v === result.totalCap), wsL4['S' + s4TRow] && String(wsL4['S' + s4TRow].v));
+
+  // d) Sheet5 总体经济技术指标：容积率公式=总计容/用地引用；各产品面积 SUMIF 且缓存与按类型汇总一致
+  hcheck('h-d: Sheet5 容积率 B9 公式=ROUND(B8/B4,2)（总计容/用地）且缓存=3.42',
+    !!(wsL5['B9'] && wsL5['B9'].f === 'ROUND(B8/B4,2)' && approx(wsL5['B9'].v, result.totalCap / projectData.landArea, 1e-9) && wsL5['B9'].v === 3.42),
+    wsL5['B9'] && (wsL5['B9'].f + ' / ' + wsL5['B9'].v));
+  hcheck('h-d: Sheet5 计容 B8 引用产品配置详表 S' + s4TRow + ' 且缓存=result.totalCap',
+    !!(wsL5['B8'] && wsL5['B8'].f === "'产品配置详表'!S" + s4TRow && wsL5['B8'].v === result.totalCap),
+    wsL5['B8'] && (wsL5['B8'].f + ' / ' + wsL5['B8'].v));
+  const S5_TYPES = ['轻钢厂房', '分栋厂房', '分层厂房', '产业大厦', '配套楼', '配套宿舍'];
+  const sumifBadF = S5_TYPES.filter((t, i) => { const c5 = wsL5['B' + (18 + i)]; return !c5 || !c5.f || c5.f.indexOf('SUMIF(') < 0 || c5.f.indexOf("'产品配置详表'!") < 0; });
+  hcheck('h-d: Sheet5 各产品面积行（B18~B23）均为 SUMIF 引用产品配置详表', sumifBadF.length === 0, sumifBadF.join(','));
+  const sumifBadV = S5_TYPES.filter((t, i) => {
+    const expect = result.products.filter(p => p.type === t).reduce((s, p) => s + (p.totalArea || 0), 0);
+    const c5 = wsL5['B' + (18 + i)];
+    return !c5 || !approx(c5.v, expect, 1e-9);
+  });
+  hcheck('h-d: Sheet5 各产品面积缓存与 result.products 按类型汇总一致', sumifBadV.length === 0, sumifBadV.join(','));
+}
+
+// e) Sheet1 输入格 t='n'（数字型输入：用地/容积率/绿地率/配套占比/研发占比/车位指标）
+{
+  const numInputCells = { B7: 40000, B8: 2, B10: 15, B11: 15, B12: 0, B13: 0.5, B14: 1 };
+  const badT = Object.keys(numInputCells).filter(k => { const c = wsL1[k]; return !c || c.t !== 'n'; });
+  hcheck('h-e: Sheet1 数字输入格均为 t=n（B7/B8/B10/B11/B12/B13/B14）', badT.length === 0, badT.join(','));
+  const badV = Object.keys(numInputCells).filter(k => { const c = wsL1[k]; return !c || c.v !== numInputCells[k]; });
+  hcheck('h-e: Sheet1 数字输入格缓存值与 projectData 一致（绿地率/占比按百分比数填）', badV.length === 0, badV.map(k => k + '=' + (wsL1[k] && wsL1[k].v)).join(','));
+  hcheck('h-e: Sheet1 文本输入格为 t=s（B5 城市=上海）', !!(wsL1['B5'] && wsL1['B5'].t === 's' && wsL1['B5'].v === '上海'), wsL1['B5'] && (wsL1['B5'].t + '/' + wsL1['B5'].v));
+}
+
+// f) A4 修复防回归：SUMIF 字面量条件、车位/栋数整数格式、层数 General、占比 0.0"%"
+{
+  const s4FirstRow = 4, s4LastRow = 3 + result.products.length, s4TotalRow = s4LastRow + 1; // 4..9 明细，10 合计
+  const fmtOf = (ws, addr) => { const c = ws[addr]; return c && c.s ? c.s.numFmt : undefined; };
+  // 1) Sheet5 产品面积 SUMIF 条件为双引号字面量（修复前为 ,A18 引用形式，标签带「建筑面积」后缀会失配归 0）
+  const sumifCells = ['B18', 'B19', 'B20', 'B21', 'B22', 'B23'].map(a => ({ addr: a, c: wsL5[a] }));
+  const literalOf = f => { const m = f && f.match(/SUMIF\('产品配置详表'!\$A\$\d+:\$A\$\d+,([^,]+),/); return m ? m[1] : null; };
+  const badSumifForm = sumifCells.filter(x => {
+    const crit = literalOf(x.c && x.c.f);
+    return !x.c || !x.c.f || x.c.f.indexOf('SUMIF(') < 0 || !crit || !/^".+"$/.test(crit) || /^A\d+$/.test(crit);
+  });
+  hcheck('h-f: Sheet5 六个产品面积格 SUMIF 条件均为双引号字面量（非 ,A 引用形式）',
+    badSumifForm.length === 0, badSumifForm.map(x => x.addr + ':' + (x.c && x.c.f)).join(' | '));
+  const literals = sumifCells.map(x => literalOf(x.c.f).slice(1, -1));
+  const aColTypes = [];
+  for (let r = s4FirstRow; r <= s4LastRow; r++) { const c = wsL4['A' + r]; if (c && c.v !== '') aColTypes.push(String(c.v)); }
+  const uniq = arr => [...new Set(arr)];
+  const setEq = (a, b) => a.length === b.length && a.every(v => b.indexOf(v) >= 0);
+  hcheck('h-f: 六个 SUMIF 字面量与 Sheet4 A 列数据区类型名集合完全一致',
+    setEq(uniq(literals), uniq(aColTypes)),
+    '字面量=' + JSON.stringify(uniq(literals)) + ' vs A列=' + JSON.stringify(uniq(aColTypes)));
+  const noHit = uniq(literals).filter(t => !aColTypes.some(v => v === t));
+  hcheck('h-f: 模拟匹配——六个字面量在 Sheet4 A 列值集合中均能命中（编辑重算不归 0）',
+    noHit.length === 0, '未命中=' + JSON.stringify(noHit));
+  // 2) Sheet3/Sheet5 车位行整数格式
+  const s3ParkBad = ['B15', 'B16', 'B17', 'B18', 'B19', 'B20'].filter(a => fmtOf(wsL3, a) !== '#,##0');
+  hcheck('h-f: Sheet3 车位行（B15~B20 机动车/非机动车及地面/地下）numFmt=#,##0',
+    s3ParkBad.length === 0, s3ParkBad.map(a => a + '=' + fmtOf(wsL3, a)).join(','));
+  const s5ParkBad = ['B12', 'B13', 'B14', 'B15', 'B16', 'B17'].filter(a => fmtOf(wsL5, a) !== '#,##0');
+  hcheck('h-f: Sheet5 车位行（B12~B17 机动车/非机动车及地面/地下）numFmt=#,##0',
+    s5ParkBad.length === 0, s5ParkBad.map(a => a + '=' + fmtOf(wsL5, a)).join(','));
+  // 3) Sheet4 层数列 General、栋数列 #,##0（明细+合计）
+  const floorsBad = [];
+  for (let r = s4FirstRow; r <= s4LastRow; r++) if (fmtOf(wsL4, 'E' + r) !== 'General') floorsBad.push('E' + r + '=' + fmtOf(wsL4, 'E' + r));
+  hcheck('h-f: Sheet4 层数列明细格（E' + s4FirstRow + '~E' + s4LastRow + '）numFmt=General（3 显示 3、3.5 显示 3.5）',
+    floorsBad.length === 0, floorsBad.join(','));
+  const countBad = [];
+  for (let r = s4FirstRow; r <= s4TotalRow; r++) if (fmtOf(wsL4, 'O' + r) !== '#,##0') countBad.push('O' + r + '=' + fmtOf(wsL4, 'O' + r));
+  hcheck('h-f: Sheet4 栋数列明细+合计格（O' + s4FirstRow + '~O' + s4TotalRow + '）numFmt=#,##0',
+    countBad.length === 0, countBad.join(','));
+  // 4) Sheet4 建面/计容占比列 0.0"%"（明细+合计），合计缓存 100
+  const ratioBad = [];
+  for (let r = s4FirstRow; r <= s4TotalRow; r++) ['R', 'T'].forEach(col => {
+    if (fmtOf(wsL4, col + r) !== '0.0"%"') ratioBad.push(col + r + '=' + fmtOf(wsL4, col + r));
+  });
+  hcheck('h-f: Sheet4 建面/计容占比列明细+合计格 numFmt=0.0"%"',
+    ratioBad.length === 0, ratioBad.join(','));
+  hcheck('h-f: Sheet4 占比合计缓存=100（显示 100.0%）',
+    !!(wsL4['R' + s4TotalRow] && wsL4['R' + s4TotalRow].v === 100 && wsL4['T' + s4TotalRow] && wsL4['T' + s4TotalRow].v === 100),
+    'R' + s4TotalRow + '=' + (wsL4['R' + s4TotalRow] && wsL4['R' + s4TotalRow].v) + ', T' + s4TotalRow + '=' + (wsL4['T' + s4TotalRow] && wsL4['T' + s4TotalRow].v));
+}
+
+console.log('\n=== h) 三表联动自检结果：' + (hChecks - hFailed) + '/' + hChecks + ' 通过' + (hFailed ? '（存在未通过项）' : '') + ' ===');
+
+// ==================== i) 总表集成自检（downloadMasterIntegratedExcel，17 sheet 捕获+重接线） ====================
+console.log('\n\n=== i) 总表集成自检 ===');
+let iChecks = 0, iFailed = 0;
+function icheck(name, cond, detail) {
+  iChecks++;
+  if (cond) console.log('  [PASS]', name);
+  else { iFailed++; console.log('  [FAIL]', name, detail != null ? '→ ' + detail : ''); }
+}
+const S5_NAME = '总体经济技术指标';
+const EXPECT_17 = ['规划指标初始值', '产品配置选择', '指标估算', '产品配置详表', S5_NAME,
+  '规划指标', '加权平均造价表', '投资估算完整版', '投资估算简化版',
+  '销售测算', '租赁测算', '租售面积分配', '土地增值税测算表', '综合汇总',
+  '多年现金流表', '敏感性分析', '关键指标汇总'];
+// 完整管线：inv/sa 用文件内已有计算链，动态结果用 e 段真实管线 dynE（stub dynA1 与真实 inv/sa 口径不一致，不适用重接线缓存断言）
+let capIntWB = null;
+sandbox.XLSX.writeFile = (wb) => { capIntWB = wb; };
+FM.downloadMasterIntegratedExcel(result, projectData, inv, sa, dynE, 'integrated-test.xlsx');
+
+// a) 17 个 sheet 齐全、名称唯一、≤31 字
+icheck('i-a: 工作簿已生成且含 17 个 sheet', !!capIntWB && capIntWB.SheetNames.length === 17, capIntWB && String(capIntWB.SheetNames.length));
+if (capIntWB) {
+  icheck('i-a: 17 个 sheet 名称与顺序符合四部分结构',
+    EXPECT_17.every((n, i) => capIntWB.SheetNames[i] === n), JSON.stringify(capIntWB.SheetNames));
+  icheck('i-a: sheet 名称唯一', new Set(capIntWB.SheetNames).size === capIntWB.SheetNames.length);
+  icheck('i-a: sheet 名称均 ≤31 字', capIntWB.SheetNames.every(n => n.length <= 31),
+    capIntWB.SheetNames.filter(n => n.length > 31).join(','));
+
+  const intS5 = capIntWB.Sheets[S5_NAME];
+  const intPlan = capIntWB.Sheets['规划指标'];
+  // b) 「规划指标」B3/B4/B6 等公式引用 Sheet5 且缓存与 Sheet5 对应单元格一致
+  const INV_PLAN_MAP = [['B3', 'B4'], ['B4', 'B9'], ['B5', 'B8'], ['B6', 'B6'], ['B7', 'B7'], ['B8', 'B5'],
+    ['B9', 'B11'], ['B10', 'B10'], ['B11', 'B31'], ['B12', 'B29'], ['B13', 'B30'],
+    ['B14', 'B18'], ['B15', 'B19'], ['B16', 'B20'], ['B17', 'B21'], ['B18', 'B32'], ['B19', 'B22'], ['B20', 'B23']];
+  [['B3', 'B4'], ['B4', 'B9'], ['B6', 'B6']].forEach(m => {
+    const c = intPlan[m[0]], ref = intS5[m[1]];
+    icheck('i-b: 规划指标 ' + m[0] + ' 引用「\'总体经济技术指标\'!' + m[1] + '」且缓存一致',
+      !!(c && ref && c.f === "'" + S5_NAME + "'!" + m[1] && c.v === ref.v),
+      c && (c.f + ' / ' + c.v + ' vs ' + (ref && ref.v)));
+  });
+  const planBad = INV_PLAN_MAP.filter(m => {
+    const c = intPlan[m[0]], ref = intS5[m[1]];
+    return !c || !ref || c.f !== "'" + S5_NAME + "'!" + m[1] || c.v !== ref.v;
+  });
+  icheck('i-b: 规划指标全部 18 处映射公式/缓存与 Sheet5 一致', planBad.length === 0, planBad.map(m => m[0]).join(','));
+
+  // c) 投资估算完整版 发展成本合计（F64）缓存与独立下载版一致
+  const intInvFull = capIntWB.Sheets['投资估算完整版'];
+  const intTotalRow = findRowByColLabel(intInvFull, 'B', '发展成本合计');
+  const indTotalRow = findRowByColLabel(invFull, 'B', '发展成本合计'); // invFull = 独立下载版（第 3 节捕获）
+  icheck('i-c: 集成版/独立版 发展成本合计 均在第 64 行', intTotalRow === 64 && indTotalRow === 64, 'int=' + intTotalRow + ', ind=' + indTotalRow);
+  icheck('i-c: 集成版 F64 缓存与独立下载版一致（=投资估算 summary.totalInvestment）',
+    !!(intTotalRow && indTotalRow &&
+      intInvFull['F' + intTotalRow].v === invFull['F' + indTotalRow].v &&
+      approx(intInvFull['F' + intTotalRow].v, inv.summary.totalInvestment, 1e-9)),
+    intTotalRow && (intInvFull['F' + intTotalRow].v + ' vs ' + (indTotalRow && invFull['F' + indTotalRow].v) + ' vs ' + inv.summary.totalInvestment));
+
+  // d) 静态销售测算 B 列规划区引用 Sheet5（租赁测算同构一并校验）
+  const SA_PLAN_MAP = [['B5', 'B4'], ['B6', 'B9'], ['B7', 'B8'], ['B8', 'B6'], ['B9', 'B7'], ['B10', 'B5']];
+  const intSale = capIntWB.Sheets['销售测算'];
+  icheck('i-d: 销售测算 B4（用地亩）=ROUND(Sheet5!B4/666.7,2) 且缓存一致',
+    !!(intSale['B4'] && intSale['B4'].f === "ROUND('" + S5_NAME + "'!B4/666.7,2)" &&
+      approx(intSale['B4'].v, Math.round(intS5['B4'].v / 666.7 * 100) / 100, 1e-9)),
+    intSale['B4'] && (intSale['B4'].f + ' / ' + intSale['B4'].v));
+  const saleBad = SA_PLAN_MAP.filter(m => {
+    const c = intSale[m[0]], ref = intS5[m[1]];
+    return !c || !ref || c.f !== "'" + S5_NAME + "'!" + m[1] || c.v !== ref.v;
+  });
+  icheck('i-d: 销售测算 B5~B10 规划区 6 处引用 Sheet5 且缓存一致', saleBad.length === 0, saleBad.map(m => m[0]).join(','));
+  const intRent = capIntWB.Sheets['租赁测算'];
+  const rentBad = SA_PLAN_MAP.filter(m => {
+    const c = intRent[m[0]], ref = intS5[m[1]];
+    return !c || !ref || c.f !== "'" + S5_NAME + "'!" + m[1] || c.v !== ref.v;
+  });
+  icheck('i-d: 租赁测算 B5~B10 规划区 6 处引用 Sheet5 且缓存一致', rentBad.length === 0, rentBad.map(m => m[0]).join(','));
+  // 附带：财务费用 → 完整版财务费用行；综合汇总总投资 → 完整版发展成本合计
+  const indFinRow = findRowByColLabel(invFull, 'B', '财务费用');
+  icheck('i-d: 销售测算 B19 财务费用引用投资估算完整版 F' + indFinRow + ' 且缓存一致',
+    !!(indFinRow && intSale['B19'] && intSale['B19'].f === "'投资估算完整版'!F" + indFinRow && intSale['B19'].v === invFull['F' + indFinRow].v),
+    intSale['B19'] && (intSale['B19'].f + ' / ' + intSale['B19'].v));
+  const intSum = capIntWB.Sheets['综合汇总'];
+  icheck('i-d: 综合汇总 B3 总投资引用投资估算完整版 F64 且缓存一致',
+    !!(intTotalRow && intSum['B3'] && intSum['B3'].f === "'投资估算完整版'!F" + intTotalRow && intSum['B3'].v === intInvFull['F' + intTotalRow].v),
+    intSum['B3'] && (intSum['B3'].f + ' / ' + intSum['B3'].v));
+
+  // e) 动态多年现金流表参数区：C3 引用投资估算完整版、G3 引用销售测算，缓存与 dynE.base 一致
+  const intCash = capIntWB.Sheets['多年现金流表'];
+  icheck('i-e: 多年现金流表 C3 公式=「\'投资估算完整版\'!F64」',
+    !!(intTotalRow && intCash['C3'] && intCash['C3'].f === "'投资估算完整版'!F" + intTotalRow), intCash['C3'] && intCash['C3'].f);
+  icheck('i-e: 多年现金流表 C3 缓存与 dynE.base.totalInvestment 一致',
+    !!(intCash['C3'] && approx(intCash['C3'].v, dynE.base.totalInvestment, 1e-9)),
+    intCash['C3'] && (intCash['C3'].v + ' vs ' + dynE.base.totalInvestment));
+  icheck('i-e: 多年现金流表 G3 公式=「\'销售测算\'!B24」',
+    !!(intCash['G3'] && intCash['G3'].f === "'销售测算'!B24"), intCash['G3'] && intCash['G3'].f);
+  icheck('i-e: 多年现金流表 G3 缓存与 dynE.base.weightedSalePrice 一致',
+    !!(intCash['G3'] && approx(intCash['G3'].v, dynE.base.weightedSalePrice, 1e-12)),
+    intCash['G3'] && (intCash['G3'].v + ' vs ' + dynE.base.weightedSalePrice));
+  const DYN_MAP = [['G5', "'租赁测算'!B24", dynE.base.weightedRent], ['G9', "'销售测算'!B23", dynE.base.saleableArea],
+    ['G10', "'租赁测算'!B23", dynE.base.rentableArea], ['G11', "'租赁测算'!B27", dynE.inputs.occupancyRate]];
+  const dynBad = DYN_MAP.filter(m => { const c = intCash[m[0]]; return !c || c.f !== m[1] || !approx(c.v, m[2], 1e-9); });
+  icheck('i-e: 多年现金流表 G5/G9/G10/G11 重接线公式与缓存（租金/可售/可租/出租率）一致', dynBad.length === 0, dynBad.map(m => m[0]).join(','));
+
+  // f) dynamicAnalysisResult 传 null：17 sheet 仍在且动态 3 sheet 为占位（含「未完成」）
+  let capNullWB = null;
+  sandbox.XLSX.writeFile = (wb) => { capNullWB = wb; };
+  FM.downloadMasterIntegratedExcel(result, projectData, inv, sa, null, 'integrated-null-test.xlsx');
+  icheck('i-f: 动态结果传 null 时仍生成 17 个 sheet（名称/顺序不变）',
+    !!capNullWB && capNullWB.SheetNames.length === 17 && EXPECT_17.every((n, i) => capNullWB.SheetNames[i] === n),
+    capNullWB && JSON.stringify(capNullWB.SheetNames));
+  if (capNullWB) {
+    const phBad = ['多年现金流表', '敏感性分析', '关键指标汇总'].filter(n => {
+      const ws = capNullWB.Sheets[n];
+      if (!ws) return true;
+      return !Object.keys(ws).some(k => k[0] !== '!' && typeof ws[k].v === 'string' && ws[k].v.indexOf('未完成') >= 0);
+    });
+    icheck('i-f: 动态 3 sheet 为占位结构（含「未完成」字样）', phBad.length === 0, phBad.join(','));
+    const phInvFull = capNullWB.Sheets['投资估算完整版'];
+    const phTotalRow = phInvFull ? findRowByColLabel(phInvFull, 'B', '发展成本合计') : null;
+    icheck('i-f: 占位版非动态部分不受影响（发展成本合计缓存仍=69852.12）',
+      !!(phTotalRow && approx(phInvFull['F' + phTotalRow].v, inv.summary.totalInvestment, 1e-9)),
+      phTotalRow && String(phInvFull['F' + phTotalRow].v));
+  }
+}
+
+console.log('\n=== i) 总表集成自检结果：' + (iChecks - iFailed) + '/' + iChecks + ' 通过' + (iFailed ? '（存在未通过项）' : '') + ' ===');
+
+// ==================== j) 参数单一数据源自检（A3 参数单元格化 + 集成重接线） ====================
+console.log('\n\n=== j) 参数单一数据源自检 ===');
+let jChecks = 0, jFailed = 0;
+function jcheck(name, cond, detail) {
+  jChecks++;
+  if (cond) console.log('  [PASS]', name);
+  else { jFailed++; console.log('  [FAIL]', name, detail != null ? '→ ' + detail : ''); }
+}
+
+// ---- j-a) 独立投资估算工作簿（capturedInvWB）：完整版表尾融资参数区 + 财务费用活公式 ----
+{
+  const rRatio = findRowByColLabel(invFull, 'B', '融资占比');
+  const rRate = findRowByColLabel(invFull, 'B', '融资利率');
+  const rPhases = findRowByColLabel(invFull, 'B', '开发期数');
+  const rPeriod = findRowByColLabel(invFull, 'B', '单期开发周期');
+  const rFinCost = findRowByColLabel(invFull, 'B', '财务费用');
+  jcheck('j-a: 完整版存在「融资占比」参数行且 D 输入格 t=n、缓存=50',
+    !!(rRatio && invFull['D' + rRatio] && invFull['D' + rRatio].t === 'n' && invFull['D' + rRatio].v === inv.inputs.financingRatio && inv.inputs.financingRatio === 50),
+    rRatio && (rRatio + ' / ' + JSON.stringify(invFull['D' + rRatio])));
+  const paramRowsOk = [[rRatio, 68, inv.inputs.financingRatio], [rRate, 69, inv.inputs.financingRate], [rPhases, 70, inv.inputs.devPhases], [rPeriod, 71, inv.inputs.phasePeriod]];
+  const paramBad = paramRowsOk.filter(m => {
+    const c = m[0] && invFull['D' + m[0]];
+    return m[0] !== m[1] || !c || c.t !== 'n' || c.v !== m[2];
+  });
+  jcheck('j-a: 融资参数区 4 行位于 D68~D71 且均 t=n、值=50/5/1/2（与 inv.inputs 一致）',
+    paramBad.length === 0, paramBad.map(m => 'row' + m[0]).join(','));
+  const finF = rFinCost && invFull['F' + rFinCost];
+  const refOk = finF && finF.f && [rRatio, rRate, rPhases, rPeriod].every(r => finF.f.indexOf('$D$' + r) >= 0);
+  jcheck('j-a: 财务费用公式引用 4 个参数 D 格且 ROUND 包裹',
+    !!(finF && finF.f && /^ROUND\(/.test(finF.f) && refOk), finF && finF.f);
+  jcheck('j-a: 财务费用公式含 IF(...>0,30,0) 活公式（利息>0 计银行费用 30 万）',
+    !!(finF && finF.f && finF.f.indexOf('IF(') >= 0 && finF.f.indexOf('>0,30,0)') >= 0 && inv.financial.bankFee === 30),
+    finF && (finF.f + ' / bankFee=' + inv.financial.bankFee));
+  jcheck('j-a: 财务费用缓存与 inv.financial.total 一致',
+    !!(finF && approx(finF.v, inv.financial.total, 1e-9)), finF && (finF.v + ' vs ' + inv.financial.total));
+}
+
+// ---- j-b) 独立静态工作簿（capturedWB）：费率输入格与费用公式引用 ----
+{
+  const wsSaleJ = capturedWB.Sheets['销售测算'];
+  const wsRentJ = capturedWB.Sheets['租赁测算'];
+  const wsSumJ = capturedWB.Sheets['综合汇总'];
+  const r2 = n => Math.round(n * 100) / 100; // 输入格按模块 round2 口径预填（sa.inputs 为 ×100 浮点存储，不能直接 ===）
+  const rMkt = findRowByColLabel(wsSaleJ, 'A', '营销费率');
+  const rMgmt = findRowByColLabel(wsSaleJ, 'A', '管理费率');
+  jcheck('j-b: 销售测算营销/管理费率输入格位于 B39/B40 且 t=n、缓存=3.5/3',
+    !!(rMkt === 39 && rMgmt === 40 &&
+      wsSaleJ['B' + rMkt] && wsSaleJ['B' + rMkt].t === 'n' && wsSaleJ['B' + rMkt].v === r2(sa.inputs.marketingRate) && wsSaleJ['B' + rMkt].v === 3.5 &&
+      wsSaleJ['B' + rMgmt] && wsSaleJ['B' + rMgmt].t === 'n' && wsSaleJ['B' + rMgmt].v === r2(sa.inputs.managementRate) && wsSaleJ['B' + rMgmt].v === 3),
+    'mkt=' + rMkt + '=' + JSON.stringify(rMkt && wsSaleJ['B' + rMkt] && wsSaleJ['B' + rMkt].v) + ', mgmt=' + rMgmt + '=' + JSON.stringify(rMgmt && wsSaleJ['B' + rMgmt] && wsSaleJ['B' + rMgmt].v));
+  const rSaleMkt = findRowByColLabel(wsSaleJ, 'A', '减：营销费用');
+  const rSaleMgmt = findRowByColLabel(wsSaleJ, 'A', '减：管理费用');
+  const saleMktC = rSaleMkt && wsSaleJ['B' + rSaleMkt];
+  jcheck('j-b: 减：营销费用公式引用本表 $B$' + rMkt + ' 且缓存=sa.sale.marketingCost',
+    !!(saleMktC && saleMktC.f && saleMktC.f.indexOf('$B$' + rMkt) >= 0 && approx(saleMktC.v, sa.sale.marketingCost, 1e-9)),
+    saleMktC && (saleMktC.f + ' / ' + saleMktC.v + ' vs ' + sa.sale.marketingCost));
+  const saleMgmtC = rSaleMgmt && wsSaleJ['B' + rSaleMgmt];
+  jcheck('j-b: 减：管理费用公式引用本表 $B$' + rMgmt + ' 且缓存=sa.sale.managementCost',
+    !!(saleMgmtC && saleMgmtC.f && saleMgmtC.f.indexOf('$B$' + rMgmt) >= 0 && approx(saleMgmtC.v, sa.sale.managementCost, 1e-9)),
+    saleMgmtC && (saleMgmtC.f + ' / ' + saleMgmtC.v + ' vs ' + sa.sale.managementCost));
+  const rOp = findRowByColLabel(wsRentJ, 'A', '租赁运营费率');
+  jcheck('j-b: 租赁测算租赁运营费率输入格位于 B38 且 t=n、缓存=6',
+    !!(rOp === 38 && wsRentJ['B' + rOp] && wsRentJ['B' + rOp].t === 'n' && wsRentJ['B' + rOp].v === r2(sa.inputs.rentalOpRate) && wsRentJ['B' + rOp].v === 6),
+    'op=' + rOp + ' / ' + JSON.stringify(rOp && wsRentJ['B' + rOp]));
+  const rRentOp = findRowByColLabel(wsRentJ, 'A', '减：运营费用');
+  const rentOpC = rRentOp && wsRentJ['B' + rRentOp];
+  jcheck('j-b: 减：运营费用公式引用本表 $B$' + rOp + ' 且缓存=sa.rent.rentalOpCost',
+    !!(rentOpC && rentOpC.f && rentOpC.f.indexOf('$B$' + rOp) >= 0 && approx(rentOpC.v, sa.rent.rentalOpCost, 1e-9)),
+    rentOpC && (rentOpC.f + ' / ' + rentOpC.v + ' vs ' + sa.rent.rentalOpCost));
+  const rSumRatio = findRowByColLabel(wsSumJ, 'A', '融资占比');
+  jcheck('j-b: 综合汇总融资占比输入格位于 B13 且 t=n、缓存=50（取自投资估算输入）',
+    !!(rSumRatio === 13 && wsSumJ['B' + rSumRatio] && wsSumJ['B' + rSumRatio].t === 'n' && wsSumJ['B' + rSumRatio].v === sa.inputs.financingRatio && sa.inputs.financingRatio === 50),
+    'row=' + rSumRatio + ' / ' + JSON.stringify(rSumRatio && wsSumJ['B' + rSumRatio]));
+  const rGap = findRowByColLabel(wsSumJ, 'A', '资金盈余/缺口');
+  const gapC = rGap && wsSumJ['B' + rGap];
+  jcheck('j-b: 资金盈余/缺口公式引用本表 $B$' + rSumRatio + ' 且缓存=sa.summary.fundingGap',
+    !!(gapC && gapC.f && gapC.f.indexOf('$B$' + rSumRatio) >= 0 && approx(gapC.v, sa.summary.fundingGap, 1e-9)),
+    gapC && (gapC.f + ' / ' + gapC.v + ' vs ' + sa.summary.fundingGap));
+}
+
+// ---- j-c) 集成工作簿（capIntWB）：新增重接线公式 + 缓存与独立动态版逐位一致 ----
+{
+  const iFullJ = capIntWB.Sheets['投资估算完整版'];
+  const iSumJ = capIntWB.Sheets['综合汇总'];
+  const iCashJ = capIntWB.Sheets['多年现金流表'];
+  const iSaleJ = capIntWB.Sheets['销售测算'];
+  const iRentJ = capIntWB.Sheets['租赁测算'];
+  const dCashJ = capturedDynWB.Sheets['多年现金流表']; // 独立动态版（f 段捕获）
+  const iRatioRowF = findRowByColLabel(iFullJ, 'B', '融资占比');
+  const iRateRowF = findRowByColLabel(iFullJ, 'B', '融资利率');
+  const iSumRatioRow = findRowByColLabel(iSumJ, 'A', '融资占比');
+  const sumRatioC = iSumRatioRow && iSumJ['B' + iSumRatioRow];
+  jcheck('j-c: 集成综合汇总融资占比格公式=「\'投资估算完整版\'!D' + iRatioRowF + '」且缓存与被引格一致',
+    !!(sumRatioC && sumRatioC.f === "'投资估算完整版'!D" + iRatioRowF &&
+      iRatioRowF && sumRatioC.v === iFullJ['D' + iRatioRowF].v && sumRatioC.v === 50),
+    sumRatioC && (sumRatioC.f + ' / ' + sumRatioC.v));
+  jcheck('j-c: 集成现金流 C4 公式引用完整版融资占比 D' + iRatioRowF + ' 且缓存=50',
+    !!(iRatioRowF && iCashJ['C4'] && iCashJ['C4'].f === "'投资估算完整版'!D" + iRatioRowF && iCashJ['C4'].v === iFullJ['D' + iRatioRowF].v && iCashJ['C4'].v === 50),
+    iCashJ['C4'] && (iCashJ['C4'].f + ' / ' + iCashJ['C4'].v));
+  jcheck('j-c: 集成现金流 C6 公式引用完整版融资利率 D' + iRateRowF + ' 且缓存=5',
+    !!(iRateRowF && iCashJ['C6'] && iCashJ['C6'].f === "'投资估算完整版'!D" + iRateRowF && iCashJ['C6'].v === iFullJ['D' + iRateRowF].v && iCashJ['C6'].v === 5),
+    iCashJ['C6'] && (iCashJ['C6'].f + ' / ' + iCashJ['C6'].v));
+  const iMktRow = findRowByColLabel(iSaleJ, 'A', '营销费率');
+  const iMgmtRow = findRowByColLabel(iSaleJ, 'A', '管理费率');
+  jcheck('j-c: 集成现金流 G13/G14 公式引用销售测算 B' + iMktRow + '/B' + iMgmtRow,
+    !!(iMktRow && iMgmtRow && iCashJ['G13'] && iCashJ['G13'].f === "'销售测算'!B" + iMktRow &&
+      iCashJ['G14'] && iCashJ['G14'].f === "'销售测算'!B" + iMgmtRow),
+    (iCashJ['G13'] && iCashJ['G13'].f) + ' / ' + (iCashJ['G14'] && iCashJ['G14'].f));
+  const iOpRow = findRowByColLabel(iRentJ, 'A', '租赁运营费率');
+  jcheck('j-c: 集成现金流 G15 公式引用租赁测算 B' + iOpRow,
+    !!(iOpRow && iCashJ['G15'] && iCashJ['G15'].f === "'租赁测算'!B" + iOpRow),
+    iCashJ['G15'] && iCashJ['G15'].f);
+  const strictBad = ['C4', 'C6', 'G13', 'G14', 'G15'].filter(k => !iCashJ[k] || !dCashJ[k] || iCashJ[k].v !== dCashJ[k].v);
+  jcheck('j-c: C4/C6/G13/G14/G15 缓存与独立动态版对应格逐位一致（===）',
+    strictBad.length === 0, strictBad.map(k => k + ':' + (iCashJ[k] && iCashJ[k].v) + ' vs ' + (dCashJ[k] && dCashJ[k].v)).join(','));
+}
+
+console.log('\n=== j) 参数单一数据源自检结果：' + (jChecks - jFailed) + '/' + jChecks + ' 通过' + (jFailed ? '（存在未通过项）' : '') + ' ===');
+
 console.log('\n=== 动态投资分析自检结果：' + (dynChecks - dynFailed) + '/' + dynChecks + ' 通过' + (dynFailed ? '（存在未通过项）' : '') + ' ===');
-if (dynFailed > 0) process.exitCode = 1;
+console.log('=== 全部自检结果：' + ((dynChecks - dynFailed) + (hChecks - hFailed) + (iChecks - iFailed) + (jChecks - jFailed)) + '/' + (dynChecks + hChecks + iChecks + jChecks) + ' 通过' + ((dynFailed + hFailed + iFailed + jFailed) ? '（存在未通过项）' : '') + ' ===');
+if (dynFailed + hFailed + iFailed + jFailed > 0) process.exitCode = 1;
 
 console.log('\n自检完成');
