@@ -5,7 +5,8 @@
  * 核心原则：
  * 1. 投资估算完整版为源头，简化版由完整版汇总反推；
  * 2. 静态分析依赖投资估算结果；
- * 3. 所有输出金额保留两位小数。
+ * 3. 所有输出金额保留两位小数；
+ * 4. 动态投资分析依赖静态分析结果，口径见 DYNAMIC_INVESTMENT_DESIGN.md（多年现金流、NPV/IRR、自有资金 IRR、动态回收期、敏感性分析）。
  */
 
 (function (global) {
@@ -556,6 +557,7 @@
       constructionCost: { landCostPerArea, unitCost, costUnitCost },
       sale: {
         weightedPrice: weightedSalePrice,
+        rawWeightedPrice: rawWeightedSalePrice, // 完整精度，供动态分析参与计算
         details: saleDetails,
         totalRevenue: saleRevenue,
         landCost: landCostForSale,
@@ -589,6 +591,7 @@
       },
       rent: {
         weightedRent,
+        rawWeightedRent, // 完整精度，供动态分析参与计算
         monthlyRent,
         yearlyRent,
         occupancyRate: occupancyRate * 100,
@@ -619,11 +622,344 @@
   };
 
 
-  // ==================== 动态投资分析（占位框架） ====================
-  NS.calculateDynamicAnalysis = function (inputs, result, projectData, staticAnalysis) {
+  // ==================== 动态投资分析 ====================
+  // 口径见 DYNAMIC_INVESTMENT_DESIGN.md：金额万元、面积㎡、比率以百分比存储/返回（如 90 表示 90%）；
+  // 年租金 = 日租金 × 360；三阶段现金流：建设期 → 销售+运营混合期 → 纯运营期。
+
+  // IRR 数值求解（二分法：-99% ~ 1000%，100 次迭代，无变号返回 null）；入出现金流数组（t=0 起），返回百分比
+  function solveIrr(cashflows) {
+    function npvAt(r) {
+      let s = 0;
+      for (let t = 0; t < cashflows.length; t++) s += cashflows[t] / Math.pow(1 + r, t);
+      return s;
+    }
+    let lo = -0.99, hi = 10;
+    let flo = npvAt(lo);
+    const fhi = npvAt(hi);
+    if (!isFinite(flo) || !isFinite(fhi)) return null;
+    if (flo === 0) return round2(lo * 100);
+    if (flo * fhi > 0) return null;
+    for (let i = 0; i < 100; i++) {
+      const mid = (lo + hi) / 2;
+      const fm = npvAt(mid);
+      if (fm === 0) { lo = mid; break; }
+      if (flo * fm < 0) { hi = mid; } else { lo = mid; flo = fm; }
+    }
+    return round2(((lo + hi) / 2) * 100);
+  }
+
+  // 动态投资回收期：累计折现现金流由负转正的年份，线性插值精确到 0.1 年；未转正返回 null
+  function dynamicPayback(cumDiscounted, discounted) {
+    for (let t = 0; t < cumDiscounted.length; t++) {
+      if (cumDiscounted[t] >= 0) {
+        if (t === 0) return 0;
+        return Math.round(((t - 1) + (-cumDiscounted[t - 1]) / discounted[t]) * 10) / 10;
+      }
+    }
+    return null;
+  }
+
+  // 土增税四级超率累进（动态口径：以动态累计销售回款为转让收入，扣除项目沿用静态土地/建安口径）
+  function calcDynamicLvat(revenue, landCost, constructionCost) {
+    const base = round2(landCost + constructionCost);
+    const devExpense = round2(base * 0.1);
+    const surcharge = round2(revenue / 1.09 * 0.006);
+    const otherDeduction = round2(base * 0.2);
+    const deductionTotal = round2(base + devExpense + surcharge + otherDeduction);
+    const increment = round2(revenue - deductionTotal);
+    let lvat = 0;
+    if (increment > 0 && deductionTotal > 0) {
+      const ratio = increment / deductionTotal * 100;
+      let rate, quick;
+      if (ratio <= 50) { rate = 30; quick = 0; }
+      else if (ratio <= 100) { rate = 40; quick = 5; }
+      else if (ratio <= 200) { rate = 50; quick = 15; }
+      else { rate = 60; quick = 35; }
+      lvat = round2(increment * rate / 100 - deductionTotal * quick / 100);
+    }
+    return { lvat, surcharge };
+  }
+
+  // 动态模型核心（敏感性分析复用）：p 中比率为小数、去化速度为 ㎡/年、售价为 万元/㎡、租金为 元/天/㎡
+  function runDynamicModel(p) {
+    const cy = Math.max(1, Math.round(p.constructionYears));
+    const oy = Math.max(1, Math.round(p.operationYears));
+    const N = cy + oy;
+    const ownFunds = round2(p.totalInvestment * (1 - p.financingRatio));
+    const loanCap = round2(p.totalInvestment * p.financingRatio);
+    const rentCapArea = round2(p.rentableArea * p.occupancyRate);
+    const investPerYear = round2(p.totalInvestment / cy);
+    const ownPerYear = round2(ownFunds / cy);
+
+    // ---- 去化引擎：销售上限 = 可售面积；租赁上限 = 可租面积 × 稳定出租率（满租口径） ----
+    // 开预售：建设期第 1/2 年按比例 × 总量去化（租赁为预租，只锁定面积）；运营期起每年 MIN(去化速度, 上限 − 累计)
+    const saleDep = [], rentDep = [], saleCumArr = [], rentCumArr = [];
+    let saleCum = 0, rentCum = 0, saleFinishYear = null, rentFullYear = null;
+    for (let t = 0; t < N; t++) {
+      let sd = 0, rd = 0;
+      if (t < cy) {
+        if (p.presaleEnabled) {
+          const pct = t === 0 ? p.presalePct1 : (t === 1 ? p.presalePct2 : 0);
+          sd = Math.min(pct * p.saleableArea, p.saleableArea - saleCum);
+          rd = Math.min(pct * p.rentableArea, rentCapArea - rentCum);
+        }
+      } else {
+        sd = Math.min(p.saleSpeed, p.saleableArea - saleCum);
+        rd = Math.min(p.rentSpeed, rentCapArea - rentCum);
+      }
+      sd = round2(Math.max(0, sd));
+      rd = round2(Math.max(0, rd));
+      saleCum = round2(saleCum + sd);
+      rentCum = round2(rentCum + rd);
+      saleDep.push(sd); rentDep.push(rd); saleCumArr.push(saleCum); rentCumArr.push(rentCum);
+      if (saleFinishYear == null && p.saleableArea > 0 && saleCum >= p.saleableArea) saleFinishYear = t;
+      if (rentFullYear == null && rentCapArea > 0 && rentCum >= rentCapArea) rentFullYear = t;
+    }
+
+    // ---- 销售回款（预售当年确认回款；租金从运营期第 1 年按当年末累计已租面积计提，含预租） ----
+    const saleRev = [];
+    let totalSaleRevenue = 0;
+    for (let t = 0; t < N; t++) {
+      const rev = round2(saleDep[t] * p.weightedSalePrice * Math.pow(1 + p.saleGrowthRate, t));
+      saleRev.push(rev);
+      totalSaleRevenue = round2(totalSaleRevenue + rev);
+    }
+
+    // ---- 清算：土增税 + 所得税在销售去化完成当年一次性计提 ----
+    const lvatInfo = calcDynamicLvat(totalSaleRevenue, p.landCostForSale, p.constructionCostForSale);
+    const marketingTotal = round2(totalSaleRevenue * p.marketingRate);
+    const managementTotal = round2(totalSaleRevenue * p.managementRate);
+    const profitTotal = round2(totalSaleRevenue - p.landCostForSale - p.constructionCostForSale -
+      lvatInfo.surcharge - lvatInfo.lvat - marketingTotal - managementTotal - p.saleFinancialCost);
+    const incomeTaxSettlement = round2(Math.max(0, profitTotal) * 0.25);
+    const settlementTotal = round2(lvatInfo.lvat + incomeTaxSettlement);
+
+    // ---- 三阶段现金流 ----
+    const years = [];
+    const projectCFs = [], equityCFs = [], discArr = [], cumDiscArr = [];
+    let remaining = 0, actualLoan = 0, cumDisc = 0;
+    for (let t = 0; t < N; t++) {
+      const isConstruction = t < cy;
+      const saleRevenue = saleRev[t];
+      const rentIncome = isConstruction ? 0 : round2(rentCumArr[t] * p.weightedRent * 360 * Math.pow(1 + p.rentGrowthRate, t) / 10000);
+      const saleTax = round2(saleRevenue / 1.09 * 0.006 + saleRevenue * p.marketingRate + saleRevenue * p.managementRate);
+      const rentTax = isConstruction ? 0 : round2(rentIncome * 0.006 + rentIncome * 0.12 + rentCumArr[t] * 6 / 10000);
+      const opCost = round2(rentIncome * p.rentalOpRate);
+      const settlementTax = (saleFinishYear != null && t === saleFinishYear) ? settlementTotal : 0;
+      const availableFunds = round2(saleRevenue + rentIncome - saleTax - rentTax - opCost - settlementTax);
+      // 建设期：总投资/自有资金均匀投入（末年轧差），贷款按进度提款；利息已含在财务费用内不重复计
+      const investOutflow = isConstruction ? (t === cy - 1 ? round2(p.totalInvestment - investPerYear * (cy - 1)) : investPerYear) : 0;
+      const ownFundOutflow = isConstruction ? (t === cy - 1 ? round2(ownFunds - ownPerYear * (cy - 1)) : ownPerYear) : 0;
+      // 预售回款（扣除当年销售税费后的净额）优先替代贷款提款，累计提款不超过贷款上限
+      const loanDrawdown = isConstruction
+        ? round2(Math.min(Math.max(investOutflow - ownFundOutflow - availableFunds, 0), Math.max(loanCap - actualLoan, 0)))
+        : 0;
+      actualLoan = round2(actualLoan + loanDrawdown);
+      // 运营期：利息 = 剩余本金 × 融资利率（全部费用化）；还本 = min(可用资金 − 利息, 剩余本金)
+      const interest = isConstruction ? 0 : round2(remaining * p.financingRate);
+      const principalRepay = isConstruction ? 0 : round2(Math.min(Math.max(availableFunds - interest, 0), remaining));
+      remaining = round2(isConstruction ? remaining + loanDrawdown : remaining - principalRepay);
+      const equityDistributable = isConstruction ? 0 : round2(availableFunds - interest - principalRepay);
+      const equityShortfall = !isConstruction && equityDistributable < 0;
+      const projectNetCF = round2(availableFunds - investOutflow);
+      const equityCF = isConstruction ? round2(-ownFundOutflow) : equityDistributable;
+      // 折现系数保留 6 位小数，折现/累计折现按 ROUND(...,2) 逐年累计，与 Excel 公式链一致
+      const factor = Math.round((1 / Math.pow(1 + p.discountRate, t)) * 1e6) / 1e6;
+      const discountedCF = round2(projectNetCF * factor);
+      cumDisc = round2(cumDisc + discountedCF);
+      const phase = isConstruction ? 'construction'
+        : (p.saleableArea > 0 && (saleFinishYear == null || t <= saleFinishYear)) ? 'mixed' : 'operation';
+      years.push({
+        t, phase,
+        saleDepleteArea: saleDep[t], saleCumArea: saleCumArr[t],
+        rentDepleteArea: rentDep[t], rentCumArea: rentCumArr[t],
+        saleRevenue, rentIncome, saleTax, rentTax, opCost, settlementTax, availableFunds,
+        investOutflow, ownFundOutflow, loanDrawdown, interest, principalRepay,
+        remainingPrincipal: remaining, equityDistributable, equityShortfall,
+        projectNetCF, equityCF,
+        discountFactor: factor,
+        discountedCF, cumDiscountedCF: cumDisc
+      });
+      projectCFs.push(projectNetCF);
+      equityCFs.push(equityCF);
+      discArr.push(discountedCF);
+      cumDiscArr.push(cumDisc);
+    }
+
     return {
-      status: 'placeholder',
-      message: '动态投资分析逻辑开发中，请明天继续。'
+      years,
+      metrics: {
+        npv: round2(cumDisc),
+        irr: solveIrr(projectCFs),
+        equityIrr: solveIrr(equityCFs),
+        paybackPeriod: dynamicPayback(cumDiscArr, discArr)
+      },
+      ownFunds, loanCap, actualLoan, rentCapArea,
+      lvatSettlement: lvatInfo.lvat, incomeTaxSettlement,
+      saleFinishYear, rentFullYear
+    };
+  }
+
+  NS.calculateDynamicAnalysis = function (inputs, result, projectData, staticAnalysis) {
+    inputs = inputs || {};
+    if (!staticAnalysis || !staticAnalysis.metrics || !staticAnalysis.sale || !staticAnalysis.rent) return null;
+    // 投资估算结果单独取：优先 inputs.investmentEstimate（便于自检注入），缺省取页面全局结果
+    const inv = inputs.investmentEstimate || global.investmentEstimateResult || null;
+    if (!inv || !inv.summary || !inv.inputs) return null;
+    const sa = staticAnalysis;
+    const saInputs = sa.inputs || {};
+
+    // ---- 用户输入（比率均为百分比；去化速度单位 万㎡/年） ----
+    const discountRate = safeNum(inputs.discountRate, 8);
+    const operationYears = Math.max(1, Math.round(safeNum(inputs.operationYears, 20)));
+    const rentGrowthRate = safeNum(inputs.rentGrowthRate, 2);
+    const saleGrowthRate = safeNum(inputs.saleGrowthRate, 0);
+    const saleSpeed = safeNum(inputs.saleSpeed, 1.5);
+    const rentSpeed = safeNum(inputs.rentSpeed, 1.5);
+    const occupancyRate = safeNum(inputs.occupancyRate, safeNum(saInputs.occupancyRate, 90));
+    const presaleEnabled = !!inputs.presaleEnabled;
+    const presalePctYear1 = safeNum(inputs.presalePctYear1, 0);
+    const presalePctYear2 = safeNum(inputs.presalePctYear2, 30);
+    // 建设期年数 = 开发期数 × 单期开发周期（投资估算输入，默认 2 年）
+    const constructionYears = Math.max(1, Math.round(safeNum(inv.inputs.devPhases, 1) * safeNum(inv.inputs.phasePeriod, 2)));
+
+    // ---- 基础量（投资估算 + 静态分析联动） ----
+    const totalInvestment = safeNum(inv.summary.totalInvestment, 0);
+    const financingRatio = safeNum(inv.inputs.financingRatio, 0) / 100;
+    const financingRate = safeNum(inv.inputs.financingRate, 0) / 100;
+    const saleableArea = safeNum(sa.metrics.soldAreaTotal, 0);
+    const rentableArea = safeNum(sa.metrics.rentedAreaTotal, 0);
+    // 加权售价/租金使用 raw 完整精度参与计算
+    const weightedSalePrice = sa.sale.rawWeightedPrice != null ? sa.sale.rawWeightedPrice : safeNum(sa.sale.weightedPrice, 0);
+    const weightedRent = sa.rent.rawWeightedRent != null ? sa.rent.rawWeightedRent : safeNum(sa.rent.weightedRent, 0);
+    const marketingRate = safeNum(saInputs.marketingRate, 3.5) / 100;
+    const managementRate = safeNum(saInputs.managementRate, 3) / 100;
+    const rentalOpRate = safeNum(saInputs.rentalOpRate, 6) / 100;
+    const landCostForSale = safeNum(sa.sale.landCost, 0);
+    const constructionCostForSale = safeNum(sa.sale.constructionCost, 0);
+    const saleFinancialCost = safeNum(sa.sale.financialCost, 0);
+    // 敏感性分析用成本结构（建安/土地扰动调整总投资及成本口径）
+    const constructionTotal = inv.construction ? safeNum(inv.construction.total, 0) : 0;
+    const totalBuildingArea = inv.metrics ? safeNum(inv.metrics.totalBuildingArea, 0) : 0;
+    const aboveGroundArea = safeNum(sa.metrics.aboveGroundArea, 0);
+    const landItems = (inv.landCost && inv.landCost.items) || [];
+    const landTransferItem = landItems.find(it => it.code === '1-1');
+    const deedTaxItem = landItems.find(it => it.code === '1-2');
+    const landBase = (landTransferItem ? landTransferItem.cost : 0) + (deedTaxItem ? deedTaxItem.cost : 0);
+
+    function buildParams() {
+      return {
+        discountRate: discountRate / 100,
+        operationYears: operationYears,
+        rentGrowthRate: rentGrowthRate / 100,
+        saleGrowthRate: saleGrowthRate / 100,
+        saleSpeed: saleSpeed * 10000,
+        rentSpeed: rentSpeed * 10000,
+        occupancyRate: occupancyRate / 100,
+        presaleEnabled: presaleEnabled,
+        presalePct1: presalePctYear1 / 100,
+        presalePct2: presalePctYear2 / 100,
+        constructionYears: constructionYears,
+        totalInvestment: totalInvestment,
+        financingRatio: financingRatio,
+        financingRate: financingRate,
+        saleableArea: saleableArea,
+        rentableArea: rentableArea,
+        weightedSalePrice: weightedSalePrice,
+        weightedRent: weightedRent,
+        marketingRate: marketingRate,
+        managementRate: managementRate,
+        rentalOpRate: rentalOpRate,
+        landCostForSale: landCostForSale,
+        constructionCostForSale: constructionCostForSale,
+        saleFinancialCost: saleFinancialCost
+      };
+    }
+
+    const baseRun = runDynamicModel(buildParams());
+
+    // ---- 敏感性分析：6 变量 × ±10%/±20%，每组扰动后整体重跑模型 ----
+    const SENS_VARIABLES = [
+      { variable: 'salePrice', label: '销售单价' },
+      { variable: 'rentPrice', label: '租金单价' },
+      { variable: 'constructionCost', label: '建安成本' },
+      { variable: 'landPrice', label: '土地价格' },
+      { variable: 'occupancyRate', label: '出租率' },
+      { variable: 'depleteSpeed', label: '去化周期' }
+    ];
+    const SENS_DELTAS = [-0.2, -0.1, 0.1, 0.2];
+    const sensitivity = [];
+    SENS_VARIABLES.forEach(function (sv) {
+      SENS_DELTAS.forEach(function (delta) {
+        const p = buildParams();
+        if (sv.variable === 'salePrice') {
+          p.weightedSalePrice *= (1 + delta);
+        } else if (sv.variable === 'rentPrice') {
+          p.weightedRent *= (1 + delta);
+        } else if (sv.variable === 'constructionCost') {
+          const deltaCost = constructionTotal * delta;
+          p.totalInvestment = round2(p.totalInvestment + deltaCost);
+          if (totalBuildingArea > 0) p.constructionCostForSale = round2(p.constructionCostForSale + deltaCost * saleableArea / totalBuildingArea);
+        } else if (sv.variable === 'landPrice') {
+          const deltaCost = landBase * delta;
+          p.totalInvestment = round2(p.totalInvestment + deltaCost);
+          if (aboveGroundArea > 0) p.landCostForSale = round2(p.landCostForSale + deltaCost * saleableArea / aboveGroundArea);
+        } else if (sv.variable === 'occupancyRate') {
+          p.occupancyRate = Math.min(1, p.occupancyRate * (1 + delta)); // 上限 100%
+        } else if (sv.variable === 'depleteSpeed') {
+          // 去化周期 ±delta → 去化速度反向换算
+          p.saleSpeed /= (1 + delta);
+          p.rentSpeed /= (1 + delta);
+        }
+        const run = runDynamicModel(p);
+        sensitivity.push({
+          variable: sv.variable,
+          label: sv.label,
+          delta: delta,
+          npv: run.metrics.npv,
+          irr: run.metrics.irr,
+          equityIrr: run.metrics.equityIrr,
+          paybackPeriod: run.metrics.paybackPeriod
+        });
+      });
+    });
+
+    return {
+      inputs: {
+        discountRate: discountRate,
+        operationYears: operationYears,
+        rentGrowthRate: rentGrowthRate,
+        saleGrowthRate: saleGrowthRate,
+        saleSpeed: saleSpeed,
+        rentSpeed: rentSpeed,
+        occupancyRate: occupancyRate,
+        presaleEnabled: presaleEnabled,
+        presalePctYear1: presalePctYear1,
+        presalePctYear2: presalePctYear2,
+        constructionYears: constructionYears
+      },
+      base: {
+        totalInvestment: round2(totalInvestment),
+        ownFunds: baseRun.ownFunds,
+        loanCap: baseRun.loanCap,
+        actualLoan: baseRun.actualLoan,
+        financingRate: round2(financingRate * 100),
+        saleableArea: saleableArea,
+        rentableArea: rentableArea,
+        rentCapArea: baseRun.rentCapArea,
+        weightedSalePrice: weightedSalePrice,
+        weightedRent: weightedRent,
+        marketingRate: round2(marketingRate * 100),
+        managementRate: round2(managementRate * 100),
+        rentalOpRate: round2(rentalOpRate * 100),
+        lvatSettlement: baseRun.lvatSettlement,
+        incomeTaxSettlement: baseRun.incomeTaxSettlement,
+        saleFinishYear: baseRun.saleFinishYear,
+        rentFullYear: baseRun.rentFullYear
+      },
+      years: baseRun.years,
+      metrics: baseRun.metrics,
+      sensitivity: sensitivity
     };
   };
 
@@ -675,7 +1011,7 @@
 
   function headerCell(v) { return cell(v, { bold: true, fill: STYLE.headerFill, fontColor: STYLE.headerFont, align: 'center', sz: 11 }); }
   function subtotalCell(v, f) { return cell(v, { bold: true, fill: STYLE.subtotalFill, numFmt: '#,##0.00', f: f }); }
-  function totalCell(v, f) { return cell(v, { bold: true, fill: STYLE.totalFill, fontColor: STYLE.totalFont, numFmt: '#,##0.00', f: f }); }
+  function totalCell(v, f, raw) { return cell(v, { bold: true, fill: STYLE.totalFill, fontColor: STYLE.totalFont, numFmt: '#,##0.00', f: f, raw: !!raw }); }
   function moneyCell(v, f, raw) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f, raw: !!raw }); }
   function numCell(v, f, raw) { return cell(v, { numFmt: '#,##0.00', align: 'right', f: f, raw: !!raw }); }
   function textCell(v, indent) { return cell((indent || '') + v, { align: 'left' }); }
@@ -693,23 +1029,25 @@
       ws[encode(r, 0)] = textCell(it.code || '', '  ');
       ws[encode(r, 1)] = textCell(it.name, '  ');
       ws[encode(r, 2)] = textCell(it.unit || '');
-      ws[encode(r, 3)] = numCell(it.unitPrice);
-      // 工程量优先使用公式引用（如 '规划指标'!B3），回退到数值
+      // 成本指标可跨表引用（如分栋厂房引用加权平均造价表），回退到数值
+      ws[encode(r, 3)] = it.unitPriceFormula ? numCell(it.unitPrice, it.unitPriceFormula) : numCell(it.unitPrice);
+      // 工程量优先使用公式引用（如 '规划指标'!B3），回退到数值；带公式时写 raw 缓存保留完整精度
       if (it.quantityFormula) {
-        ws[encode(r, 4)] = numCell(it.quantity, it.quantityFormula);
+        ws[encode(r, 4)] = numCell(it.quantity, it.quantityFormula, true);
       } else {
         ws[encode(r, 4)] = numCell(it.quantity);
       }
       const unit = it.unit || '';
       const hasDivide = unit.includes('元/m²') || unit.includes('元/m') || unit.includes('元/KVA');
-      const formula = hasDivide ? `${col(3)}${r + 1}*${col(4)}${r + 1}/10000` : `${col(3)}${r + 1}*${col(4)}${r + 1}`;
+      // 金额类明细行包 ROUND(...,2)，与 JS 先 round2 再求和口径一致，避免 Excel 重算后小计漂移
+      const formula = hasDivide ? `ROUND(${col(3)}${r + 1}*${col(4)}${r + 1}/10000,2)` : `ROUND(${col(3)}${r + 1}*${col(4)}${r + 1},2)`;
       // 若 item 自定义了成本公式（如增值税），优先使用
       let costFormula;
       if (it.vatDE) {
-        // 增值税专用：成本 = 税率 × 不含税工程量
+        // 增值税专用：成本 = 税率 × 不含税工程量（D×E 联动结构保持不包 ROUND）
         costFormula = `${col(3)}${r + 1}*${col(4)}${r + 1}`;
       } else {
-        costFormula = it.costFormula || formula;
+        costFormula = it.costFormula ? `ROUND(${it.costFormula},2)` : formula;
       }
       ws[encode(r, costCol)] = moneyCell(it.cost, costFormula);
 
@@ -831,6 +1169,7 @@
       typeSum[it.type].cost += round2(it.area * it.price / 10000);
     });
     // 写入加权平均单价：有面积的子形态行显示该类型加权平均单价，面积为0的留空
+    const weightedAvgCellByType = {}; // 各产品类型首个加权平均单价单元格（供完整版成本指标引用）
     costPriceRows.forEach((it, idx) => {
       const r = idx + 2;
       const range = typeRange[it.type];
@@ -839,6 +1178,7 @@
         const avg = sum.area > 0 ? round2(sum.cost * 10000 / sum.area) : 0;
         const formula = `IF(ROUND(SUM(C${range.first}:C${range.last}),2)=0,0,ROUND(SUMPRODUCT(C${range.first}:C${range.last},D${range.first}:D${range.last})/ROUND(SUM(C${range.first}:C${range.last}),2),2))`;
         ws0_5[encode(r, 5)] = numCell(avg, formula);
+        if (!weightedAvgCellByType[it.type]) weightedAvgCellByType[it.type] = 'F' + (r + 1);
       } else {
         ws0_5[encode(r, 5)] = textCell('—');
       }
@@ -946,7 +1286,12 @@
     ws[encode(row, 1)] = subtotalCell('  3.4 单体建安成本');
     for (let c = 2; c <= 8; c++) ws[encode(row, c)] = cell('', { fill: STYLE.subtotalFill });
     const buildStart = row + 1;
-    row = addItems(ws, buildStart, fullEstimate.building.items, 5, 4, 3);
+    // 分栋厂房成本指标改为公式引用「加权平均造价表」对应加权平均单价单元格（缓存值不变）
+    const buildingItemsXlsx = fullEstimate.building.items.map(it =>
+      it.name === '分栋厂房' && weightedAvgCellByType['分栋厂房']
+        ? Object.assign({}, it, { unitPriceFormula: `'加权平均造价表'!${weightedAvgCellByType['分栋厂房']}` })
+        : it);
+    row = addItems(ws, buildStart, buildingItemsXlsx, 5, 4, 3);
     ws[encode(row, 1)] = subtotalCell('    小计');
     ws[encode(row, 5)] = subtotalCell(fullEstimate.building.total, `ROUND(SUM(${col(5)}${buildStart + 1}:${col(5)}${row}),2)`);
     ws[encode(row, 6)] = numCell(round2(fullEstimate.building.total * 10000 / totalBuildingArea), `${col(5)}${row + 1}/${ws._totalBuildingAreaRef}*10000`);
@@ -1138,7 +1483,7 @@
     const financialRow = planCost1.financialRow;
     const saleRows = [
       { name: '可售面积', value: staticResult.metrics.soldAreaTotal, unit: 'm²', desc: '', f: `'租售面积分配'!B${saleAllocTotalRow}` },
-      { name: '加权平均售价', value: staticResult.sale.weightedPrice, unit: '万元/㎡', desc: '', f: `'租售面积分配'!E${saleAllocTotalRow}` },
+      { name: '加权平均售价', value: staticResult.sale.rawWeightedPrice, unit: '万元/㎡', desc: '', f: `'租售面积分配'!E${saleAllocTotalRow}`, raw: true },
       { name: '不含税售价', value: round2(staticResult.sale.weightedPrice / 1.09), unit: '万元/㎡', desc: '售价/1.09', f: `ROUND(B${ssr + 1}/1.09,2)` },
       { name: '销售收入', value: staticResult.sale.totalRevenue, unit: '万元', desc: '可售面积×加权平均售价', f: `'租售面积分配'!D${saleAllocTotalRow}` },
       { name: '减：土地成本', value: staticResult.sale.landCost, unit: '万元', desc: '', f: `ROUND(B${ssr}*$B$${costLandTaxRow}/10000,2)` },
@@ -1157,7 +1502,7 @@
       const r = saleStartIdx + idx;
       const isTotal = row.name === '净利润';
       ws1[encode(r, 0)] = isTotal ? totalCell(row.name) : textCell(row.name);
-      ws1[encode(r, 1)] = isTotal ? totalCell(row.value, row.f) : moneyCell(row.value, row.f);
+      ws1[encode(r, 1)] = isTotal ? totalCell(row.value, row.f) : moneyCell(row.value, row.f, row.raw);
       ws1[encode(r, 2)] = textCell(row.unit);
       ws1[encode(r, 3)] = textCell(row.desc);
     });
@@ -1181,7 +1526,7 @@
     const financialRow2 = planCost2.financialRow;
     const rentRows = [
       { name: '可租面积', value: staticResult.metrics.rentableArea, unit: 'm²', desc: '', f: `'租售面积分配'!B${rentAllocTotalRow}` },
-      { name: '加权平均租金', value: staticResult.rent.weightedRent, unit: '元/天/㎡', desc: '', f: `'租售面积分配'!E${rentAllocTotalRow}` },
+      { name: '加权平均租金', value: staticResult.rent.rawWeightedRent, unit: '元/天/㎡', desc: '', f: `'租售面积分配'!E${rentAllocTotalRow}`, raw: true },
       { name: '月租金', value: staticResult.rent.monthlyRent, unit: '元/月/㎡', desc: '日租金×30', f: `ROUND(B${rsr + 1}*30,2)` },
       { name: '年租金收入', value: staticResult.rent.yearlyRent, unit: '元/年/㎡', desc: '年租金=加权平均租金×360', f: `ROUND(B${rsr + 1}*360,2)` },
       { name: '出租率', value: staticResult.rent.occupancyRate, unit: '%', desc: '', f: null },
@@ -1199,7 +1544,7 @@
       const r = rentStartIdx + idx;
       const isKey = row.name === '净租赁收入' || row.name === 'NOI';
       ws2[encode(r, 0)] = isKey ? totalCell(row.name) : textCell(row.name);
-      ws2[encode(r, 1)] = isKey ? totalCell(row.value, row.f) : moneyCell(row.value, row.f);
+      ws2[encode(r, 1)] = isKey ? totalCell(row.value, row.f) : moneyCell(row.value, row.f, row.raw);
       ws2[encode(r, 2)] = textCell(row.unit);
       ws2[encode(r, 3)] = textCell(row.desc);
     });
@@ -1231,7 +1576,7 @@
     ws3[encode(saleTotalIdx, 1)] = totalCell(staticResult.metrics.soldAreaTotal, `ROUND(SUM(B4:B${saleDataLastRowNum}),2)`);
     ws3[encode(saleTotalIdx, 2)] = totalCell('—');
     ws3[encode(saleTotalIdx, 3)] = totalCell(staticResult.sale.totalRevenue, `ROUND(SUM(D4:D${saleDataLastRowNum}),2)`);
-    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.weightedPrice, `IF(B${saleTotalRowNum}=0,0,ROUND(D${saleTotalRowNum}/B${saleTotalRowNum},6))`);
+    ws3[encode(saleTotalIdx, 4)] = totalCell(staticResult.sale.rawWeightedPrice, `IF(B${saleTotalRowNum}=0,0,ROUND(D${saleTotalRowNum}/B${saleTotalRowNum},6))`, true);
 
     const rentAllocStartIdx = saleTotalIdx + 2; // 0-based title
     ws3[encode(rentAllocStartIdx, 0)] = cell('二、租赁面积分配', { bold: true, sz: 12 });
@@ -1257,7 +1602,7 @@
     ws3[encode(rentTotalIdx, 1)] = totalCell(staticResult.metrics.rentedAreaTotal, `ROUND(SUM(B${rentDetailStartRowNum}:B${rentDataLastRowNum}),2)`);
     ws3[encode(rentTotalIdx, 2)] = totalCell('—');
     ws3[encode(rentTotalIdx, 3)] = totalCell(grossAnnualRentTotal, `ROUND(SUM(D${rentDetailStartRowNum}:D${rentDataLastRowNum}),2)`);
-    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.weightedRent, `IF(B${rentTotalRowNum}=0,0,ROUND(SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum},6))`);
+    ws3[encode(rentTotalIdx, 4)] = totalCell(staticResult.rent.rawWeightedRent, `IF(B${rentTotalRowNum}=0,0,ROUND(SUMPRODUCT(B${rentDetailStartRowNum}:B${rentDataLastRowNum},C${rentDetailStartRowNum}:C${rentDataLastRowNum})/B${rentTotalRowNum},6))`, true);
 
     ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentTotalIdx, c: 5 } });
     setWsMeta(ws3, [16, 16, 16, 18, 16, 4]);
@@ -1277,7 +1622,9 @@
     const lvatDevExpense = round2((s.landCost + s.constructionCost) * 0.1);
     const lvatOtherDeduction = round2((s.landCost + s.constructionCost) * 0.2);
     const lvatTaxRate = s.totalRevenue > 0 ? round2(s.landValueAddedTax / s.totalRevenue * 100) : 0;
-    const lvatTaxPerArea = s.soldAreaTotal > 0 ? round2(s.landValueAddedTax / s.soldAreaTotal * 10000) : 0;
+    // 可售面积在 staticResult.metrics 上（sale 对象无 soldAreaTotal 字段，误读会导致缓存恒为 0）
+    const lvatSoldArea = staticResult.metrics.soldAreaTotal;
+    const lvatTaxPerArea = lvatSoldArea > 0 ? round2(s.landValueAddedTax / lvatSoldArea * 10000) : 0;
     const landTaxRows = [
       { no: '1', name: '转让房地产收入总额', value: s.totalRevenue, f: landTaxSaleRevenueCell, note: '=销售测算.销售收入' },
       { no: '2', name: '扣除项目金额合计', value: s.lvatDeductionTotal, f: 'ROUND(C5+C6+C7+C8+C9,2)', note: '=①+②+③+④+⑤' },
@@ -1334,6 +1681,237 @@
     XLSX.utils.book_append_sheet(wb, ws5, '综合汇总');
 
     XLSX.writeFile(wb, fileName || '静态投资分析表.xlsx');
+  };
+
+
+  // ==================== 动态投资分析 Excel 导出 ====================
+  // Sheet1 多年现金流表：顶部参数区（黄色底纹 = 可编辑输入格，蓝色 = 派生公式格）+ 按年公式链 + 内置 NPV()/IRR()；
+  // Sheet2 敏感性分析（6 变量 × 4 档全量）；Sheet3 关键指标汇总。所有带公式单元格写入 JS 预计算缓存值。
+  NS.downloadDynamicAnalysisExcel = function (dynamicResult, fileName) {
+    if (typeof XLSX === 'undefined') { alert('Excel 导出库未加载，请检查网络。'); return; }
+    if (!dynamicResult || !dynamicResult.years || !dynamicResult.years.length) { alert('请先完成动态投资分析计算'); return; }
+    const wb = XLSX.utils.book_new();
+    const d = dynamicResult;
+    const b = d.base;
+    const years = d.years;
+    const N = years.length;
+    const INPUT_FILL = 'FFF7E6';   // 可编辑输入格底色
+    const CALC_FILL = 'E0F2FE';    // 派生公式格底色
+
+    function inputCell(v, numFmt) { return cell(v, { fill: INPUT_FILL, numFmt: numFmt || '#,##0.00', align: 'right', raw: true }); }
+    function inputPctCell(v) { return inputCell(v, '0.00"%"'); }
+    function inputIntCell(v) { return inputCell(v, '0'); }
+    function calcParamCell(v, f, numFmt) { return cell(v, { f: f, fill: CALC_FILL, numFmt: numFmt || '#,##0.00', align: 'right' }); }
+    function pctResultCell(v, f) { // v 为小数（0.1234 表示 12.34%）
+      if (v == null) return textCell('—');
+      return cell(Math.round(v * 10000) / 10000, { f: f || undefined, numFmt: '0.00%', align: 'right', raw: true });
+    }
+    function factorCell(v, f) { return cell(v, { f: f, numFmt: '0.000000', align: 'right', raw: true }); }
+
+    // ---------- Sheet 1：多年现金流表 ----------
+    const ws1 = {};
+    const merges1 = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 24 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 24 } }
+    ];
+    ws1['!merge'] = merges1;
+    ws1[encode(0, 0)] = cell('多年现金流表（动态投资分析）', { bold: true, sz: 14 });
+    ws1[encode(1, 0)] = cell('黄色底纹为可编辑输入格，蓝色为派生公式格，修改参数区后现金流及指标自动重算（敏感性分析 sheet 为生成时快照，不联动更新）；比率按百分比填（如 8 表示 8%）；金额单位万元、面积单位㎡。', { fontColor: '6B7280' });
+
+    // 参数区：左侧 A:B 合并标签 + C 值 + D 单位；右侧 E:F 合并标签 + G 值 + H 单位
+    const financingRatioPct = b.totalInvestment > 0 ? round2(b.loanCap / b.totalInvestment * 100) : 0;
+    const leftParams = [
+      { name: '总投资', value: b.totalInvestment, unit: '万元' },
+      { name: '融资占比', value: financingRatioPct, unit: '%', pct: true },
+      { name: '自有资金', value: b.ownFunds, unit: '万元', f: 'ROUND(C3*(1-C4/100),2)' },
+      { name: '贷款利率', value: b.financingRate, unit: '%', pct: true },
+      { name: '折现率', value: d.inputs.discountRate, unit: '%', pct: true },
+      { name: '建设期年数', value: d.inputs.constructionYears, unit: '年', int: true },
+      { name: '运营期年数', value: d.inputs.operationYears, unit: '年', int: true },
+      { name: '预售开关（1=开，0=关）', value: d.inputs.presaleEnabled ? 1 : 0, unit: '—', int: true },
+      { name: '预售第1年去化比例', value: d.inputs.presalePctYear1, unit: '%', pct: true },
+      { name: '预售第2年去化比例', value: d.inputs.presalePctYear2, unit: '%', pct: true },
+      { name: '清算年序号（空=未清算）', value: b.saleFinishYear != null ? b.saleFinishYear : '', unit: 't', int: true }
+    ];
+    const rightParams = [
+      { name: '加权平均售价', value: b.weightedSalePrice, unit: '万元/㎡' },
+      { name: '售价年增长率', value: d.inputs.saleGrowthRate, unit: '%', pct: true },
+      { name: '加权平均租金', value: b.weightedRent, unit: '元/天/㎡' },
+      { name: '租金年增长率', value: d.inputs.rentGrowthRate, unit: '%', pct: true },
+      { name: '销售去化速度', value: d.inputs.saleSpeed, unit: '万㎡/年' },
+      { name: '租赁去化速度', value: d.inputs.rentSpeed, unit: '万㎡/年' },
+      { name: '可售面积', value: b.saleableArea, unit: '㎡' },
+      { name: '可租面积', value: b.rentableArea, unit: '㎡' },
+      { name: '稳定出租率', value: d.inputs.occupancyRate, unit: '%', pct: true },
+      { name: '满租面积上限', value: b.rentCapArea, unit: '㎡', f: 'ROUND(G10*G11/100,2)' },
+      { name: '营销费率', value: b.marketingRate, unit: '%', pct: true },
+      { name: '管理费率', value: b.managementRate, unit: '%', pct: true },
+      { name: '租赁运营费率', value: b.rentalOpRate, unit: '%', pct: true },
+      { name: '土增税清算额', value: b.lvatSettlement, unit: '万元' },
+      { name: '所得税清算额', value: b.incomeTaxSettlement, unit: '万元' }
+    ];
+    leftParams.forEach(function (p, i) {
+      const r = 2 + i; // 0-based；1-based 行号 = r+1（3..13）
+      merges1.push({ s: { r: r, c: 0 }, e: { r: r, c: 1 } });
+      ws1[encode(r, 0)] = cell(p.name, { bold: true, fill: 'F3F4F6' });
+      ws1[encode(r, 1)] = cell('', { fill: 'F3F4F6' });
+      ws1[encode(r, 2)] = p.f ? calcParamCell(p.value, p.f) : (p.int ? inputIntCell(p.value) : (p.pct ? inputPctCell(p.value) : inputCell(p.value)));
+      ws1[encode(r, 3)] = textCell(p.unit);
+    });
+    rightParams.forEach(function (p, i) {
+      const r = 2 + i; // 0-based；1-based 行号 = r+1（3..17）
+      merges1.push({ s: { r: r, c: 4 }, e: { r: r, c: 5 } });
+      ws1[encode(r, 4)] = cell(p.name, { bold: true, fill: 'F3F4F6' });
+      ws1[encode(r, 5)] = cell('', { fill: 'F3F4F6' });
+      ws1[encode(r, 6)] = p.f ? calcParamCell(p.value, p.f) : (p.int ? inputIntCell(p.value) : (p.pct ? inputPctCell(p.value) : inputCell(p.value)));
+      ws1[encode(r, 7)] = textCell(p.unit);
+    });
+
+    // 按年全量行（t=0 起，按 建设期年数+运营期年数 预生成；超出参数区所设区间时公式显示 0）
+    const headerRow0 = 18;              // 0-based，1-based 第 19 行
+    const firstDataRowNum = 20;         // 1-based 首行数据行
+    const lastDataRowNum = 19 + N;      // 1-based 末行数据行
+    const headers = ['年份t', '阶段', '销售去化(㎡)', '销售累计(㎡)', '租赁去化(㎡)', '租赁累计(㎡)',
+      '销售回款', '租金收入', '销售税费', '运营税费', '运营成本', '清算税费', '可用资金',
+      '投资支出', '自有出资', '贷款提款', '利息', '还本', '剩余本金', '股东可分配',
+      '项目净现金流', '自有资金现金流', '折现系数', '折现现金流', '累计折现现金流'];
+    headers.forEach(function (h, c) { ws1[encode(headerRow0, c)] = headerCell(h); });
+    const PHASE_ZH = { construction: '建设期', mixed: '混合期', operation: '运营期' };
+    years.forEach(function (y, i) {
+      const r0 = headerRow0 + 1 + i;
+      const R = r0 + 1; // 1-based
+      const t = y.t;
+      const prevD = i === 0 ? '0' : ('D' + (R - 1));
+      const prevF = i === 0 ? '0' : ('F' + (R - 1));
+      const prevS = i === 0 ? '0' : ('S' + (R - 1));
+      const prevY = i === 0 ? '0' : ('Y' + (R - 1));
+      const prevPSum = i === 0 ? '0' : ('SUM(P$' + firstDataRowNum + ':P' + (R - 1) + ')');
+      const pctRef = t === 0 ? '$C$11' : (t === 1 ? '$C$12' : '0');
+      ws1[encode(r0, 0)] = cell(t, { numFmt: '0', align: 'right' });
+      ws1[encode(r0, 1)] = textCell(PHASE_ZH[y.phase] || y.phase);
+      // 去化：MIN(去化速度, 上限 − 累计)；建设期开预售按 比例 × 总量
+      ws1[encode(r0, 2)] = numCell(y.saleDepleteArea, 'IF($A' + R + '>=$C$8+$C$9,0,IF($A' + R + '<$C$8,IF($C$10=1,ROUND(MIN(' + pctRef + '*$G$9/100,MAX($G$9-' + prevD + ',0)),2),0),ROUND(MIN($G$7*10000,MAX($G$9-' + prevD + ',0)),2)))');
+      ws1[encode(r0, 3)] = numCell(y.saleCumArea, 'ROUND(' + prevD + '+C' + R + ',2)');
+      ws1[encode(r0, 4)] = numCell(y.rentDepleteArea, 'IF($A' + R + '>=$C$8+$C$9,0,IF($A' + R + '<$C$8,IF($C$10=1,ROUND(MIN(' + pctRef + '*$G$10/100,MAX($G$12-' + prevF + ',0)),2),0),ROUND(MIN($G$8*10000,MAX($G$12-' + prevF + ',0)),2)))');
+      ws1[encode(r0, 5)] = numCell(y.rentCumArea, 'ROUND(' + prevF + '+E' + R + ',2)');
+      // 收入与税费（租金按当年末累计已租面积 × 日租金 × 360 计提，建设期不计）
+      ws1[encode(r0, 6)] = moneyCell(y.saleRevenue, 'ROUND(C' + R + '*$G$3*(1+$G$4/100)^' + t + ',2)');
+      ws1[encode(r0, 7)] = moneyCell(y.rentIncome, 'IF($A' + R + '<$C$8,0,ROUND(F' + R + '*$G$5*360*(1+$G$6/100)^' + t + '/10000,2))');
+      ws1[encode(r0, 8)] = moneyCell(y.saleTax, 'ROUND(G' + R + '/1.09*0.006+G' + R + '*$G$13/100+G' + R + '*$G$14/100,2)');
+      ws1[encode(r0, 9)] = moneyCell(y.rentTax, 'IF($A' + R + '<$C$8,0,ROUND(H' + R + '*0.006+H' + R + '*0.12+F' + R + '*6/10000,2))');
+      ws1[encode(r0, 10)] = moneyCell(y.opCost, 'ROUND(H' + R + '*$G$15/100,2)');
+      ws1[encode(r0, 11)] = moneyCell(y.settlementTax, 'IF($C$13="",0,IF($A' + R + '=$C$13,ROUND($G$16+$G$17,2),0))');
+      ws1[encode(r0, 12)] = moneyCell(y.availableFunds, 'ROUND(G' + R + '+H' + R + '-I' + R + '-J' + R + '-K' + R + '-L' + R + ',2)');
+      // 建设期投入与提款（末年轧差；预售净回款优先替代贷款提款，累计不超过贷款上限）
+      ws1[encode(r0, 13)] = moneyCell(y.investOutflow, 'IF($A' + R + '<$C$8,IF($A' + R + '=$C$8-1,ROUND($C$3-ROUND($C$3/$C$8,2)*($C$8-1),2),ROUND($C$3/$C$8,2)),0)');
+      ws1[encode(r0, 14)] = moneyCell(y.ownFundOutflow, 'IF($A' + R + '<$C$8,IF($A' + R + '=$C$8-1,ROUND($C$5-ROUND($C$5/$C$8,2)*($C$8-1),2),ROUND($C$5/$C$8,2)),0)');
+      ws1[encode(r0, 15)] = moneyCell(y.loanDrawdown, 'IF($A' + R + '<$C$8,ROUND(MIN(MAX(N' + R + '-O' + R + '-M' + R + ',0),MAX(ROUND($C$3*$C$4/100,2)-' + prevPSum + ',0)),2),0)');
+      // 运营期还本付息与分配
+      ws1[encode(r0, 16)] = moneyCell(y.interest, 'IF($A' + R + '<$C$8,0,ROUND(' + prevS + '*$C$6/100,2))');
+      ws1[encode(r0, 17)] = moneyCell(y.principalRepay, 'IF($A' + R + '<$C$8,0,ROUND(MIN(MAX(M' + R + '-Q' + R + ',0),' + prevS + '),2))');
+      ws1[encode(r0, 18)] = moneyCell(y.remainingPrincipal, 'IF($A' + R + '<$C$8,ROUND(' + prevS + '+P' + R + ',2),ROUND(' + prevS + '-R' + R + ',2))');
+      ws1[encode(r0, 19)] = moneyCell(y.equityDistributable, 'IF($A' + R + '<$C$8,0,ROUND(M' + R + '-Q' + R + '-R' + R + ',2))');
+      ws1[encode(r0, 20)] = moneyCell(y.projectNetCF, 'IF($A' + R + '<$C$8,ROUND(M' + R + '-N' + R + ',2),ROUND(M' + R + ',2))');
+      ws1[encode(r0, 21)] = moneyCell(y.equityCF, 'IF($A' + R + '<$C$8,ROUND(-O' + R + ',2),ROUND(T' + R + ',2))');
+      ws1[encode(r0, 22)] = factorCell(y.discountFactor, 'ROUND(1/(1+$C$7/100)^' + t + ',6)');
+      ws1[encode(r0, 23)] = moneyCell(y.discountedCF, 'ROUND(U' + R + '*W' + R + ',2)');
+      ws1[encode(r0, 24)] = moneyCell(y.cumDiscountedCF, 'ROUND(' + prevY + '+X' + R + ',2)');
+    });
+
+    // 指标行：NPV 直接对 X 列（逐年 ROUND(...,2) 折现现金流）求和并包 ROUND，公式口径与 JS ROUND 链缓存口径一致；
+    // IRR 用内置 IRR()；均写入 JS 预计算缓存值
+    const npvRowNum = lastDataRowNum + 2;
+    const irrRowNum = npvRowNum + 1;
+    const equityIrrRowNum = npvRowNum + 2;
+    const paybackRowNum = npvRowNum + 3;
+    ws1[encode(npvRowNum - 1, 0)] = totalCell('项目NPV（万元）');
+    ws1[encode(npvRowNum - 1, 1)] = moneyCell(d.metrics.npv, 'ROUND(SUM(X' + firstDataRowNum + ':X' + lastDataRowNum + '),2)');
+    ws1[encode(irrRowNum - 1, 0)] = totalCell('项目IRR');
+    ws1[encode(irrRowNum - 1, 1)] = pctResultCell(d.metrics.irr != null ? d.metrics.irr / 100 : null, 'IRR(U' + firstDataRowNum + ':U' + lastDataRowNum + ')');
+    ws1[encode(equityIrrRowNum - 1, 0)] = totalCell('自有资金IRR');
+    ws1[encode(equityIrrRowNum - 1, 1)] = pctResultCell(d.metrics.equityIrr != null ? d.metrics.equityIrr / 100 : null, 'IRR(V' + firstDataRowNum + ':V' + lastDataRowNum + ')');
+    ws1[encode(paybackRowNum - 1, 0)] = totalCell('动态投资回收期（年）');
+    // 回收期公式推导：MATCH 首个累计折现现金流（Y 列）>=0 的数据行（位置 k 对应年份 t=k-1），
+    // 线性插值 = (k-2) + |上年累计| / (|上年累计| + 当年累计)，与 dynamicPayback 口径一致；
+    // Y 首行即 >=0 时回收期为 0；全期为负（COUNTIF=0）返回“—”。建设期累计为负、0 值行不影响 MATCH 首个 >=0 行。
+    const yCumRange = 'Y' + firstDataRowNum + ':Y' + lastDataRowNum;
+    const firstPosMatch = 'MATCH(TRUE,INDEX(' + yCumRange + '>=0,0),0)';
+    const paybackFormula = 'IF(COUNTIF(' + yCumRange + ',">=0")=0,"—",IF(Y' + firstDataRowNum + '>=0,0,ROUND(' + firstPosMatch + '-2+ABS(INDEX(' + yCumRange + ',' + firstPosMatch + '-1))/(ABS(INDEX(' + yCumRange + ',' + firstPosMatch + '-1))+INDEX(' + yCumRange + ',' + firstPosMatch + ')),1)))';
+    ws1[encode(paybackRowNum - 1, 1)] = numCell(d.metrics.paybackPeriod != null ? d.metrics.paybackPeriod : '—', paybackFormula);
+
+    ws1['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: paybackRowNum - 1, c: 24 } });
+    setWsMeta(ws1, [18, 12, 13, 13, 13, 13, 13, 13, 12, 12, 12, 12, 13, 13, 13, 13, 11, 11, 13, 13, 14, 14, 10, 13, 14]);
+    XLSX.utils.book_append_sheet(wb, ws1, '多年现金流表');
+
+    // ---------- Sheet 2：敏感性分析（6 变量 × 4 档全量，JS 重跑模型的缓存值） ----------
+    const ws2 = {};
+    ws2['!merge'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }
+    ];
+    ws2[encode(0, 0)] = cell('敏感性分析（单变量扰动重算）', { bold: true, sz: 14 });
+    const baseNote = '基准情形：NPV ' + fmtNum(d.metrics.npv) + ' 万元，项目IRR ' + (d.metrics.irr != null ? fmtNum(d.metrics.irr) + '%' : '—') +
+      '，自有资金IRR ' + (d.metrics.equityIrr != null ? fmtNum(d.metrics.equityIrr) + '%' : '—') +
+      '，动态回收期 ' + (d.metrics.paybackPeriod != null ? fmtNum(d.metrics.paybackPeriod) + ' 年' : '—') +
+      '。注：以下各行扰动结果基于生成时参数由 JS 重跑模型得出，修改「多年现金流表」参数区不会联动更新。';
+    ws2[encode(1, 0)] = cell(baseNote, { fontColor: '6B7280' });
+    ['变量', '变动幅度（%）', 'NPV（万元）', '项目IRR（%）', '自有资金IRR（%）', '动态回收期（年）']
+      .forEach(function (h, c) { ws2[encode(2, c)] = headerCell(h); });
+    d.sensitivity.forEach(function (row, i) {
+      const r = 3 + i;
+      ws2[encode(r, 0)] = textCell(row.label);
+      ws2[encode(r, 1)] = numCell(round2(row.delta * 100));
+      ws2[encode(r, 2)] = moneyCell(row.npv);
+      ws2[encode(r, 3)] = row.irr != null ? numCell(row.irr) : textCell('—');
+      ws2[encode(r, 4)] = row.equityIrr != null ? numCell(row.equityIrr) : textCell('—');
+      ws2[encode(r, 5)] = row.paybackPeriod != null ? numCell(row.paybackPeriod) : textCell('—');
+    });
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 3 + d.sensitivity.length - 1, c: 5 } });
+    setWsMeta(ws2, [14, 14, 16, 14, 16, 16]);
+    XLSX.utils.book_append_sheet(wb, ws2, '敏感性分析');
+
+    // ---------- Sheet 3：关键指标汇总 ----------
+    const ws3 = {};
+    ws3['!merge'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
+    ws3[encode(0, 0)] = cell('关键指标汇总', { bold: true, sz: 14 });
+    ['指标', '数值', '单位'].forEach(function (h, c) { ws3[encode(1, c)] = headerCell(h); });
+    const s1 = "'多年现金流表'!";
+    const summaryRows = [
+      { name: '项目NPV', unit: '万元', write: function () { return moneyCell(d.metrics.npv, s1 + 'B' + npvRowNum); } },
+      { name: '项目IRR', unit: '%', write: function () { return pctResultCell(d.metrics.irr != null ? d.metrics.irr / 100 : null, s1 + 'B' + irrRowNum); } },
+      { name: '自有资金IRR', unit: '%', write: function () { return pctResultCell(d.metrics.equityIrr != null ? d.metrics.equityIrr / 100 : null, s1 + 'B' + equityIrrRowNum); } },
+      { name: '动态投资回收期', unit: '年', write: function () { return d.metrics.paybackPeriod != null ? numCell(d.metrics.paybackPeriod, s1 + 'B' + paybackRowNum) : textCell('—'); } },
+      { name: '总投资', unit: '万元', write: function () { return moneyCell(b.totalInvestment, s1 + 'C3'); } },
+      { name: '自有资金', unit: '万元', write: function () { return moneyCell(b.ownFunds, s1 + 'C5'); } },
+      { name: '贷款上限', unit: '万元', write: function () { return moneyCell(b.loanCap, 'ROUND(' + s1 + 'C3*' + s1 + 'C4/100,2)'); } },
+      { name: '实际提款', unit: '万元', write: function () { return moneyCell(b.actualLoan, 'ROUND(SUM(' + s1 + 'P' + firstDataRowNum + ':P' + lastDataRowNum + '),2)'); } },
+      { name: '融资利率', unit: '%', write: function () { return numCell(b.financingRate, s1 + 'C6'); } },
+      { name: '建设期年数', unit: '年', write: function () { return calcParamCell(d.inputs.constructionYears, s1 + 'C8', '0'); } },
+      { name: '运营期年数', unit: '年', write: function () { return calcParamCell(d.inputs.operationYears, s1 + 'C9', '0'); } },
+      { name: '销售完成年（清算年）', unit: 't', write: function () { return b.saleFinishYear != null ? calcParamCell(b.saleFinishYear, s1 + 'C13', '0') : textCell('—'); } },
+      { name: '满租年', unit: 't', write: function () {
+        // 公式推导：MATCH 首个租赁累计（F 列）>= 满租上限（$G$12）的数据行（位置 k 对应年份 t=k-1）；
+        // 上限为 0（无可租面积）或始终未满租（COUNTIF=0）时返回“—”，与 JS rentFullYear 口径一致
+        if (b.rentFullYear == null) return textCell('—');
+        const fCumRange = s1 + 'F' + firstDataRowNum + ':F' + lastDataRowNum;
+        const capRef = s1 + '$G$12';
+        const fullMatch = 'MATCH(TRUE,INDEX(' + fCumRange + '>=' + capRef + ',0),0)';
+        return numCell(b.rentFullYear, 'IF(' + capRef + '<=0,"—",IF(COUNTIF(' + fCumRange + ',">="&' + capRef + ')=0,"—",' + fullMatch + '-1))');
+      } },
+      { name: '土增税清算额', unit: '万元', write: function () { return moneyCell(b.lvatSettlement, s1 + 'G16'); } },
+      { name: '所得税清算额', unit: '万元', write: function () { return moneyCell(b.incomeTaxSettlement, s1 + 'G17'); } }
+    ];
+    summaryRows.forEach(function (row, i) {
+      const r = 2 + i;
+      ws3[encode(r, 0)] = textCell(row.name);
+      ws3[encode(r, 1)] = row.write();
+      ws3[encode(r, 2)] = textCell(row.unit);
+    });
+    ws3['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summaryRows.length + 1, c: 2 } });
+    setWsMeta(ws3, [24, 16, 12]);
+    XLSX.utils.book_append_sheet(wb, ws3, '关键指标汇总');
+
+    XLSX.writeFile(wb, fileName || '动态投资分析表.xlsx');
   };
 
 })(window);

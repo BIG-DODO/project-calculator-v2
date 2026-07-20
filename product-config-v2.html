@@ -3353,7 +3353,7 @@
           </div>
           <table class="data-table">
             <thead><tr><th>产品类型</th><th>出租面积（m²）</th><th>租金（元/天/m²）</th><th>年租金收入（万元）</th></tr></thead>
-            <tbody>${rentRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.rentedAreaTotal, 2)}</td><td class="num">${fmtNum(result.rent.weightedRent, 2)}</td><td class="num">${fmtNum(result.rent.netRentalIncome, 2)}</td></tr></tbody>
+            <tbody>${rentRows}<tr style="font-weight:600;"><td>合计</td><td class="num">${fmtNum(result.metrics.rentedAreaTotal, 2)}</td><td class="num">${fmtNum(result.rent.weightedRent, 2)}</td><td class="num">${fmtNum((result.rent.details || []).reduce((s, d) => s + (d.annualRevenue || 0), 0), 2)}</td></tr></tbody>
           </table>
         </div>
         <div class="card">
@@ -3377,24 +3377,358 @@
       FinancialModules.downloadStaticAnalysisExcel(window.staticAnalysisResult, '静态投资分析表.xlsx');
     }
 
-    // ==================== 动态投资分析视图（开发中） ====================
-    function renderDynamicAnalysis() {
-      const container = document.getElementById('dynamic-analysis-content');
-      if (!container) return;
-      container.innerHTML = `
+    // ==================== 动态投资分析视图 ====================
+    window.dynamicAnalysisResult = null;
+    window.dynamicAnalysisInputs = null;
+    let dynamicCfChart = null;
+    let dynamicPresaleExpanded = false;
+
+    const DYNAMIC_SPEED_OPTIONS = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0];
+    const DYNAMIC_PHASE_LABELS = { construction: '建设期', mixed: '销售+运营', operation: '运营期' };
+    const DYNAMIC_KEY_YEARS = [0, 1, 2, 5, 10, 20];
+    const DYNAMIC_SENSITIVITY_VARS = ['salePrice', 'rentPrice', 'constructionCost'];
+
+    window.addEventListener('resize', () => { if (dynamicCfChart) dynamicCfChart.resize(); });
+
+    function dynamicPrereqHtml(message) {
+      return `
         <div class="card" style="text-align:center;padding:60px 40px;">
-          <div style="font-size:3rem;margin-bottom:16px;">🚧</div>
+          <div style="font-size:3rem;margin-bottom:16px;">⚠️</div>
           <h3 style="margin-bottom:8px;">动态投资分析</h3>
-          <p style="color:var(--neutral-400);">该模块正在开发中，敬请期待。</p>
+          <p style="color:var(--neutral-400);">${message}</p>
         </div>
       `;
     }
 
-    function downloadDynamicAnalysis() {
-      if (!window.staticAnalysisResult) {
-        alert('请先完成静态投资分析'); return;
+    function toggleDynamicPresale() {
+      dynamicPresaleExpanded = !dynamicPresaleExpanded;
+      const body = document.getElementById('dynamic-presale-body');
+      const arrow = document.getElementById('dynamic-presale-arrow');
+      if (body) body.style.display = dynamicPresaleExpanded ? '' : 'none';
+      if (arrow) arrow.textContent = dynamicPresaleExpanded ? '▾' : '▸';
+    }
+
+    function renderDynamicAnalysis() {
+      const container = document.getElementById('dynamic-analysis-content');
+      if (!container) return;
+      if (!window.investmentEstimateResult) {
+        container.innerHTML = dynamicPrereqHtml('请先进行投资估算');
+        return;
       }
-      alert('动态投资分析表下载功能开发中...');
+      if (!window.staticAnalysisResult) {
+        container.innerHTML = dynamicPrereqHtml('请先进行静态投资分析');
+        return;
+      }
+
+      const saved = window.dynamicAnalysisInputs || {};
+      const staticInputs = window.staticAnalysisResult.inputs || {};
+      const discountRate = saved.discountRate != null ? saved.discountRate : 8;
+      const operationYears = saved.operationYears != null ? saved.operationYears : 20;
+      const rentGrowthRate = saved.rentGrowthRate != null ? saved.rentGrowthRate : 2;
+      const saleGrowthRate = saved.saleGrowthRate != null ? saved.saleGrowthRate : 0;
+      const saleSpeed = saved.saleSpeed != null ? saved.saleSpeed : 1.5;
+      const rentSpeed = saved.rentSpeed != null ? saved.rentSpeed : 1.5;
+      const occupancyRate = saved.occupancyRate != null ? saved.occupancyRate : (staticInputs.occupancyRate != null ? staticInputs.occupancyRate : 90);
+      const presaleEnabled = saved.presaleEnabled != null ? !!saved.presaleEnabled : false;
+      const presalePctYear1 = saved.presalePctYear1 != null ? saved.presalePctYear1 : 0;
+      const presalePctYear2 = saved.presalePctYear2 != null ? saved.presalePctYear2 : 30;
+
+      // 融资参数：从投资估算结果只读展示
+      const inv = window.investmentEstimateResult;
+      const invInputs = inv.inputs || {};
+      const totalInvestment = inv.summary ? inv.summary.totalInvestment : 0;
+      const financingRate = invInputs.financingRate != null ? invInputs.financingRate : 0;
+      const financingRatio = invInputs.financingRatio != null ? invInputs.financingRatio : 0;
+      const constructionYears = FinancialModules.safeNum(invInputs.devPhases, 1) * FinancialModules.safeNum(invInputs.phasePeriod, 2);
+
+      const speedOptions = cur => DYNAMIC_SPEED_OPTIONS.map(v =>
+        `<option value="${v}" ${v === cur ? 'selected' : ''}>${v.toFixed(1)}</option>`).join('');
+      const presaleVisible = dynamicPresaleExpanded || presaleEnabled;
+
+      container.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">基础假设</div>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+            <div class="form-group">
+              <label>折现率（%）</label>
+              <input type="number" id="dyn-discount-rate" class="form-control" value="${discountRate}" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label>运营期（年）</label>
+              <input type="number" id="dyn-operation-years" class="form-control" value="${operationYears}" step="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>租金年增长率（%）</label>
+              <input type="number" id="dyn-rent-growth-rate" class="form-control" value="${rentGrowthRate}" step="0.1">
+            </div>
+            <div class="form-group">
+              <label>售价年增长率（%）</label>
+              <input type="number" id="dyn-sale-growth-rate" class="form-control" value="${saleGrowthRate}" step="0.1">
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">去化设置</div>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+            <div class="form-group">
+              <label>销售去化速度（万㎡/年）</label>
+              <select id="dyn-sale-speed" class="form-control">${speedOptions(saleSpeed)}</select>
+            </div>
+            <div class="form-group">
+              <label>租赁去化速度（万㎡/年）</label>
+              <select id="dyn-rent-speed" class="form-control">${speedOptions(rentSpeed)}</select>
+            </div>
+            <div class="form-group">
+              <label>稳定出租率（%）</label>
+              <input type="number" id="dyn-occupancy-rate" class="form-control" value="${occupancyRate}" step="1" min="0" max="100">
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;" onclick="toggleDynamicPresale()">
+            <span>预售设置（默认不考虑预售）</span>
+            <span id="dynamic-presale-arrow" style="color:var(--neutral-400);">${presaleVisible ? '▾' : '▸'}</span>
+          </div>
+          <div id="dynamic-presale-body" style="display:${presaleVisible ? 'block' : 'none'};">
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+              <div class="form-group">
+                <label>是否开启预售</label>
+                <div style="display:flex;align-items:center;gap:8px;min-height:38px;">
+                  <input type="checkbox" id="dyn-presale-enabled" ${presaleEnabled ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--brand-accent);cursor:pointer;">
+                  <span style="font-size:0.8rem;color:var(--neutral-500);">开启后建设期按比例提前去化</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>建设期第 1 年去化比例（%）</label>
+                <input type="number" id="dyn-presale-pct1" class="form-control" value="${presalePctYear1}" step="1" min="0" max="100">
+              </div>
+              <div class="form-group">
+                <label>建设期第 2 年去化比例（%）</label>
+                <input type="number" id="dyn-presale-pct2" class="form-control" value="${presalePctYear2}" step="1" min="0" max="100">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">融资参数（来自投资估算，只读）</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+            <div class="stat-card"><div class="label">总投资</div><div class="value">${fmtNum(totalInvestment, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">融资利率</div><div class="value">${fmtNum(financingRate, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">融资占比</div><div class="value">${fmtNum(financingRatio, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">建设期年数</div><div class="value">${constructionYears}</div><div class="unit">年</div></div>
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <button class="btn btn-primary" onclick="calculateDynamicAnalysis()">计算动态投资分析</button>
+        </div>
+        <div id="dynamic-result-panel"></div>
+      `;
+      if (window.dynamicAnalysisResult) renderDynamicAnalysisResult(window.dynamicAnalysisResult);
+    }
+
+    function calculateDynamicAnalysis() {
+      if (!window.configResult || !projectData) {
+        alert('请先生成产品配置'); return;
+      }
+      if (!window.investmentEstimateResult) {
+        alert('请先进行投资估算'); return;
+      }
+      if (!window.staticAnalysisResult) {
+        alert('请先进行静态投资分析'); return;
+      }
+      const discountRate = FinancialModules.safeNum(document.getElementById('dyn-discount-rate').value, 8);
+      const operationYears = Math.max(1, Math.round(FinancialModules.safeNum(document.getElementById('dyn-operation-years').value, 20)));
+      const rentGrowthRate = FinancialModules.safeNum(document.getElementById('dyn-rent-growth-rate').value, 2);
+      const saleGrowthRate = FinancialModules.safeNum(document.getElementById('dyn-sale-growth-rate').value, 0);
+      const saleSpeed = FinancialModules.safeNum(document.getElementById('dyn-sale-speed').value, 1.5);
+      const rentSpeed = FinancialModules.safeNum(document.getElementById('dyn-rent-speed').value, 1.5);
+      const occupancyRate = FinancialModules.safeNum(document.getElementById('dyn-occupancy-rate').value, 90);
+      const presaleEnabled = document.getElementById('dyn-presale-enabled').checked;
+      const presalePctYear1 = FinancialModules.safeNum(document.getElementById('dyn-presale-pct1').value, 0);
+      const presalePctYear2 = FinancialModules.safeNum(document.getElementById('dyn-presale-pct2').value, 30);
+      const invInputs = window.investmentEstimateResult.inputs || {};
+      const constructionYears = FinancialModules.safeNum(invInputs.devPhases, 1) * FinancialModules.safeNum(invInputs.phasePeriod, 2);
+
+      const inputs = { discountRate, operationYears, rentGrowthRate, saleGrowthRate, saleSpeed, rentSpeed, occupancyRate, presaleEnabled, presalePctYear1, presalePctYear2, constructionYears };
+      window.dynamicAnalysisInputs = inputs;
+      const result = FinancialModules.calculateDynamicAnalysis(inputs, window.configResult, projectData, window.staticAnalysisResult);
+      if (!result || !result.metrics || !result.years) {
+        alert((result && result.message) || '动态投资分析计算失败');
+        return;
+      }
+      window.dynamicAnalysisResult = result;
+      renderDynamicAnalysisResult(result);
+    }
+
+    function renderDynamicAnalysisResult(result) {
+      const panel = document.getElementById('dynamic-result-panel');
+      if (!panel) return;
+      const m = result.metrics || {};
+      const years = result.years || [];
+      const fmtPct = v => v == null ? '—' : fmtNum(v, 2);
+      const fmtYear = v => v == null ? '—' : fmtNum(v, 1);
+
+      // 关键年份现金流表（t = 0/1/2/5/10/20，取存在的年份）
+      const keyYears = years.filter(y => DYNAMIC_KEY_YEARS.indexOf(y.t) >= 0);
+      const hasShortfall = keyYears.some(y => y.equityShortfall);
+      const yearRows = keyYears.map(y => `
+        <tr${y.equityShortfall ? ' style="color:var(--danger);"' : ''}>
+          <td class="num">${y.t}</td>
+          <td>${DYNAMIC_PHASE_LABELS[y.phase] || y.phase}</td>
+          <td class="num">${fmtNum(y.saleDepleteArea, 2)}</td>
+          <td class="num">${fmtNum(y.rentCumArea, 2)}</td>
+          <td class="num">${fmtNum(y.saleRevenue, 2)}</td>
+          <td class="num">${fmtNum(y.rentIncome, 2)}</td>
+          <td class="num">${fmtNum(y.investOutflow, 2)}</td>
+          <td class="num">${fmtNum(y.interest, 2)}</td>
+          <td class="num">${fmtNum(y.principalRepay, 2)}</td>
+          <td class="num">${fmtNum(y.equityDistributable, 2)}${y.equityShortfall ? '<span style="font-size:0.7rem;">（股东补足）</span>' : ''}</td>
+          <td class="num">${fmtNum(y.projectNetCF, 2)}</td>
+          <td class="num">${fmtNum(y.cumDiscountedCF, 2)}</td>
+        </tr>
+      `).join('');
+
+      // 敏感性分析：仅售价/租金/建安成本 3 组，按 |NPV变化|（±20% 区间跨度）排序
+      const base = m.npv;
+      const sensGroups = DYNAMIC_SENSITIVITY_VARS.map(v => {
+        const rows = (result.sensitivity || []).filter(s => s.variable === v).sort((a, b) => a.delta - b.delta);
+        const label = rows.length ? rows[0].label : v;
+        const low = rows.find(r => r.delta === -0.2);
+        const high = rows.find(r => r.delta === 0.2);
+        const span = (base != null && low && high && low.npv != null && high.npv != null) ? Math.abs(high.npv - low.npv) : 0;
+        return { variable: v, label, rows, low, high, span };
+      }).filter(g => g.rows.length > 0);
+      sensGroups.sort((a, b) => b.span - a.span);
+
+      const sensRows = sensGroups.map(g => g.rows.map(s => `
+        <tr>
+          <td>${s.label}</td>
+          <td class="num">${s.delta > 0 ? '+' : ''}${Math.round(s.delta * 100)}%</td>
+          <td class="num">${s.npv == null ? '—' : fmtNum(s.npv, 2)}</td>
+          <td class="num">${fmtPct(s.irr)}</td>
+          <td class="num">${fmtPct(s.equityIrr)}</td>
+          <td class="num">${fmtYear(s.paybackPeriod)}</td>
+        </tr>
+      `).join('')).join('');
+
+      // 龙卷风图（纯 CSS 条形，以基准 NPV 为中心）
+      let tornadoHtml = '<div style="color:var(--neutral-400);font-size:0.8rem;">暂无敏感性数据</div>';
+      if (base != null && sensGroups.length) {
+        let maxAbs = 0;
+        sensGroups.forEach(g => {
+          [g.low, g.high].forEach(r => {
+            if (r && r.npv != null) maxAbs = Math.max(maxAbs, Math.abs(r.npv - base));
+          });
+        });
+        if (maxAbs > 0) {
+          tornadoHtml = sensGroups.map(g => {
+            const diffs = [g.low, g.high].filter(r => r && r.npv != null).map(r => r.npv - base);
+            if (!diffs.length) return '';
+            const lo = Math.min.apply(null, diffs);
+            const hi = Math.max.apply(null, diffs);
+            const leftPct = lo / maxAbs * 50;
+            const widthPct = Math.max(0.5, (hi - lo) / maxAbs * 50);
+            return `
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div style="width:72px;text-align:right;font-size:0.8rem;color:var(--neutral-600);flex-shrink:0;">${g.label}</div>
+                <div style="flex:1;position:relative;height:22px;background:var(--neutral-50);border-radius:4px;">
+                  <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--neutral-300);"></div>
+                  <div style="position:absolute;top:3px;bottom:3px;left:calc(50% + ${leftPct}%);width:${widthPct}%;background:linear-gradient(90deg,#60A5FA,#1E4E8C);border-radius:3px;"></div>
+                </div>
+                <div style="width:190px;font-size:0.7rem;color:var(--neutral-400);flex-shrink:0;">${fmtNum(base + lo, 0)} ~ ${fmtNum(base + hi, 0)} 万元</div>
+              </div>
+            `;
+          }).join('') + `<div style="font-size:0.7rem;color:var(--neutral-400);margin-top:4px;">以基准 NPV（${fmtNum(base, 2)} 万元）为中心，条形范围为 ±20% 波动下的 NPV 区间，按影响幅度排序。</div>`;
+        }
+      }
+
+      panel.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">核心指标</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+            <div class="stat-card"><div class="label">项目 NPV</div><div class="value">${m.npv == null ? '—' : fmtNum(m.npv, 2)}</div><div class="unit">万元</div></div>
+            <div class="stat-card"><div class="label">项目 IRR</div><div class="value">${m.irr == null ? '—' : fmtNum(m.irr, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">自有资金 IRR</div><div class="value">${m.equityIrr == null ? '—' : fmtNum(m.equityIrr, 2)}</div><div class="unit">%</div></div>
+            <div class="stat-card"><div class="label">动态投资回收期</div><div class="value">${m.paybackPeriod == null ? '—' : fmtNum(m.paybackPeriod, 1)}</div><div class="unit">年</div></div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">关键年份现金流</div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead><tr>
+                <th>年份</th><th>阶段</th><th>销售去化（㎡）</th><th>累计租赁（㎡）</th>
+                <th>销售回款</th><th>租金收入</th><th>投资支出</th><th>利息</th><th>还本</th>
+                <th>股东可分配</th><th>项目净现金流</th><th>累计折现现金流</th>
+              </tr></thead>
+              <tbody>${yearRows}</tbody>
+            </table>
+          </div>
+          <div style="margin-top:8px;color:var(--neutral-500);font-size:0.75rem;">
+            金额单位：万元。${hasShortfall ? '<span style="color:var(--danger);">标红年份表示当年可用资金不足以支付利息，股东可分配为负，需股东补足。</span>' : ''}
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card-title">累计折现现金流曲线</div>
+          <div id="dynamic-cf-chart" style="width:100%;height:320px;"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">敏感性分析（售价 / 租金 / 建安成本）</div>
+          <table class="data-table" style="margin-bottom:16px;">
+            <thead><tr><th>变量</th><th>变动幅度</th><th>NPV（万元）</th><th>IRR（%）</th><th>自有资金 IRR（%）</th><th>动态回收期（年）</th></tr></thead>
+            <tbody>${sensRows}</tbody>
+          </table>
+          ${tornadoHtml}
+        </div>
+      `;
+
+      // 累计折现现金流曲线图（复用本文件 ECharts 方案）
+      const chartDom = document.getElementById('dynamic-cf-chart');
+      if (chartDom && typeof echarts !== 'undefined') {
+        if (dynamicCfChart) { dynamicCfChart.dispose(); dynamicCfChart = null; }
+        dynamicCfChart = echarts.init(chartDom);
+        dynamicCfChart.setOption({
+          tooltip: {
+            trigger: 'axis',
+            formatter: params => {
+              const p = params[0];
+              return p.axisValue + '<br/>累计折现现金流：' + fmtNum(p.value, 2) + ' 万元';
+            }
+          },
+          grid: { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true },
+          xAxis: { type: 'category', data: years.map(y => '第' + y.t + '年'), axisLabel: { fontSize: 11 } },
+          yAxis: { type: 'value', name: '万元', axisLabel: { fontSize: 11 } },
+          series: [{
+            name: '累计折现现金流',
+            type: 'line',
+            smooth: true,
+            symbolSize: 6,
+            data: years.map(y => y.cumDiscountedCF),
+            lineStyle: { color: '#1E4E8C', width: 3 },
+            itemStyle: { color: '#3B8DD8' },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(59,141,216,0.25)' },
+                { offset: 1, color: 'rgba(59,141,216,0.02)' }
+              ])
+            },
+            markLine: { silent: true, symbol: 'none', lineStyle: { color: '#9CA3AF', type: 'dashed' }, data: [{ yAxis: 0 }] }
+          }]
+        });
+      }
+    }
+
+    function downloadDynamicAnalysis() {
+      if (!window.dynamicAnalysisResult) {
+        alert('请先进入“动态投资分析”页面完成计算'); return;
+      }
+      if (typeof FinancialModules.downloadDynamicAnalysisExcel !== 'function') {
+        alert('动态投资分析表下载功能开发中'); return;
+      }
+      const projectName = (projectData && projectData.projectName) || '项目';
+      const today = new Date();
+      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      FinancialModules.downloadDynamicAnalysisExcel(window.dynamicAnalysisResult, projectName + '_动态投资分析表_' + dateStr + '.xlsx');
     }
 
     // ==================== 视图切换 ====================
