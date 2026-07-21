@@ -3739,10 +3739,9 @@
       if (typeof FinancialModules.downloadMasterLinkageExcel !== 'function') {
         alert('规划/产品总表下载功能开发中'); return;
       }
-      const projectName = (projectData && projectData.projectName) || '项目';
-      const today = new Date();
-      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-      FinancialModules.downloadMasterLinkageExcel(window.configResult, projectData, projectName + '_规划产品总表_' + dateStr + '.xlsx');
+      const projectName = (projectData && projectData.projectName || '').trim();
+      const fileName = (projectName ? projectName + '+' : '') + '规划产品总表.xlsx';
+      FinancialModules.downloadMasterLinkageExcel(window.configResult, projectData, fileName);
     }
 
     function downloadMasterIntegrated() {
@@ -3761,10 +3760,9 @@
       if (typeof FinancialModules.downloadMasterIntegratedExcel !== 'function') {
         alert('指标/测算总表下载功能开发中'); return;
       }
-      const projectName = (projectData && projectData.projectName) || '项目';
-      const today = new Date();
-      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-      FinancialModules.downloadMasterIntegratedExcel(window.configResult, projectData, window.investmentEstimateResult, window.staticAnalysisResult, window.dynamicAnalysisResult, projectName + '_指标测算总表_' + dateStr + '.xlsx');
+      const projectName = (projectData && projectData.projectName || '').trim();
+      const fileName = (projectName ? projectName + '+' : '') + '指标测算总表.xlsx';
+      FinancialModules.downloadMasterIntegratedExcel(window.configResult, projectData, window.investmentEstimateResult, window.staticAnalysisResult, window.dynamicAnalysisResult, fileName);
     }
 
     // ==================== 视图切换 ====================
