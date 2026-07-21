@@ -408,13 +408,14 @@ if (capturedDynWB) {
   const wsAlloc = capturedWB.Sheets['租售面积分配'];
   const rawPriceCell = Object.keys(wsAlloc).map(k => wsAlloc[k]).find(c => c && typeof c.v === 'number' && Math.abs(c.v - sa.sale.rawWeightedPrice) < 1e-9);
   check('g4: 加权售价缓存为 raw 6 位精度', !!rawPriceCell, rawPriceCell && String(rawPriceCell.v));
-  // g5: 方案B——土地成本=土地配套费合计摊（地上建面口径）、建安成本=前期+建安摊（总建面口径），互补不重叠
-  const expectLandUnit = Math.round(inv.landCost.total * 10000 / sa.metrics.aboveGroundArea * 100) / 100;
-  const expectSaleConstrUnit = Math.round((inv.preliminary.total + inv.construction.total) * 10000 / inv.metrics.totalBuildingArea * 100) / 100;
-  check('g5: 土地成本单方=土地配套费合计÷地上建面', approx(sa.constructionCost.landCostPerArea, expectLandUnit, 1e-6), sa.constructionCost.landCostPerArea + ' vs ' + expectLandUnit);
-  check('g5: 建安成本单方=(前期+建安)÷总建面', approx(sa.constructionCost.saleConstructionUnitCost, expectSaleConstrUnit, 1e-6), sa.constructionCost.saleConstructionUnitCost + ' vs ' + expectSaleConstrUnit);
-  check('g5: 销售土地成本=可售×土地成本单方', approx(sa.sale.landCost, Math.round(sa.metrics.soldAreaTotal * expectLandUnit / 100) / 100, 0.01), sa.sale.landCost + '');
-  check('g5: 销售建安成本=可售×建安成本单方（不含土地，无重复计扣）', approx(sa.sale.constructionCost, Math.round(sa.metrics.soldAreaTotal * expectSaleConstrUnit / 100) / 100, 0.01), sa.sale.constructionCost + '');
+  // g5: A5 新口径——土地/建安成本均按租售建面（地上总建面−配套楼面积）摊，互补不重叠
+  const rentSaleAreaG = sa.metrics.aboveGroundArea - sa.metrics.supportArea; // 136800-2000=134800
+  const expectLandUnit = Math.round(inv.landCost.total * 10000 / rentSaleAreaG * 100) / 100;
+  const expectSaleConstrUnit = Math.round((inv.preliminary.total + inv.construction.total + inv.indirect.cost) * 10000 / rentSaleAreaG * 100) / 100;
+  check('g5: 土地成本单方=土地配套费合计÷租售建面（地上−配套楼）', approx(sa.constructionCost.landCostPerArea, expectLandUnit, 1e-6), sa.constructionCost.landCostPerArea + ' vs ' + expectLandUnit);
+  check('g5: 建安成本单方=(前期+建安+开发间接费)÷租售建面', approx(sa.constructionCost.saleConstructionUnitCost, expectSaleConstrUnit, 1e-6), sa.constructionCost.saleConstructionUnitCost + ' vs ' + expectSaleConstrUnit);
+  check('g5: 销售土地成本=可售×土地成本单方÷10000', approx(sa.sale.landCost, Math.round(sa.metrics.soldAreaTotal * expectLandUnit / 10000 * 100) / 100, 0.01), sa.sale.landCost + '');
+  check('g5: 销售建安成本=可售×建安成本单方÷10000（不含土地，无重复计扣）', approx(sa.sale.constructionCost, Math.round(sa.metrics.soldAreaTotal * expectSaleConstrUnit / 10000 * 100) / 100, 0.01), sa.sale.constructionCost + '');
   // g6: 销售测算 Excel「减：建安成本」引用建安成本单方行（不再引用综合建造成本行）
   const wsSale = capturedWB.Sheets['销售测算'];
   const saleConstrKey = Object.keys(wsSale).find(k => wsSale[k].v === '建安成本单方（前期+建安工程）');
@@ -867,8 +868,128 @@ function jcheck(name, cond, detail) {
 
 console.log('\n=== j) 参数单一数据源自检结果：' + (jChecks - jFailed) + '/' + jChecks + ' 通过' + (jFailed ? '（存在未通过项）' : '') + ' ===');
 
+// ==================== k) 租售成本闭合并自检（A5 口径改造） ====================
+console.log('\n\n=== k) 租售成本闭合并自检 ===');
+let kChecks = 0, kFailed = 0;
+function kcheck(name, cond, detail) {
+  kChecks++;
+  if (cond) console.log('  [PASS]', name);
+  else { kFailed++; console.log('  [FAIL]', name, detail != null ? '→ ' + detail : ''); }
+}
+function findRowsByColLabel(ws, colLetter, label) {
+  const re = new RegExp('^' + colLetter + '\\d+$');
+  return Object.keys(ws).filter(k => re.test(k) && ws[k] && ws[k].v === label)
+    .map(k => parseInt(k.slice(colLetter.length), 10)).sort((a, b) => a - b);
+}
+const r2k = n => Math.round(n * 100) / 100;
+{
+  const cc = sa.constructionCost;
+  const rentSaleAreaK = sa.metrics.aboveGroundArea - sa.metrics.supportArea; // 租售建面 = 134800
+  // k-a 恒等式：可售 + 可租 === 租售建面（夹具下精确相等，容差 0.01 吸收 round2 分配差）
+  kcheck('k-a: 可售+可租 === 地上−配套楼（租售建面恒等式）',
+    approx(sa.metrics.soldAreaTotal + sa.metrics.rentedAreaTotal, rentSaleAreaK, 0.01) && rentSaleAreaK === 134800,
+    (sa.metrics.soldAreaTotal + sa.metrics.rentedAreaTotal) + ' vs ' + rentSaleAreaK);
+  // k-b 单位租售建面成本构成 + 闭合
+  kcheck('k-b: rentSaleUnitCost = round2(土地成本单方+建安成本单方)',
+    approx(cc.rentSaleUnitCost, r2k(cc.landCostPerArea + cc.saleConstructionUnitCost), 1e-9) && cc.rentSaleUnitCost === 5168.54,
+    cc.rentSaleUnitCost + ' vs ' + r2k(cc.landCostPerArea + cc.saleConstructionUnitCost));
+  const closeLhs = (sa.metrics.soldAreaTotal + sa.metrics.rentedAreaTotal) * cc.rentSaleUnitCost / 10000;
+  const closeRhs = inv.landCost.total + inv.preliminary.total + inv.construction.total + inv.indirect.cost;
+  kcheck('k-b: 闭合——(可售+可租)×rentSaleUnitCost÷10000 ≈ 土地+前期+建安+开发间接费（容差0.2万）',
+    Math.abs(closeLhs - closeRhs) < 0.2, closeLhs.toFixed(4) + ' vs ' + closeRhs + ', diff=' + Math.abs(closeLhs - closeRhs).toFixed(4));
+  // k-c 租赁总投 = 可租×rentSaleUnitCost÷10000 + 租赁分摊财务费用
+  kcheck('k-c: 租赁总投=round2(可租×rentSaleUnitCost÷10000+租赁分摊财务费用)（与模块公式路径精确一致）',
+    approx(sa.rent.rentalTotalInvestment, r2k(sa.metrics.rentedAreaTotal * cc.rentSaleUnitCost / 10000 + sa.rent.financialCost), 1e-9),
+    sa.rent.rentalTotalInvestment + ' vs ' + r2k(sa.metrics.rentedAreaTotal * cc.rentSaleUnitCost / 10000 + sa.rent.financialCost));
+  kcheck('k-c: 租赁总投≈round2(可租×rentSaleUnitCost÷10000)+租赁分摊财务费用（容差0.01）',
+    approx(sa.rent.rentalTotalInvestment, r2k(sa.metrics.rentedAreaTotal * cc.rentSaleUnitCost / 10000) + sa.rent.financialCost, 0.01),
+    sa.rent.rentalTotalInvestment + ' vs ' + (r2k(sa.metrics.rentedAreaTotal * cc.rentSaleUnitCost / 10000) + sa.rent.financialCost));
+  // k-d 工程量口径抽查（独立投资估算工作簿完整版 E 列）：勘察费仍按用地（B3），其余改按总建面（B8）
+  const rSurvey = findRowByColLabel(invFull, 'B', '  勘察费用');
+  const surveyE = rSurvey && invFull['E' + rSurvey];
+  kcheck('k-d: 勘察费用工程量仍引用用地行（\'规划指标\'!B3）',
+    !!(surveyE && surveyE.f === "'规划指标'!B3"), surveyE && surveyE.f);
+  const rPlan = findRowByColLabel(invFull, 'B', '  规划设计费');
+  const planE = rPlan && invFull['E' + rPlan];
+  kcheck('k-d: 规划设计费工程量引用总建面行（\'规划指标\'!B8）',
+    !!(planE && planE.f === "'规划指标'!B8"), planE && planE.f);
+  const TB_QTY_ITEMS = ['  大市政配套费', '  红线外给水、排水接驳费', '  报批报建费', '  造价咨询服务费', '  工程监理费',
+    '  临时工程费', '  拆除工程', '  其他', '  室外给水管网', '  室外排水管网', '  室外电缆工程', '  室外弱电工程',
+    '  室外燃气管网', '  供配电设备及安装', '  水泵房设备及安装', '  消防设备及安装', '  室外石材台阶及散水', '  标示标牌'];
+  const tbBad = TB_QTY_ITEMS.filter(lb => {
+    const r = findRowByColLabel(invFull, 'B', lb);
+    const c = r && invFull['E' + r];
+    return !r || !c || c.f !== "'规划指标'!B8";
+  });
+  kcheck('k-d: 大市政/红线外接驳/前期2-3~2-8/基础设施3-1-1~8/石材台阶/标示标牌 工程量均引用总建面行（B8）',
+    tbBad.length === 0, tbBad.map(lb => lb.trim() + '(row' + findRowByColLabel(invFull, 'B', lb) + ')').join(','));
+  // k-e 规划指标 sheet 租售建面行（B25）= 地上(B6)−配套楼(B19)
+  const invPlanK = capturedInvWB.Sheets['规划指标'];
+  const rRentSalePlan = findRowByColLabel(invPlanK, 'A', '租售建面');
+  const rentSaleCell = rRentSalePlan && invPlanK['B' + rRentSalePlan];
+  kcheck('k-e: 规划指标存在「租售建面」行（第 25 行）且公式=B6-B19（地上−配套楼引用）',
+    !!(rRentSalePlan === 25 && rentSaleCell && rentSaleCell.f === 'B6-B19'),
+    'row=' + rRentSalePlan + ', f=' + (rentSaleCell && rentSaleCell.f));
+  kcheck('k-e: 租售建面缓存=136800−2000=134800',
+    !!(rentSaleCell && rentSaleCell.v === 134800 && rentSaleCell.v === r2k(sa.metrics.aboveGroundArea - sa.metrics.supportArea)),
+    rentSaleCell && String(rentSaleCell.v));
+  // k-f 集成工作簿静态成本区 5 行重接线：公式存在且缓存与独立版一致
+  const iFullK = capIntWB.Sheets['投资估算完整版'];
+  const iPlanK2 = capIntWB.Sheets['规划指标'];
+  const iSaleK = capIntWB.Sheets['销售测算'];
+  const iRentK = capIntWB.Sheets['租赁测算'];
+  const indSaleK = capturedWB.Sheets['销售测算'];
+  const indRentK = capturedWB.Sheets['租赁测算'];
+  // 标签变更：「综合建造成本（不含期间费用）」已更名为「单位租售建面成本」（g6 引用的「建安成本单方（前期+建安工程）」标签不变、仍通过）
+  kcheck('k-f: 静态成本区标签已变更——存在「单位租售建面成本」、不存在「综合建造成本（不含期间费用）」',
+    !!(findRowByColLabel(indSaleK, 'A', '单位租售建面成本') && !findRowByColLabel(indSaleK, 'A', '综合建造成本（不含期间费用）')),
+    '单位租售建面成本 row=' + findRowByColLabel(indSaleK, 'A', '单位租售建面成本'));
+  // 动态定位被引行（禁止写死）
+  const xjRows = findRowsByColLabel(iFullK, 'B', '  小计'); // [土地配套小计, 前期小计]
+  const landSubRowK = xjRows[0], prelimSubRowK = xjRows[1];
+  const constrTotRowK = findRowByColLabel(iFullK, 'B', '  建安工程成本合计');
+  const indirRowK = findRowByColLabel(iFullK, 'B', '开发间接费');
+  const landTransRowK = findRowByColLabel(iFullK, 'B', '  土地出让金');
+  const devTotRowK = findRowByColLabel(iFullK, 'B', '发展成本合计');
+  const rentSaleRowK = findRowByColLabel(iPlanK2, 'A', '租售建面');
+  const totalBldRowK = findRowByColLabel(iPlanK2, 'A', '总建筑面积');
+  const rLandUnitK = findRowByColLabel(iSaleK, 'A', '土地成本单方（土地配套费合计）');
+  const rConstrUnitK = findRowByColLabel(iSaleK, 'A', '建安成本单方（前期+建安工程）');
+  const COST5 = [
+    { label: '土地价格', f: "'投资估算完整版'!D" + landTransRowK, v: sa.inputs.landPrice },
+    { label: '土地成本单方（土地配套费合计）', f: "ROUND('投资估算完整版'!F" + landSubRowK + "/'规划指标'!B" + rentSaleRowK + "*10000,2)", v: cc.landCostPerArea },
+    { label: '建安成本单方（前期+建安工程）', f: "ROUND(('投资估算完整版'!F" + prelimSubRowK + "+'投资估算完整版'!F" + constrTotRowK + "+'投资估算完整版'!F" + indirRowK + ")/'规划指标'!B" + rentSaleRowK + "*10000,2)", v: cc.saleConstructionUnitCost },
+    { label: '单位租售建面成本', f: 'ROUND(B' + rLandUnitK + '+B' + rConstrUnitK + ',2)', v: cc.rentSaleUnitCost },
+    { label: '综合单方成本（含期间费用）', f: "ROUND('投资估算完整版'!F" + devTotRowK + "/'规划指标'!B" + totalBldRowK + "*10000,2)", v: cc.unitCost }
+  ];
+  COST5.forEach(item => {
+    const r = findRowByColLabel(iSaleK, 'A', item.label);
+    const c = r && iSaleK['B' + r];
+    kcheck('k-f: 集成销售测算「' + item.label + '」重接线公式正确',
+      !!(r && c && c.f === item.f), c && (c.f + ' vs 期望 ' + item.f));
+  });
+  const saleCacheBad = COST5.filter(item => {
+    const r = findRowByColLabel(iSaleK, 'A', item.label);
+    const rr = findRowByColLabel(indSaleK, 'A', item.label);
+    const c = r && iSaleK['B' + r], ci = rr && indSaleK['B' + rr];
+    return !c || !ci || c.v !== ci.v || !approx(c.v, item.v, 1e-9);
+  });
+  kcheck('k-f: 集成销售测算成本区 5 行缓存与独立版一致（=sa 新口径字段）',
+    saleCacheBad.length === 0, saleCacheBad.map(x => x.label).join(','));
+  const rentAllBad = COST5.filter(item => {
+    const r = findRowByColLabel(iRentK, 'A', item.label);
+    const rr = findRowByColLabel(indRentK, 'A', item.label);
+    const c = r && iRentK['B' + r], ci = rr && indRentK['B' + rr];
+    return !c || !ci || c.f !== item.f || c.v !== ci.v;
+  });
+  kcheck('k-f: 集成租赁测算成本区 5 行重接线公式/缓存与销售测算同构一致',
+    rentAllBad.length === 0, rentAllBad.map(x => x.label).join(','));
+}
+
+console.log('\n=== k) 租售成本闭合并自检结果：' + (kChecks - kFailed) + '/' + kChecks + ' 通过' + (kFailed ? '（存在未通过项）' : '') + ' ===');
+
 console.log('\n=== 动态投资分析自检结果：' + (dynChecks - dynFailed) + '/' + dynChecks + ' 通过' + (dynFailed ? '（存在未通过项）' : '') + ' ===');
-console.log('=== 全部自检结果：' + ((dynChecks - dynFailed) + (hChecks - hFailed) + (iChecks - iFailed) + (jChecks - jFailed)) + '/' + (dynChecks + hChecks + iChecks + jChecks) + ' 通过' + ((dynFailed + hFailed + iFailed + jFailed) ? '（存在未通过项）' : '') + ' ===');
-if (dynFailed + hFailed + iFailed + jFailed > 0) process.exitCode = 1;
+console.log('=== 全部自检结果：' + ((dynChecks - dynFailed) + (hChecks - hFailed) + (iChecks - iFailed) + (jChecks - jFailed) + (kChecks - kFailed)) + '/' + (dynChecks + hChecks + iChecks + jChecks + kChecks) + ' 通过' + ((dynFailed + hFailed + iFailed + jFailed + kFailed) ? '（存在未通过项）' : '') + ' ===');
+if (dynFailed + hFailed + iFailed + jFailed + kFailed > 0) process.exitCode = 1;
 
 console.log('\n自检完成');

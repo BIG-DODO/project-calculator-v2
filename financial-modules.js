@@ -153,7 +153,7 @@
 
     // 用户输入
     const landPrice = safeNum(inputs.landPrice, 70);          // 万元/亩
-    const municipalFee = safeNum(inputs.municipalFee, 0);     // 元/m² 用地
+    const municipalFee = safeNum(inputs.municipalFee, 0);     // 元/m² 总建面
     const city = (inputs.city || pd.region || '').trim();
     const spongeCity = inputs.spongeCity != null ? !!inputs.spongeCity : (city === '上海' || city === '杭州');
     const financingRatio = safeNum(inputs.financingRatio, 0);
@@ -165,10 +165,10 @@
     const landTransferFee = round2(landPrice * acre);
     const deedTax = round2(landTransferFee * 0.03 + 10);
     const effectiveMunicipalFee = city === '上海' ? 0 : municipalFee;
-    const municipalSupportingFee = round2(effectiveMunicipalFee * landArea / 10000);
+    const municipalSupportingFee = round2(effectiveMunicipalFee * totalBuildingArea / 10000);
     const powerKva = (aboveGroundArea * 70 + undergroundArea * 50) / 1000;
     const powerCapacityCost = round2(REFERENCE_PRICES.offsiteMunicipal.powerCapacity * powerKva / 10000);
-    const waterDrainageCost = round2(REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection * landArea / 10000);
+    const waterDrainageCost = round2(REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection * totalBuildingArea / 10000);
     const offsiteMunicipalTotal = round2(powerCapacityCost + waterDrainageCost);
     const landVAT = round2(offsiteMunicipalTotal * 0.06 / 1.06);
 
@@ -176,9 +176,9 @@
       { code: '1-1', name: '土地出让金', unit: '万元/亩', unitPrice: landPrice, quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: landTransferFee, note: '单价×亩数' },
       { code: '1-2', name: '土地转让费（契税）', unit: '万元', unitPrice: round2(landPrice * 0.03 + 10 / acre), quantity: acre, quantityFormula: "'规划指标'!B3/666.7", cost: deedTax, costFormula: 'F4*0.03+10', note: '出让金×3%+10' },
       { code: '1-3', name: '拆迁补偿费', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '删除，不输出' },
-      { code: '1-4', name: '大市政配套费', unit: '元/m²', unitPrice: effectiveMunicipalFee, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: municipalSupportingFee, note: city === '上海' ? '上海默认0' : '' },
+      { code: '1-4', name: '大市政配套费', unit: '元/m²', unitPrice: effectiveMunicipalFee, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: municipalSupportingFee, note: city === '上海' ? '上海默认0' : '按总建筑面积' },
       { code: '1-5-2', name: '电力增容费/高可靠性用电', unit: '元/KVA', unitPrice: REFERENCE_PRICES.offsiteMunicipal.powerCapacity, quantity: powerKva, quantityFormula: "('规划指标'!B6*70+'规划指标'!B7*50)/1000", cost: powerCapacityCost, note: '(地上建面×70+地下建面×50)/1000' },
-      { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: waterDrainageCost, note: '按用地面积' },
+      { code: '1-5-3', name: '红线外给水、排水接驳费', unit: '元/m²', unitPrice: REFERENCE_PRICES.offsiteMunicipal.waterDrainageConnection, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: waterDrainageCost, note: '按总建筑面积' },
       { code: '1-6', name: '其他费用', unit: '万元', unitPrice: 0, quantity: 0, cost: 0, note: '' },
       { code: '1-7', name: '其中增值税', unit: '万元', unitPrice: 0.06, quantity: round2(offsiteMunicipalTotal / 1.06), quantityFormula: '(F8+F9)/1.06', cost: landVAT, vatDE: true, note: '红线外市政×6%/1.06' }
     ];
@@ -188,13 +188,13 @@
     const pre = REFERENCE_PRICES.preliminary;
     const prelimItems = [
       { code: '2-1', name: '勘察费用', unit: '元/m²', unitPrice: pre.survey, quantity: landArea, quantityFormula: "'规划指标'!B3", cost: round2(pre.survey * landArea / 10000), note: '按用地面积' },
-      { code: '2-2', name: '规划设计费', unit: '元/m²', unitPrice: pre.planning, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.planning * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-3', name: '报批报建费', unit: '元/m²', unitPrice: pre.approval, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.approval * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-4', name: '造价咨询服务费', unit: '元/m²', unitPrice: pre.consulting, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.consulting * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-5', name: '工程监理费', unit: '元/m²', unitPrice: pre.supervision, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.supervision * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-6', name: '临时工程费', unit: '元/m²', unitPrice: pre.temporary, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.temporary * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '2-7', name: '拆除工程', unit: '元/m²', unitPrice: pre.demolition, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.demolition * aboveGroundArea / 10000), note: '无拆除时为0' },
-      { code: '2-8', name: '其他', unit: '元/m²', unitPrice: pre.other, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(pre.other * aboveGroundArea / 10000), note: '' }
+      { code: '2-2', name: '规划设计费', unit: '元/m²', unitPrice: pre.planning, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.planning * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '2-3', name: '报批报建费', unit: '元/m²', unitPrice: pre.approval, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.approval * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '2-4', name: '造价咨询服务费', unit: '元/m²', unitPrice: pre.consulting, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.consulting * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '2-5', name: '工程监理费', unit: '元/m²', unitPrice: pre.supervision, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.supervision * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '2-6', name: '临时工程费', unit: '元/m²', unitPrice: pre.temporary, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.temporary * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '2-7', name: '拆除工程', unit: '元/m²', unitPrice: pre.demolition, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.demolition * totalBuildingArea / 10000), note: '无拆除时为0' },
+      { code: '2-8', name: '其他', unit: '元/m²', unitPrice: pre.other, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(pre.other * totalBuildingArea / 10000), note: '按总建筑面积' }
     ];
     const prelimSubtotal = round2(prelimItems.reduce((s, it) => s + it.cost, 0));
     const prelimVAT = round2(prelimSubtotal * 0.06 / 1.06);
@@ -205,14 +205,14 @@
     // 3.1 基础设施费
     const infra = REFERENCE_PRICES.infrastructure;
     const infraItems = [
-      { code: '3-1-1', name: '室外给水管网', unit: '元/m²', unitPrice: infra.waterSupply, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.waterSupply * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-2', name: '室外排水管网', unit: '元/m²', unitPrice: infra.drainage, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.drainage * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-3', name: '室外电缆工程', unit: '元/m²', unitPrice: infra.cable, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.cable * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-4', name: '室外弱电工程', unit: '元/m²', unitPrice: infra.weakCurrent, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.weakCurrent * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-5', name: '室外燃气管网', unit: '元/m²', unitPrice: infra.gas, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.gas * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-6', name: '供配电设备及安装', unit: '元/m²', unitPrice: infra.powerDistribution, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.powerDistribution * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-7', name: '水泵房设备及安装', unit: '元/m²', unitPrice: infra.pumpRoom, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.pumpRoom * aboveGroundArea / 10000), note: '' },
-      { code: '3-1-8', name: '消防设备及安装', unit: '元/m²', unitPrice: infra.fire, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(infra.fire * aboveGroundArea / 10000), note: '' },
+      { code: '3-1-1', name: '室外给水管网', unit: '元/m²', unitPrice: infra.waterSupply, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.waterSupply * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-2', name: '室外排水管网', unit: '元/m²', unitPrice: infra.drainage, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.drainage * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-3', name: '室外电缆工程', unit: '元/m²', unitPrice: infra.cable, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.cable * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-4', name: '室外弱电工程', unit: '元/m²', unitPrice: infra.weakCurrent, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.weakCurrent * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-5', name: '室外燃气管网', unit: '元/m²', unitPrice: infra.gas, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.gas * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-6', name: '供配电设备及安装', unit: '元/m²', unitPrice: infra.powerDistribution, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.powerDistribution * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-7', name: '水泵房设备及安装', unit: '元/m²', unitPrice: infra.pumpRoom, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.pumpRoom * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-1-8', name: '消防设备及安装', unit: '元/m²', unitPrice: infra.fire, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(infra.fire * totalBuildingArea / 10000), note: '按总建筑面积' },
       { code: '3-1-9', name: '小区车行道路工程', unit: '元/m²', unitPrice: infra.road, quantity: roadArea, quantityFormula: "'规划指标'!B11", cost: round2(infra.road * roadArea / 10000), note: '总用地×30%' }
     ];
     const infraTotal = round2(infraItems.reduce((s, it) => s + it.cost, 0));
@@ -229,8 +229,8 @@
       { code: '3-2-2', name: '硬质铺装', unit: '元/m²', unitPrice: land.hardPavement, quantity: hardPavementArea, quantityFormula: "'规划指标'!B3-'规划指标'!B3*'规划指标'!B10/100-'规划指标'!B11-'规划指标'!B3*'规划指标'!B9/100", cost: round2(land.hardPavement * hardPavementArea / 10000), note: '总用地-绿地-道路-建筑基底' },
       { code: '3-2-3', name: '非示范区绿化', unit: '元/m²', unitPrice: land.greening, quantity: nonDemoGreenArea, quantityFormula: "'规划指标'!B3*'规划指标'!B10/100-1000", cost: round2(land.greening * nonDemoGreenArea / 10000), note: '总用地×绿地率-1000' },
       { code: '3-2-4', name: '出入口开口费', unit: '万元/个', unitPrice: land.entrance, quantity: entranceCount, quantityFormula: "MIN(4,MAX(2,CEILING('规划指标'!B3/20000,1)))", cost: round2(land.entrance * entranceCount), note: 'ceil(总用地/20000),2~4个' },
-      { code: '3-2-5', name: '室外石材台阶及散水', unit: '元/m²', unitPrice: land.stoneSteps, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(land.stoneSteps * aboveGroundArea / 10000), note: '按地上总建面' },
-      { code: '3-2-6', name: '标示标牌', unit: '元/m²', unitPrice: land.signs, quantity: aboveGroundArea, quantityFormula: "'规划指标'!B6", cost: round2(land.signs * aboveGroundArea / 10000), note: '按地上总建面' },
+      { code: '3-2-5', name: '室外石材台阶及散水', unit: '元/m²', unitPrice: land.stoneSteps, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(land.stoneSteps * totalBuildingArea / 10000), note: '按总建筑面积' },
+      { code: '3-2-6', name: '标示标牌', unit: '元/m²', unitPrice: land.signs, quantity: totalBuildingArea, quantityFormula: "'规划指标'!B8", cost: round2(land.signs * totalBuildingArea / 10000), note: '按总建筑面积' },
       { code: '3-2-7', name: '围墙', unit: '元/m', unitPrice: land.wall, quantity: wallLength, quantityFormula: "SQRT('规划指标'!B3)*4*1.2", cost: round2(land.wall * wallLength / 10000), note: '√总用地×4×1.2' },
       { code: '3-2-8', name: '海绵城市', unit: '元/m²', unitPrice: land.spongeCity, quantity: spongeCityArea, quantityFormula: spongeCity ? "'规划指标'!B3*'规划指标'!B10/100+'规划指标'!B3-'规划指标'!B3*'规划指标'!B10/100-'规划指标'!B11-'规划指标'!B3*'规划指标'!B9/100" : '0', cost: round2(land.spongeCity * spongeCityArea / 10000), note: spongeCity ? '总用地×绿地率+硬质铺装' : '未启用' }
     ];
@@ -462,14 +462,19 @@
     const landCostTotal = inv.landCost ? inv.landCost.total : 0;
     const prelimTotal = inv.preliminary ? inv.preliminary.total : 0;
     const constructionTotal = inv.construction ? inv.construction.total : 0;
-    // 土地成本单方（方案B口径）：土地配套费用合计（出让金+契税+市政配套+红线外市政+土地增值税）按地上总建面摊
-    const landCostPerArea = aboveGroundArea > 0 ? round2(landCostTotal * 10000 / aboveGroundArea) : 0;
+    const indirectTotal = inv.indirect ? safeNum(inv.indirect.cost, 0) : 0;
+    // 租售建面 = 地上总建筑面积 − 配套楼面积（配套宿舍强制出租，留在租售建面内）
+    const rentSaleArea = Math.max(0, aboveGroundArea - supportArea);
+    // 土地成本单方：土地配套费用合计（出让金+契税+市政配套+红线外市政+土地增值税）按租售建面摊
+    const landCostPerArea = rentSaleArea > 0 ? round2(landCostTotal * 10000 / rentSaleArea) : 0;
     const unitCost = inv.summary ? round2(inv.summary.totalInvestment * 10000 / inv.metrics.totalBuildingArea) : 0;
-    // 综合建造成本（不含期间费用）：仅用于租赁总投口径（租赁侧无单独土地行，含土地不重复）
+    // 综合建造成本（不含期间费用）：仅展示用（租赁总投已改用单位租售建面成本）
     const constructionCostTotal = landCostTotal + prelimTotal + constructionTotal;
     const costUnitCost = inv.metrics && inv.metrics.totalBuildingArea > 0 ? round2(constructionCostTotal * 10000 / inv.metrics.totalBuildingArea) : 0;
-    // 销售侧建安成本单方（方案B口径）：前期费用+建安工程成本按总建面摊，与土地成本行互补不重叠、无遗漏
-    const saleConstructionUnitCost = inv.metrics && inv.metrics.totalBuildingArea > 0 ? round2((prelimTotal + constructionTotal) * 10000 / inv.metrics.totalBuildingArea) : 0;
+    // 建安成本单方：前期费用+建安工程成本+开发间接费按租售建面摊，与土地成本行互补不重叠、无遗漏
+    const saleConstructionUnitCost = rentSaleArea > 0 ? round2((prelimTotal + constructionTotal + indirectTotal) * 10000 / rentSaleArea) : 0;
+    // 单位租售建面成本 = 土地成本单方 + 建安成本单方（租赁总投口径）
+    const rentSaleUnitCost = round2(landCostPerArea + saleConstructionUnitCost);
     const landCostForSale = round2(soldAreaTotal * landCostPerArea / 10000);
     const constructionCostForSale = round2(soldAreaTotal * saleConstructionUnitCost / 10000);
     const saleTaxSurcharge = round2(saleRevenue / 1.09 * 0.006);
@@ -515,7 +520,7 @@
     const rentalOpCost = round2(effectiveYearlyRent * rentalOpRate);
     const netRentPerSqm = round2(effectiveYearlyRent - taxSurcharge - propertyTax - landUseTax - rentalOpCost);
     const netRentalIncome = round2(netRentPerSqm * rentedAreaTotal / 10000);
-    const rentalTotalInvestment = round2(rentedAreaTotal * costUnitCost / 10000 + rentFinancialCost);
+    const rentalTotalInvestment = round2(rentedAreaTotal * rentSaleUnitCost / 10000 + rentFinancialCost);
     const noi = rentalTotalInvestment > 0 ? round2(netRentalIncome / rentalTotalInvestment * 100) : 0;
 
     // 综合汇总
@@ -556,7 +561,7 @@
         soldAreaTotal,
         rentedAreaTotal
       },
-      constructionCost: { landCostPerArea, unitCost, costUnitCost, saleConstructionUnitCost },
+      constructionCost: { landCostPerArea, unitCost, costUnitCost, saleConstructionUnitCost, rentSaleUnitCost },
       sale: {
         weightedPrice: weightedSalePrice,
         rawWeightedPrice: rawWeightedSalePrice, // 完整精度，供动态分析参与计算
@@ -844,6 +849,8 @@
     const constructionTotal = inv.construction ? safeNum(inv.construction.total, 0) : 0;
     const totalBuildingArea = inv.metrics ? safeNum(inv.metrics.totalBuildingArea, 0) : 0;
     const aboveGroundArea = safeNum(sa.metrics.aboveGroundArea, 0);
+    // 敏感性分摊口径：租售建面 = 地上总建筑面积 − 配套楼面积
+    const rentSaleArea = aboveGroundArea - safeNum(sa.metrics.supportArea, 0);
     const landItems = (inv.landCost && inv.landCost.items) || [];
     const landTransferItem = landItems.find(it => it.code === '1-1');
     const deedTaxItem = landItems.find(it => it.code === '1-2');
@@ -901,11 +908,11 @@
         } else if (sv.variable === 'constructionCost') {
           const deltaCost = constructionTotal * delta;
           p.totalInvestment = round2(p.totalInvestment + deltaCost);
-          if (totalBuildingArea > 0) p.constructionCostForSale = round2(p.constructionCostForSale + deltaCost * saleableArea / totalBuildingArea);
+          if (rentSaleArea > 0) p.constructionCostForSale = round2(p.constructionCostForSale + deltaCost * saleableArea / rentSaleArea);
         } else if (sv.variable === 'landPrice') {
           const deltaCost = landBase * delta;
           p.totalInvestment = round2(p.totalInvestment + deltaCost);
-          if (aboveGroundArea > 0) p.landCostForSale = round2(p.landCostForSale + deltaCost * saleableArea / aboveGroundArea);
+          if (rentSaleArea > 0) p.landCostForSale = round2(p.landCostForSale + deltaCost * saleableArea / rentSaleArea);
         } else if (sv.variable === 'occupancyRate') {
           p.occupancyRate = Math.min(1, p.occupancyRate * (1 + delta)); // 上限 100%
         } else if (sv.variable === 'depleteSpeed') {
@@ -1118,7 +1125,13 @@
       ws0[encode(r, 1)] = numCell(row[1]);
       ws0[encode(r, 2)] = textCell(row[2]);
     });
-    ws0['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: planningMetricRows.length + 1, c: 2 } });
+    // 租售建面（B25）= 地上总建筑面积(B6) − 配套楼面积(B19)（配套宿舍强制出租，留在租售建面内）
+    const rentSaleAreaMetrics = round2(fullEstimate.metrics.aboveGroundArea - (fullEstimate.metrics.supportArea || 0));
+    const rentSaleRow0 = planningMetricRows.length + 2; // 0-based，紧接最后指标行（1-based 第 25 行）
+    ws0[encode(rentSaleRow0, 0)] = textCell('租售建面');
+    ws0[encode(rentSaleRow0, 1)] = numCell(rentSaleAreaMetrics, 'B6-B19');
+    ws0[encode(rentSaleRow0, 2)] = textCell('m²');
+    ws0['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rentSaleRow0, c: 2 } });
     setWsMeta(ws0, [24, 16, 12]);
     XLSX.utils.book_append_sheet(wb, ws0, '规划指标');
 
@@ -1203,16 +1216,18 @@
     const ws = {};
     const cols = [10, 24, 14, 14, 16, 16, 16, 18, 28];
     const totalBuildingArea = fullEstimate.metrics.totalBuildingArea || 1;
-    const aboveGroundArea = fullEstimate.metrics.aboveGroundArea || 1;
+    // 单位租售建面成本口径：H 列分母 = 租售建面（地上总建筑面积 − 配套楼面积，配套宿舍强制出租留在租售建面内）
+    const rentSaleArea = round2(fullEstimate.metrics.aboveGroundArea - (fullEstimate.metrics.supportArea || 0)) || 1;
+    const aboveGroundArea = rentSaleArea; // 下方 H 列单位成本缓存统一按租售建面口径
     ws._totalBuildingArea = totalBuildingArea;
-    ws._aboveGroundArea = aboveGroundArea;
+    ws._aboveGroundArea = rentSaleArea;
     ws._totalBuildingAreaRef = "'规划指标'!B8";
-    ws._aboveGroundAreaRef = "'规划指标'!B6";
+    ws._aboveGroundAreaRef = "'规划指标'!B25"; // 规划指标「租售建面」行
 
     ws[encode(0, 0)] = cell('投资估算表（完整版）', { bold: true, sz: 14, align: 'left' });
     ws['!merge'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
 
-    ['科目编码', '成本科目', '指标单位', '成本指标', '工程量', '成本（万元）', '单位建面成本（元/㎡）', '单位地上建面成本（元/㎡）', '科目说明']
+    ['科目编码', '成本科目', '指标单位', '成本指标', '工程量', '成本（万元）', '单位建面成本（元/㎡）', '单位租售建面成本（元/㎡）', '科目说明']
       .forEach((h, c) => ws[encode(1, c)] = headerCell(h));
 
     let row = 2;
@@ -1366,8 +1381,8 @@
     ws[encode(row, 1)] = textCell('单位建面成本（元/㎡）');
     ws[encode(row, 5)] = moneyCell(fullEstimate.summary.unitGroundCost, `${col(5)}${totalRow}/${ws._totalBuildingAreaRef}*10000`);
     row += 1;
-    ws[encode(row, 1)] = textCell('单位地上建面成本（元/㎡）');
-    ws[encode(row, 5)] = moneyCell(fullEstimate.summary.unitAboveGroundCost, `${col(5)}${totalRow}/${ws._aboveGroundAreaRef}*10000`);
+    ws[encode(row, 1)] = textCell('单位租售建面成本（元/㎡）');
+    ws[encode(row, 5)] = moneyCell(round2(fullEstimate.summary.totalInvestment * 10000 / rentSaleArea), `${col(5)}${totalRow}/${ws._aboveGroundAreaRef}*10000`);
 
     // 融资参数小区（表尾追加）：黄色可编辑输入格，预填投资估算输入；财务费用公式引用此处，总表集成时供静态/动态 sheet 引用
     row += 1;
@@ -1421,7 +1436,11 @@
       ws2[encode(r, 3)] = isTotal ? totalCell(100, null, { numFmt: '0.00"%"' }) : numCell(pct, `IF($C$${totalSimpleRow}=0,0,ROUND(C${rowNum}/$C$${totalSimpleRow}*100,2))`);
       ws2[encode(r, 3)].s = Object.assign({}, ws2[encode(r, 3)].s, { numFmt: '0.00"%"', alignment: { horizontal: 'right', vertical: 'center' } });
     });
-    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: simple.length + 1, c: 3 } });
+    // 底部：单位租售建面成本 = 发展成本合计 × 10000 ÷ 规划指标「租售建面」（B25）
+    const ursR0 = simple.length + 2; // 0-based 追加行
+    ws2[encode(ursR0, 1)] = textCell('单位租售建面成本（元/㎡）');
+    ws2[encode(ursR0, 2)] = moneyCell(round2(fullEstimate.summary.totalInvestment * 10000 / rentSaleArea), `ROUND(C${totalSimpleRow}*10000/'规划指标'!B25,2)`);
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: ursR0, c: 3 } });
     setWsMeta(ws2, [12, 24, 18, 12]);
     XLSX.utils.book_append_sheet(wb, ws2, '投资估算简化版');
 
@@ -1465,11 +1484,14 @@
       ws['!merge'].push({ s: { r: costStart, c: 0 }, e: { r: costStart, c: 2 } });
       ['项目', '数值', '单位'].forEach((h, c) => ws[encode(costStart + 1, c)] = headerCell(h));
       const totalFinancialCost = (staticResult.sale.financialCost || 0) + (staticResult.rent.financialCost || 0);
+      const rentSaleUnitCostVal = staticResult.constructionCost.rentSaleUnitCost != null
+        ? staticResult.constructionCost.rentSaleUnitCost
+        : staticResult.constructionCost.costUnitCost; // 兼容旧结构（缺失时退化为综合建造成本）
       const costRows = [
         ['土地价格', staticResult.inputs.landPrice || 0, '万元/亩'],
         ['土地成本单方（土地配套费合计）', staticResult.constructionCost.landCostPerArea, '元/㎡'],
         ['建安成本单方（前期+建安工程）', staticResult.constructionCost.saleConstructionUnitCost, '元/㎡'],
-        ['综合建造成本（不含期间费用）', staticResult.constructionCost.costUnitCost, '元/㎡'],
+        ['单位租售建面成本', rentSaleUnitCostVal, '元/㎡'],
         ['财务费用', totalFinancialCost, '万元'],
         ['综合单方成本（含期间费用）', staticResult.constructionCost.unitCost, '元/㎡']
       ];
@@ -1478,13 +1500,15 @@
         ws[encode(r, 0)] = textCell(row[0]);
         ws[encode(r, 1)] = numCell(row[1]);
         ws[encode(r, 2)] = textCell(row[2]);
+        // 独立下载版为快照值（总表集成时这 5 行会被重接线为公式引用）；财务费用行另有引用，不标注
+        if (row[0] !== '财务费用') ws[encode(r, 3)] = textCell('快照值，引自投资估算结果');
       });
       return {
         nextRow: costStart + costRows.length + 2,
         costStart,
         costLandTaxRow: costStart + 4,       // 1-based，土地成本单方（土地配套费合计）
         costSaleConstructionRow: costStart + 5, // 1-based，建安成本单方（前期+建安工程），销售测算扣减用
-        costConstructionRow: costStart + 6,  // 1-based，综合建造成本（含土地，租赁总投用）
+        costConstructionRow: costStart + 6,  // 1-based，单位租售建面成本（租赁总投用）
         financialRow: costStart + 7,         // 1-based，财务费用
         costUnitRow: costStart + 8           // 1-based，综合单方成本
       };
@@ -2411,6 +2435,15 @@
     return null;
   }
 
+  // 同上，返回全部匹配行号（升序），用于「  小计」等重复标签按出现顺序取行
+  function findRowsByLabel(ws, colLetter, label) {
+    const re = new RegExp('^' + colLetter + '\\d+$');
+    return Object.keys(ws)
+      .filter(k => re.test(k) && ws[k] && ws[k].v === label)
+      .map(k => parseInt(k.slice(colLetter.length), 10))
+      .sort((a, b) => a - b);
+  }
+
   // 把 ws 中 addr 单元格改为公式引用 refWs 的 refAddr；缓存值取被引单元格缓存，保证缓存 == 公式求值
   function rewireCellToRef(ws, addr, refSheetName, refWs, refAddr) {
     const c = ws[addr];
@@ -2479,9 +2512,19 @@
     const invFinRatioParamRow = findRowByLabel(invFull, 'B', '融资占比');
     const invFinRateParamRow = findRowByLabel(invFull, 'B', '融资利率');
 
-    // ---------- 第三部分：静态投资分析（5 sheet；规划指标区 → Sheet5，总投资/财务费用 → 完整版） ----------
+    // ---------- 第三部分：静态投资分析（5 sheet；规划指标区 → Sheet5，成本区 → 完整版/规划指标） ----------
     const saWb = captureWorkbook(NS.downloadStaticAnalysisExcel, [staticAnalysisResult, '_tmp.xlsx']);
     if (!saWb || !saWb.Sheets) { alert('静态投资分析工作簿生成失败'); return; }
+    // 完整版成本区引用行（findRowByLabel 动态定位，禁止写死）：小计行按 2 空格缩进匹配（建安子项小计为 4 空格，不会混入）
+    const invPlanSheet = invWb.Sheets['规划指标'];
+    const xiaojiRows = findRowsByLabel(invFull, 'B', '  小计'); // [土地配套小计, 前期小计]
+    const landSubtotalRowX = xiaojiRows[0] || null;
+    const prelimSubtotalRowX = xiaojiRows[1] || null;
+    const constructionTotalRowX = findRowByLabel(invFull, 'B', '  建安工程成本合计');
+    const indirectRowX = findRowByLabel(invFull, 'B', '开发间接费');
+    const landTransferRowX = findRowByLabel(invFull, 'B', '  土地出让金');
+    const rentSalePlanRow = findRowByLabel(invPlanSheet, 'A', '租售建面');
+    const totalBldPlanRow = findRowByLabel(invPlanSheet, 'A', '总建筑面积');
     // 销售测算/租赁测算的「一、规划指标」区行号固定（B4 亩/B5 用地/B6 容积率/B7 计容/B8 地上/B9 地下/B10 总建面）
     const saPlanMap = [['B5', 'B4'], ['B6', 'B9'], ['B7', 'B8'], ['B8', 'B6'], ['B9', 'B7'], ['B10', 'B5']];
     ['销售测算', '租赁测算'].forEach(function (n) {
@@ -2495,6 +2538,30 @@
       saPlanMap.forEach(function (m) { rewireCellToRef(ws, m[0], S5_NAME, sheet5, m[1]); });
       // 财务费用 → 投资估算完整版「财务费用」行金额
       if (invFinRow) rewireCellToRef(ws, 'B19', '投资估算完整版', invFull, 'F' + invFinRow);
+      // 成本区 5 行重接线（缓存与新口径一致；行号全部动态定位）
+      const rLandPrice = findRowByLabel(ws, 'A', '土地价格');
+      const rLandUnit = findRowByLabel(ws, 'A', '土地成本单方（土地配套费合计）');
+      const rConstrUnit = findRowByLabel(ws, 'A', '建安成本单方（前期+建安工程）');
+      const rRentSale = findRowByLabel(ws, 'A', '单位租售建面成本');
+      const rUnitAll = findRowByLabel(ws, 'A', '综合单方成本（含期间费用）');
+      // 土地价格 → 完整版「土地出让金」单价单元格
+      if (rLandPrice && landTransferRowX) rewireCellToRef(ws, 'B' + rLandPrice, '投资估算完整版', invFull, 'D' + landTransferRowX);
+      // 土地成本单方 → 完整版土地配套小计 ÷ 规划指标租售建面
+      if (rLandUnit && landSubtotalRowX && rentSalePlanRow) {
+        ws['B' + rLandUnit].f = "ROUND('投资估算完整版'!F" + landSubtotalRowX + "/'规划指标'!B" + rentSalePlanRow + "*10000,2)";
+      }
+      // 建安成本单方 → (完整版前期小计+建安工程成本合计+开发间接费) ÷ 规划指标租售建面
+      if (rConstrUnit && prelimSubtotalRowX && constructionTotalRowX && indirectRowX && rentSalePlanRow) {
+        ws['B' + rConstrUnit].f = "ROUND(('投资估算完整版'!F" + prelimSubtotalRowX + "+'投资估算完整版'!F" + constructionTotalRowX + "+'投资估算完整版'!F" + indirectRowX + ")/'规划指标'!B" + rentSalePlanRow + "*10000,2)";
+      }
+      // 单位租售建面成本 → 本表上两行之和
+      if (rRentSale && rLandUnit && rConstrUnit) {
+        ws['B' + rRentSale].f = 'ROUND(B' + rLandUnit + '+B' + rConstrUnit + ',2)';
+      }
+      // 综合单方成本（含期间费用）→ 完整版发展成本合计 ÷ 规划指标总建筑面积
+      if (rUnitAll && invTotalRow && totalBldPlanRow) {
+        ws['B' + rUnitAll].f = "ROUND('投资估算完整版'!F" + invTotalRow + "/'规划指标'!B" + totalBldPlanRow + "*10000,2)";
+      }
     });
     // 综合汇总「总投资」→ 完整版「发展成本合计」；「融资占比」输入格 → 完整版融资参数区
     const sumWs = saWb.Sheets['综合汇总'];
