@@ -1,6 +1,6 @@
 // 团队访问密码门：所有请求先过 Basic Auth，验证通过后才放行静态文件
 // 仓库里只存密码的 SHA-256 哈希，不存明文密码
-const PASSWORD_HASH = "9afebe4d68f32acee39b5f5c189921ff4db12fff26d13ed6c2427ba4335b43bc";
+const PASSWORD_HASH = "5aef96240bca5582e6fd0468879a26863d81d1c1fb602def55926ef33ec8bb1f";
 
 async function sha256hex(text) {
   const data = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
