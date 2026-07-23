@@ -289,6 +289,10 @@
     const totalInvestment = round2(landCostTotal + prelimTotal + constructionTotal + indirectCost + marketingCost + managementCost + financialTotal);
     const unitGroundCost = totalBuildingArea > 0 ? round2(totalInvestment * 10000 / totalBuildingArea) : 0;
     const unitAboveGroundCost = aboveGroundArea > 0 ? round2(totalInvestment * 10000 / aboveGroundArea) : 0;
+    // 单位租售建面成本 = 发展成本合计 ÷ 租售建面（地上总建面 − 配套楼自用面积）
+    const supportAreaForRentSale = metrics.supportArea || 0;
+    const rentSaleArea = Math.max(0, aboveGroundArea - supportAreaForRentSale);
+    const unitRentSaleCost = rentSaleArea > 0 ? round2(totalInvestment * 10000 / rentSaleArea) : 0;
 
     return {
       inputs: {
@@ -332,6 +336,7 @@
         totalInvestment,
         unitGroundCost,
         unitAboveGroundCost,
+        unitRentSaleCost,
         landCostRatio: totalInvestment > 0 ? round2(landCostTotal / totalInvestment * 100) : 0,
         constructionRatio: totalInvestment > 0 ? round2(constructionTotal / totalInvestment * 100) : 0
       }
@@ -395,6 +400,9 @@
     const occupancyRate = safeNum(inputs.occupancyRate, 90) / 100;
     const rentalPeriod = Math.max(1, Math.round(safeNum(inputs.rentalPeriod, 20)));
     const rentGrowthRate = safeNum(inputs.rentGrowthRate, 0) / 100;
+    // 去化速度（万㎡/年，首现于静态，动态模块从此处继承）
+    const saleSpeed = safeNum(inputs.saleSpeed, 1.5) || 1.5;
+    const rentSpeed = safeNum(inputs.rentSpeed, 1.5) || 1.5;
 
     // 产品价格映射
     const priceMap = {};
@@ -529,7 +537,26 @@
     const fundingGap = round2(totalInvestment - (1 - financingRatioInput / 100) * totalInvestment - saleRevenue);
     const saleProfitCoverRatio = rentalTotalInvestment > 0 ? round2(saleNetProfit / rentalTotalInvestment * 100) : 0;
     const totalInvestmentReturn = totalInvestment > 0 ? round2(netRentalIncome / totalInvestment * 100) : 0;
-    const paybackPeriod = netRentalIncome > 0 ? round2(totalInvestment / netRentalIncome) : 0;
+    // 去化爬坡期（年）：销售爬坡期 = 可售 ÷ 销售去化速度；租赁爬坡期（满租年） = 可租 × 出租率 ÷ 租赁去化速度
+    const salesRampYears = saleSpeed > 0 ? round2(soldAreaTotal / (saleSpeed * 10000)) : 0;
+    const rentRampYears = rentSpeed > 0 ? round2(rentedAreaTotal * occupancyRate / (rentSpeed * 10000)) : 0;
+    // 销售部分总投（建造成本按单位租售建面成本 + 销售分摊财务费用）
+    const salesTotalInvestment = round2(soldAreaTotal * rentSaleUnitCost / 10000 + saleFinancialCost);
+    // 静态投资回收期（三情况）：
+    // 情况3：销售净利 > 租赁总投 → 销售期内回收，回收期 = 销售爬坡期 × 总投资/(销售总投+销售净利)
+    // 情况1/2：销售净利 ≤ 租赁总投 → max(销售爬坡期, (租赁总投-销售净利)/租赁年净收入)
+    let paybackPeriod = null;
+    let paybackMode = 'none';
+    if (saleNetProfit > rentalTotalInvestment) {
+      const salesRecoverBase = salesTotalInvestment + saleNetProfit;
+      if (salesRecoverBase > 0 && salesRampYears > 0) {
+        paybackPeriod = round2(salesRampYears * totalInvestment / salesRecoverBase);
+        paybackMode = 'sales';
+      }
+    } else if (netRentalIncome > 0) {
+      paybackPeriod = round2(Math.max(salesRampYears, (rentalTotalInvestment - saleNetProfit) / netRentalIncome));
+      paybackMode = 'rent';
+    }
 
     return {
       inputs: {
@@ -544,6 +571,8 @@
         occupancyRate: occupancyRate * 100,
         rentalPeriod,
         rentGrowthRate: rentGrowthRate * 100,
+        saleSpeed,
+        rentSpeed,
         landPrice: (inv && inv.inputs && inv.inputs.landPrice) || safeNum(inputs.landPrice, 0),
         municipalFee: safeNum(inputs.municipalFee, 0),
         financingRatio: financingRatioInput
@@ -623,7 +652,11 @@
         saleNetMargin,
         noi,
         totalInvestmentReturn,
-        paybackPeriod
+        paybackPeriod,
+        paybackMode,
+        salesRampYears,
+        rentRampYears,
+        salesTotalInvestment
       }
     };
   };
@@ -821,8 +854,9 @@
     const operationYears = Math.max(1, Math.round(safeNum(inputs.operationYears, 20)));
     const rentGrowthRate = safeNum(inputs.rentGrowthRate, 2);
     const saleGrowthRate = safeNum(inputs.saleGrowthRate, 0);
-    const saleSpeed = safeNum(inputs.saleSpeed, 1.5);
-    const rentSpeed = safeNum(inputs.rentSpeed, 1.5);
+    // 去化速度首现于静态分析：页面端从静态结果联动传入；独立调用时回退静态输入值，再无则 1.5
+    const saleSpeed = safeNum(inputs.saleSpeed, safeNum(saInputs.saleSpeed, 1.5));
+    const rentSpeed = safeNum(inputs.rentSpeed, safeNum(saInputs.rentSpeed, 1.5));
     const occupancyRate = safeNum(inputs.occupancyRate, safeNum(saInputs.occupancyRate, 90));
     const presaleEnabled = !!inputs.presaleEnabled;
     const presalePctYear1 = safeNum(inputs.presalePctYear1, 0);
@@ -1741,7 +1775,9 @@
       { name: '销售净利率', value: staticResult.summary.saleNetMargin, unit: '%', f: `'销售测算'!B${ssr + 14}` },
       { name: '租赁 NOI', value: staticResult.summary.noi, unit: '%', f: `'租赁测算'!B${rsr + 13}` },
       { name: '总投资收益率', value: staticResult.summary.totalInvestmentReturn, unit: '%', f: `IF(B3=0,0,ROUND(B5/B3*100,2))` },
-      { name: '静态投资回收期', value: staticResult.summary.paybackPeriod, unit: '年', f: `IF(B5=0,0,ROUND(B3/B5,2))` }
+      // 静态投资回收期（三情况）：净利>租赁总投 → 销售期内回收=销售爬坡期×总投资/(销售总投+净利)；
+      // 否则 → max(销售爬坡期, (租赁总投-净利)/租赁年净收入)（净利为负涵盖）；年净收入≤0 显示“—”
+      { name: '静态投资回收期', value: staticResult.summary.paybackPeriod != null ? staticResult.summary.paybackPeriod : '—', unit: '年', f: `IF(B4>'租赁测算'!B${rsr + 12},IF(OR($B$17<=0,$B$19+B4<=0),"—",ROUND($B$17*B3/($B$19+B4),2)),IF(B5<=0,"—",ROUND(MAX($B$17,('租赁测算'!B${rsr + 12}-B4)/B5),2)))` }
     ];
     summaryRows.forEach((row, idx) => {
       const r = idx + 2;
@@ -1758,6 +1794,32 @@
     ws5[encode(sumTail, 0)] = textCell('融资占比');
     ws5[encode(sumTail, 1)] = cell(round2(staticResult.inputs.financingRatio || 0), { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
     ws5[encode(sumTail, 2)] = textCell('%');
+    // 去化设置小区（表尾追加）：去化速度首现于静态（黄色输入格），爬坡期/销售总投为公式格；总表集成时动态参数区 G7/G8 重接线到此处
+    sumTail += 1;
+    ws5['!merge'].push({ s: { r: sumTail, c: 0 }, e: { r: sumTail, c: 2 } });
+    ws5[encode(sumTail, 0)] = cell('去化设置（黄色为可编辑输入格，其他表引用此处）', { bold: true, sz: 12 });
+    const sumSaleSpeedRow = sumTail + 2; // 1-based，销售去化速度行
+    const sumRentSpeedRow = sumTail + 3; // 1-based，租赁去化速度行
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('销售去化速度');
+    ws5[encode(sumTail, 1)] = cell(round2(staticResult.inputs.saleSpeed || 1.5), { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+    ws5[encode(sumTail, 2)] = textCell('万㎡/年');
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('租赁去化速度');
+    ws5[encode(sumTail, 1)] = cell(round2(staticResult.inputs.rentSpeed || 1.5), { fill: 'FFF2CC', numFmt: '#,##0.00', align: 'right', raw: true });
+    ws5[encode(sumTail, 2)] = textCell('万㎡/年');
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('销售爬坡期');
+    ws5[encode(sumTail, 1)] = moneyCell(staticResult.summary.salesRampYears, `ROUND('销售测算'!B${ssr}/$B$${sumSaleSpeedRow}/10000,2)`);
+    ws5[encode(sumTail, 2)] = textCell('年');
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('租赁爬坡期');
+    ws5[encode(sumTail, 1)] = moneyCell(staticResult.summary.rentRampYears, `ROUND('租赁测算'!B${rsr}*'租赁测算'!B${rsr + 4}/100/$B$${sumRentSpeedRow}/10000,2)`);
+    ws5[encode(sumTail, 2)] = textCell('年');
+    sumTail += 1;
+    ws5[encode(sumTail, 0)] = textCell('销售总投');
+    ws5[encode(sumTail, 1)] = moneyCell(staticResult.summary.salesTotalInvestment, `ROUND('销售测算'!B${ssr}*'销售测算'!B${costStart1 + 6}/10000+'销售测算'!B${ssr + 10},2)`);
+    ws5[encode(sumTail, 2)] = textCell('万元');
     ws5['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sumTail, c: 2 } });
     setWsMeta(ws5, [28, 16, 12]);
     XLSX.utils.book_append_sheet(wb, ws5, '综合汇总');
@@ -2593,6 +2655,12 @@
       if (mktRateRowS) rewireCellToRef(cashWs, 'G13', '销售测算', saSaleWs, 'B' + mktRateRowS);
       if (mgmtRateRowS) rewireCellToRef(cashWs, 'G14', '销售测算', saSaleWs, 'B' + mgmtRateRowS);
       if (opRateRowS) rewireCellToRef(cashWs, 'G15', '租赁测算', saRentWs, 'B' + opRateRowS);
+      // 销售/租赁去化速度 → 静态「综合汇总」去化设置参数区（首现于静态）
+      const sumWs2 = saWb.Sheets['综合汇总'];
+      const sumSaleSpeedRow = findRowByLabel(sumWs2, 'A', '销售去化速度');
+      const sumRentSpeedRow = findRowByLabel(sumWs2, 'A', '租赁去化速度');
+      if (sumSaleSpeedRow) rewireCellToRef(cashWs, 'G7', '综合汇总', sumWs2, 'B' + sumSaleSpeedRow);
+      if (sumRentSpeedRow) rewireCellToRef(cashWs, 'G8', '综合汇总', sumWs2, 'B' + sumRentSpeedRow);
       ['多年现金流表', '敏感性分析', '关键指标汇总'].forEach(function (n) { appendSheet(dynWb.Sheets[n], n); });
     } else {
       appendSheet(buildDynamicPlaceholderSheet('多年现金流表'), '多年现金流表');

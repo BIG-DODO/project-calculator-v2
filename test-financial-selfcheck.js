@@ -988,8 +988,95 @@ const r2k = n => Math.round(n * 100) / 100;
 
 console.log('\n=== k) 租售成本闭合并自检结果：' + (kChecks - kFailed) + '/' + kChecks + ' 通过' + (kFailed ? '（存在未通过项）' : '') + ' ===');
 
+// ==================== l) 去化速度入静态 + 静态回收期三情况公式 =================
+let lChecks = 0, lFailed = 0;
+function lcheck(name, cond, detail) {
+  lChecks++;
+  if (cond) { console.log('  [PASS] ' + name); }
+  else { lFailed++; console.log('  [FAIL] ' + name + (detail ? ' → ' + detail : '')); }
+}
+console.log('\n--- l) 去化速度入静态与静态回收期三情况 ---');
+const r2 = x => Math.round(x * 100) / 100;
+
+// l1: 真实管线爬坡期与回收期口径
+{
+  const expSalesRamp = r2(sa.metrics.soldAreaTotal / (sa.inputs.saleSpeed * 10000));
+  const expRentRamp = r2(sa.metrics.rentedAreaTotal * (sa.inputs.occupancyRate / 100) / (sa.inputs.rentSpeed * 10000));
+  lcheck('l1: 销售爬坡期 = 可售÷销售去化速度', approx(sa.summary.salesRampYears, expSalesRamp, 1e-6), sa.summary.salesRampYears + ' vs ' + expSalesRamp);
+  lcheck('l1: 租赁爬坡期 = 可租×出租率÷租赁去化速度', approx(sa.summary.rentRampYears, expRentRamp, 1e-6), sa.summary.rentRampYears + ' vs ' + expRentRamp);
+  const s = sa.summary;
+  let expMode, expPayback;
+  if (s.saleNetProfit > sa.rent.rentalTotalInvestment) {
+    expMode = 'sales'; expPayback = r2(s.salesRampYears * s.totalInvestment / (s.salesTotalInvestment + s.saleNetProfit));
+  } else if (s.netRentalIncome > 0) {
+    expMode = 'rent'; expPayback = r2(Math.max(s.salesRampYears, (sa.rent.rentalTotalInvestment - s.saleNetProfit) / s.netRentalIncome));
+  } else { expMode = 'none'; expPayback = null; }
+  lcheck('l1: 回收期模式与分支判定一致', s.paybackMode === expMode, s.paybackMode + ' vs ' + expMode);
+  lcheck('l1: 回收期数值与公式重算一致', approx(s.paybackPeriod, expPayback, 1e-6), s.paybackPeriod + ' vs ' + expPayback);
+}
+
+// l2: 情况3（销售净利>租赁总投）→ 销售期内回收
+{
+  const saHigh = FM.calculateStaticAnalysis(Object.assign({}, staticInputs, { priceSplit: 3.0, priceLayer: 3.0, saleRatio: 90 }), result, projectData, inv);
+  lcheck('l2: 高售价场景 paybackMode=sales', saHigh.summary.paybackMode === 'sales' && saHigh.summary.saleNetProfit > saHigh.rent.rentalTotalInvestment, saHigh.summary.paybackMode);
+  const exp3 = r2(saHigh.summary.salesRampYears * saHigh.summary.totalInvestment / (saHigh.summary.salesTotalInvestment + saHigh.summary.saleNetProfit));
+  lcheck('l2: 情况3 回收期 = 销售爬坡期×总投资/(销售总投+净利)', approx(saHigh.summary.paybackPeriod, exp3, 1e-6), saHigh.summary.paybackPeriod + ' vs ' + exp3);
+}
+
+// l3: 情况1（销售净利<0）→ rent 分支且被除数>租赁总投
+{
+  const saLow = FM.calculateStaticAnalysis(Object.assign({}, staticInputs, { priceSplit: 0.1, priceLayer: 0.1, saleRatio: 90 }), result, projectData, inv);
+  lcheck('l3: 低售价场景净利<0 且 paybackMode=rent', saLow.summary.saleNetProfit < 0 && saLow.summary.paybackMode === 'rent', saLow.summary.saleNetProfit + '/' + saLow.summary.paybackMode);
+  const exp1 = r2(Math.max(saLow.summary.salesRampYears, (saLow.rent.rentalTotalInvestment - saLow.summary.saleNetProfit) / saLow.summary.netRentalIncome));
+  lcheck('l3: 情况1 回收期 = max(销售爬坡期, (租赁总投-净利)/年净收入)', approx(saLow.summary.paybackPeriod, exp1, 1e-6), saLow.summary.paybackPeriod + ' vs ' + exp1);
+}
+
+// l4: 静态综合汇总 Excel 去化设置区与回收期公式
+{
+  const sumWsL = capturedWB.Sheets['综合汇总'];
+  const spdRowL = findRowByColLabel(sumWsL, 'A', '销售去化速度');
+  const rspdRowL = findRowByColLabel(sumWsL, 'A', '租赁去化速度');
+  const rampRowL = findRowByColLabel(sumWsL, 'A', '销售爬坡期');
+  const stiRowL = findRowByColLabel(sumWsL, 'A', '销售总投');
+  const paybackRowL = findRowByColLabel(sumWsL, 'A', '静态投资回收期');
+  lcheck('l4: 综合汇总存在去化设置参数格（t=n 且为首现输入格）',
+    !!(spdRowL && rspdRowL && sumWsL['B' + spdRowL].t === 'n' && sumWsL['B' + rspdRowL].t === 'n'), '');
+  lcheck('l4: 销售爬坡期为公式格', !!(rampRowL && sumWsL['B' + rampRowL].f && sumWsL['B' + rampRowL].f.indexOf('$B$' + spdRowL) >= 0), rampRowL && sumWsL['B' + rampRowL].f);
+  lcheck('l4: 销售总投为公式格', !!(stiRowL && sumWsL['B' + stiRowL].f), stiRowL && sumWsL['B' + stiRowL].f);
+  const pbCellL = paybackRowL ? sumWsL['B' + paybackRowL] : null;
+  lcheck('l4: 回收期公式为三情况结构（含 IF 分支与 MAX）', !!(pbCellL && pbCellL.f && pbCellL.f.indexOf('MAX(') >= 0 && pbCellL.f.indexOf('IF(B4>') >= 0), pbCellL && pbCellL.f);
+  lcheck('l4: 回收期缓存与 JS 一致', !!(pbCellL && approx(pbCellL.v, sa.summary.paybackPeriod, 1e-6)), pbCellL && (pbCellL.v + ' vs ' + sa.summary.paybackPeriod));
+}
+
+// l5: 动态继承静态去化速度
+{
+  const saSpeedStub = makeSaStub({});
+  saSpeedStub.inputs.saleSpeed = 2.5;
+  saSpeedStub.inputs.rentSpeed = 2.0;
+  const dynInherit = FM.calculateDynamicAnalysis({ discountRate: 8, operationYears: 8, rentGrowthRate: 0, saleGrowthRate: 0, occupancyRate: 90, investmentEstimate: invA }, null, null, saSpeedStub);
+  lcheck('l5: 动态 saleSpeed 继承静态（2.5）', dynInherit && dynInherit.inputs.saleSpeed === 2.5, dynInherit && String(dynInherit.inputs.saleSpeed));
+  lcheck('l5: 动态 rentSpeed 继承静态（2.0）', dynInherit && dynInherit.inputs.rentSpeed === 2.0, dynInherit && String(dynInherit.inputs.rentSpeed));
+  const dynFallback = FM.calculateDynamicAnalysis({ investmentEstimate: invA }, null, null, makeSaStub({}));
+  lcheck('l5: 静态未设置时回退 1.5', dynFallback && dynFallback.inputs.saleSpeed === 1.5 && dynFallback.inputs.rentSpeed === 1.5, dynFallback && (dynFallback.inputs.saleSpeed + '/' + dynFallback.inputs.rentSpeed));
+}
+
+// l6: 总表集成动态参数区 G7/G8 重接线到综合汇总去化设置
+if (capIntWB) {
+  const cashWsL = capIntWB.Sheets['多年现金流表'];
+  const sumWsIntL = capIntWB.Sheets['综合汇总'];
+  const spdRowInt = findRowByColLabel(sumWsIntL, 'A', '销售去化速度');
+  const rspdRowInt = findRowByColLabel(sumWsIntL, 'A', '租赁去化速度');
+  lcheck('l6: 集成动态 G7 公式引用综合汇总销售去化速度', !!(cashWsL.G7 && cashWsL.G7.f === "'综合汇总'!B" + spdRowInt), cashWsL.G7 && cashWsL.G7.f);
+  lcheck('l6: 集成动态 G8 公式引用综合汇总租赁去化速度', !!(cashWsL.G8 && cashWsL.G8.f === "'综合汇总'!B" + rspdRowInt), cashWsL.G8 && cashWsL.G8.f);
+  lcheck('l6: 集成动态 G7/G8 缓存与静态输入一致',
+    !!(cashWsL.G7 && cashWsL.G8 && cashWsL.G7.v === sa.inputs.saleSpeed && cashWsL.G8.v === sa.inputs.rentSpeed),
+    (cashWsL.G7 && cashWsL.G7.v) + '/' + (cashWsL.G8 && cashWsL.G8.v));
+}
+
+console.log('\n=== l) 去化速度入静态与回收期公式自检结果：' + (lChecks - lFailed) + '/' + lChecks + ' 通过' + (lFailed ? '（存在未通过项）' : '') + ' ===');
+
 console.log('\n=== 动态投资分析自检结果：' + (dynChecks - dynFailed) + '/' + dynChecks + ' 通过' + (dynFailed ? '（存在未通过项）' : '') + ' ===');
-console.log('=== 全部自检结果：' + ((dynChecks - dynFailed) + (hChecks - hFailed) + (iChecks - iFailed) + (jChecks - jFailed) + (kChecks - kFailed)) + '/' + (dynChecks + hChecks + iChecks + jChecks + kChecks) + ' 通过' + ((dynFailed + hFailed + iFailed + jFailed + kFailed) ? '（存在未通过项）' : '') + ' ===');
-if (dynFailed + hFailed + iFailed + jFailed + kFailed > 0) process.exitCode = 1;
+console.log('=== 全部自检结果：' + ((dynChecks - dynFailed) + (hChecks - hFailed) + (iChecks - iFailed) + (jChecks - jFailed) + (kChecks - kFailed) + (lChecks - lFailed)) + '/' + (dynChecks + hChecks + iChecks + jChecks + kChecks + lChecks) + ' 通过' + ((dynFailed + hFailed + iFailed + jFailed + kFailed + lFailed) ? '（存在未通过项）' : '') + ' ===');
+if (dynFailed + hFailed + iFailed + jFailed + kFailed + lFailed > 0) process.exitCode = 1;
 
 console.log('\n自检完成');
