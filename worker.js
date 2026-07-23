@@ -22,10 +22,7 @@ export default {
         const decoded = atob(auth.slice(6));
         const password = decoded.slice(decoded.indexOf(":") + 1);
         if ((await sha256hex(password)) === PASSWORD_HASH) {
-          const url = new URL(request.url);
-          if (url.pathname === "/" || url.pathname === "") {
-            return Response.redirect(url.origin + "/index.html", 302);
-          }
+          // 验证通过，交给静态文件服务（根目录会自动返回 index.html）
           return env.ASSETS.fetch(request);
         }
       } catch (e) { /* 解析失败一律视为未授权 */ }
